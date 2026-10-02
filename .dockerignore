@@ -1,0 +1,13 @@
+# Packages are installed inside the Docker image.
+node_modules
+
+# TypeScript creates this folder during the Docker build.
+dist
+
+# Version-control files are not needed inside the image.
+.git
+.gitignore
+
+# Local logs and environment files should not be copied.
+*.log
+.env

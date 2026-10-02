@@ -1,0 +1,97 @@
+:root {
+  color-scheme: dark;
+}
+
+body {
+  min-height: 100vh;
+  margin: 0;
+  background:
+    radial-gradient(circle at top left, #6f42c1 0, transparent 35%),
+    radial-gradient(circle at bottom right, #0d6efd 0, transparent 35%),
+    #10131a;
+  color: #f8f9fa;
+}
+
+.game-card {
+  overflow: hidden;
+  color: #f8f9fa;
+  background: rgba(30, 34, 45, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 1.25rem;
+  backdrop-filter: blur(12px);
+}
+
+.game-card .form-control,
+.game-card .form-select {
+  color: #f8f9fa;
+  background-color: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.game-card .form-control::placeholder {
+  color: #adb5bd;
+}
+
+.game-card .form-control:focus,
+.game-card .form-select:focus {
+  color: #fff;
+  background-color: rgba(255, 255, 255, 0.12);
+  border-color: #86b7fe;
+  box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+}
+
+.game-card .form-select option {
+  color: #212529;
+  background-color: #fff;
+}
+
+.room-code {
+  min-height: 2rem;
+  color: #7ee787;
+  font-size: 1.4rem;
+  letter-spacing: 0.12em;
+}
+
+.status-message {
+  min-height: 1.5rem;
+  font-weight: 600;
+}
+
+#player-list:empty::after {
+  display: block;
+  padding: 1rem;
+  color: #adb5bd;
+  text-align: center;
+  content: "No players have joined yet.";
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 0.75rem;
+}
+
+#player-list .list-group-item {
+  color: #f8f9fa;
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.btn {
+  font-weight: 700;
+  border-radius: 0.8rem;
+  transition:
+    transform 120ms ease,
+    box-shadow 120ms ease;
+}
+
+.btn:not(:disabled):hover {
+  transform: translateY(-2px);
+  box-shadow: 0 0.6rem 1.25rem rgba(0, 0, 0, 0.2);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn {
+    transition: none;
+  }
+
+  .btn:not(:disabled):hover {
+    transform: none;
+  }
+}

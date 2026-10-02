@@ -1,0 +1,16 @@
+# Installed packages
+node_modules/
+
+# Compiled TypeScript
+dist/
+
+# Environment variables and secrets
+.env
+.env.*
+
+# Logs
+*.log
+
+# Operating-system files
+Thumbs.db
+.DS_Store

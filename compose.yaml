@@ -1,0 +1,31 @@
+services:
+  gamehub:
+    build:
+      context: .
+
+    ports:
+      # Windows port : container port
+      # Change only the left number if port 3000 is already being used.
+      - "3000:3000"
+
+    environment:
+      # The port used by GameHub inside the container.
+      PORT: "3000"
+
+    init: true
+
+  tunnel:
+    # Only starts when the "public" profile is requested.
+    profiles:
+      - public
+
+    image: cloudflare/cloudflared:latest
+
+    command:
+      - tunnel
+      - --no-autoupdate
+      - --url
+      - http://gamehub:3000
+
+    depends_on:
+      - gamehub
