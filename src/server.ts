@@ -121,6 +121,16 @@ io.on("connection", (socket) => {
       return;
     }
 
+    if (room.activeGameId !== null) {
+      respond({
+        success: false,
+        message:
+          "This game is already in progress. Spectator mode is not available yet."
+      });
+
+      return;
+    }
+
     room.players.set(socket.id, {
       id: socket.id,
       name: playerName

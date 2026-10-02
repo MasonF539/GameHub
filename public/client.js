@@ -19,10 +19,24 @@ let hostedRoomCode = null;
 
 socket.on("connect", () => {
   connectionStatus.textContent = "Connected to server";
+
+  connectionStatus.classList.remove(
+    "text-bg-warning",
+    "text-bg-danger"
+  );
+
+  connectionStatus.classList.add("text-bg-success");
 });
 
 socket.on("disconnect", () => {
   connectionStatus.textContent = "Disconnected from server";
+
+  connectionStatus.classList.remove(
+    "text-bg-warning",
+    "text-bg-success"
+  );
+
+  connectionStatus.classList.add("text-bg-danger");
 
   hostedRoomCode = null;
 

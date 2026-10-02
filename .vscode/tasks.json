@@ -3,14 +3,16 @@
   "tasks": [
     {
       "label": "GameHub Controls",
-      "type": "shell",
+      "type": "process",
       "command": "powershell",
       "args": [
         "-NoProfile",
         "-ExecutionPolicy",
         "Bypass",
         "-File",
-        "${workspaceFolder}\\GameHub.ps1"
+        "${workspaceFolder}\\GameHub.ps1",
+        "-Action",
+        "Menu"
       ],
       "options": {
         "cwd": "${workspaceFolder}"
@@ -28,8 +30,17 @@
     },
     {
       "label": "GameHub: Start Local",
-      "type": "shell",
-      "command": "docker compose up --build --detach; Start-Process 'http://localhost:3000'",
+      "type": "process",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}\\GameHub.ps1",
+        "-Action",
+        "Local"
+      ],
       "options": {
         "cwd": "${workspaceFolder}"
       },
@@ -42,8 +53,17 @@
     },
     {
       "label": "GameHub: Start Public",
-      "type": "shell",
-      "command": "docker compose --profile public up --build --detach; Start-Process 'http://localhost:3000'; docker compose logs --follow tunnel",
+      "type": "process",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}\\GameHub.ps1",
+        "-Action",
+        "Public"
+      ],
       "options": {
         "cwd": "${workspaceFolder}"
       },
@@ -55,9 +75,41 @@
       }
     },
     {
-      "label": "GameHub: View Logs",
-      "type": "shell",
-      "command": "docker compose --profile public logs --follow",
+      "label": "GameHub: Show Status",
+      "type": "process",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}\\GameHub.ps1",
+        "-Action",
+        "Status"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "new",
+        "clear": true
+      }
+    },
+    {
+      "label": "GameHub: Show Recent Logs",
+      "type": "process",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}\\GameHub.ps1",
+        "-Action",
+        "Logs"
+      ],
       "options": {
         "cwd": "${workspaceFolder}"
       },
@@ -70,8 +122,17 @@
     },
     {
       "label": "GameHub: Stop",
-      "type": "shell",
-      "command": "docker compose --profile public down",
+      "type": "process",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}\\GameHub.ps1",
+        "-Action",
+        "Stop"
+      ],
       "options": {
         "cwd": "${workspaceFolder}"
       },
