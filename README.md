@@ -6,10 +6,13 @@ The server runs locally in Docker and can optionally use a temporary Cloudflare 
 
 ## Current features
 
-- Six-character room codes
+- Six-character room codes with hide and reveal controls
+- Shared lobby visible to the host and joined players
+- Player names and selectable avatars
+- Host identification in the player list
 - Live player joining and disconnection
 - Server-controlled room state
-- Host-only game selection
+- Host-only game starting
 - Real-time communication with Socket.IO
 - Responsive Bootstrap interface
 - Local and public hosting modes
@@ -116,6 +119,7 @@ GameHub/
 ├── package.json
 ├── package-lock.json
 ├── README.md
+├── TODO.md
 └── tsconfig.json
 ```
 

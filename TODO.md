@@ -13,6 +13,17 @@
 - Allow spectators to become players when the room returns to the lobby.
 - Let each game define the information included in its spectator snapshot.
 
+### Visual game selection
+
+- Replace the game dropdown with a Bootstrap modal.
+- Display each available game as a selectable card.
+- Give each card a game name, description, and animated preview.
+- Prefer optimized animated WebP or short muted video previews over large GIF files.
+- Clearly highlight the currently selected game.
+- Allow every player to browse the available games.
+- Decide whether non-host players can vote for games.
+- Keep final game-starting permission restricted to the host.
+
 ## Architecture requirements
 
 Each playable game should support:

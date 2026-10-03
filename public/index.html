@@ -24,62 +24,83 @@
         </p>
       </header>
 
-      <div class="row g-4">
-        <div class="col-12 col-lg-6">
-          <section class="card game-card h-100 shadow">
-            <div class="card-body p-4">
-              <h2 class="card-title">Host a game</h2>
+      <section id="entry-view" class="card game-card shadow mx-auto">
+        <div class="card-body p-4">
+          <h2 class="card-title text-center mb-4">
+            Enter GameHub
+          </h2>
+
+          <label for="player-name" class="form-label">
+            Player name
+          </label>
+
+          <input
+            id="player-name"
+            class="form-control form-control-lg mb-3"
+            type="text"
+            placeholder="Your name"
+            maxlength="20"
+            autocomplete="nickname"
+          >
+
+          <label class="form-label d-block text-center">
+            Choose an avatar
+          </label>
+
+          <div
+            class="avatar-picker d-flex align-items-center justify-content-center gap-3 mb-3"
+          >
+            <button
+              id="previous-avatar"
+              class="btn btn-outline-light avatar-arrow"
+              type="button"
+              aria-label="Previous avatar"
+            >
+              &lt;
+            </button>
+
+            <div
+              id="avatar-preview"
+              class="avatar-preview"
+              role="img"
+              aria-label="Selected avatar"
+            >
+              🐱
+            </div>
+
+            <button
+              id="next-avatar"
+              class="btn btn-outline-light avatar-arrow"
+              type="button"
+              aria-label="Next avatar"
+            >
+              &gt;
+            </button>
+          </div>
+
+          <div class="room-actions">
+            <div class="room-action room-action-create">
+              <h3 class="h5 text-center mb-3">
+                Create a new room
+              </h3>
 
               <button
                 id="create-room"
-                class="btn btn-primary btn-lg w-100 mb-3"
+                class="btn btn-primary btn-lg w-100"
               >
                 Create Room
               </button>
-
-              <p
-                id="created-room"
-                class="room-code text-center fw-bold"
-              ></p>
-
-              <hr>
-
-              <h3 class="h5">Players</h3>
-
-              <ul
-                id="player-list"
-                class="list-group mb-4"
-              ></ul>
-
-              <h3 class="h5">Choose a game</h3>
-
-              <select
-                id="game-select"
-                class="form-select form-select-lg mb-3"
-              >
-                <option value="">Loading games…</option>
-              </select>
-
-              <button
-                id="start-game"
-                class="btn btn-success btn-lg w-100"
-                disabled
-              >
-                Start Game
-              </button>
-
-              <p
-                id="game-status"
-                class="status-message mt-3 mb-0"
-              ></p>
             </div>
-          </section>
-        </div>
 
-        <div class="col-12 col-lg-6">
-          <section class="card game-card h-100 shadow">
-            <div class="card-body p-4">
-              <h2 class="card-title">Join a game</h2>
+            <div
+              class="room-action-divider"
+              aria-hidden="true"
+            ></div>
+
+            <div class="room-action">
+              <h3 class="h5 text-center mb-3">
+                Join an existing room
+              </h3>
 
               <label for="room-code" class="form-label">
                 Room code
@@ -94,34 +115,80 @@
                 autocomplete="off"
               >
 
-              <label for="player-name" class="form-label">
-                Player name
-              </label>
-
-              <input
-                id="player-name"
-                class="form-control form-control-lg mb-3"
-                type="text"
-                placeholder="Your name"
-                maxlength="20"
-                autocomplete="nickname"
-              >
-
               <button
                 id="join-room"
                 class="btn btn-warning btn-lg w-100"
               >
                 Join Room
               </button>
-
-              <p
-                id="join-result"
-                class="status-message mt-3 mb-0"
-              ></p>
             </div>
-          </section>
+          </div>
+
+          <p
+            id="join-result"
+            class="status-message mt-3 mb-0"
+          ></p>
         </div>
-      </div>
+      </section>
+
+      <section
+        id="lobby-view"
+        class="card game-card shadow mx-auto d-none"
+      >
+        <div class="card-body p-4">
+          <h2 class="card-title text-center">Game Lobby</h2>
+
+          <div
+            class="room-code-container d-flex align-items-center justify-content-center gap-1"
+          >
+            <p
+              id="created-room"
+              class="room-code fw-bold mb-0"
+            ></p>
+
+            <button
+              id="toggle-room-code"
+              class="room-code-eye btn"
+              type="button"
+              aria-label="Hide room code"
+              title="Hide room code"
+            >
+              <span aria-hidden="true">👁</span>
+            </button>
+          </div>
+
+          <hr>
+
+          <h3 class="h5">Players</h3>
+
+          <ul
+            id="player-list"
+            class="list-group mb-4"
+          ></ul>
+
+          <h3 class="h5">Choose a game</h3>
+
+          <select
+            id="game-select"
+            class="form-select form-select-lg mb-3"
+          >
+            <option value="">Loading games…</option>
+          </select>
+
+          <button
+            id="start-game"
+            class="btn btn-success btn-lg w-100"
+            disabled
+          >
+            Start Game
+          </button>
+
+          <p
+            id="game-status"
+            class="status-message mt-3 mb-0"
+          ></p>
+        </div>
+      </section>
     </main>
 
     <script src="/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>

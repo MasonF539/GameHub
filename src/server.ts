@@ -6,6 +6,7 @@ import { Server } from "socket.io";
 type Player = {
   id: string;
   name: string;
+  avatar: string;
 };
 
 type GameDefinition = {
@@ -18,6 +19,24 @@ type Room = {
   players: Map<string, Player>;
   activeGameId: string | null;
 };
+
+const availableAvatars = [
+  "🐱",
+  "🐶",
+  "🦊",
+  "🐸",
+  "🐼",
+  "🐯",
+  "🐵",
+  "🐙",
+  "🦄",
+  "🐲",
+  "🤖",
+  "👻",
+  "👽",
+  "🥷",
+  "🧙"
+];
 
 const availableGames: GameDefinition[] = [
   {
@@ -62,9 +81,13 @@ function generateRoomCode(): string {
   return code;
 }
 
-function sendPlayerList(room: Room): void {
-  const players = Array.from(room.players.values());
-  io.to(room.hostId).emit("player-list", players);
+function sendPlayerList(roomCode: string, room: Room): void {
+  const players = Array.from(room.players.values()).map((player) => ({
+    ...player,
+    isHost: player.id === room.hostId
+  }));
+
+  io.to(roomCode).emit("player-list", players);
 }
 
 io.on("connection", (socket) => {
@@ -72,28 +95,58 @@ io.on("connection", (socket) => {
 
   socket.emit("available-games", availableGames);
 
-  socket.on("create-room", (respond) => {
+  socket.on("create-room", (data, respond) => {
+    const playerName = String(data?.playerName ?? "").trim();
+    const avatar = String(data?.avatar ?? "");
+
+    if (playerName.length < 1 || playerName.length > 20) {
+      respond({
+        success: false,
+        message: "Enter a name between 1 and 20 characters."
+      });
+      return;
+    }
+
+    if (!availableAvatars.includes(avatar)) {
+      respond({
+        success: false,
+        message: "Select a valid avatar."
+      });
+      return;
+    }
+
     const roomCode = generateRoomCode();
 
-    rooms.set(roomCode, {
+    const room: Room = {
       hostId: socket.id,
       players: new Map(),
       activeGameId: null
+    };
+
+    room.players.set(socket.id, {
+      id: socket.id,
+      name: playerName,
+      avatar
     });
 
+    rooms.set(roomCode, room);
     socket.join(roomCode);
 
-    console.log(`Room ${roomCode} created by ${socket.id}`);
+    sendPlayerList(roomCode, room);
+
+    console.log(`Room ${roomCode} created by ${playerName}`);
 
     respond({
       success: true,
-      roomCode
+      roomCode,
+      playerName
     });
   });
 
   socket.on("join-room", (data, respond) => {
     const roomCode = String(data?.roomCode ?? "").trim().toUpperCase();
     const playerName = String(data?.playerName ?? "").trim();
+    const avatar = String(data?.avatar ?? "");
 
     if (roomCode.length !== 6) {
       respond({
@@ -107,6 +160,14 @@ io.on("connection", (socket) => {
       respond({
         success: false,
         message: "Enter a name between 1 and 20 characters."
+      });
+      return;
+    }
+
+    if (!availableAvatars.includes(avatar)) {
+      respond({
+        success: false,
+        message: "Select a valid avatar."
       });
       return;
     }
@@ -133,11 +194,12 @@ io.on("connection", (socket) => {
 
     room.players.set(socket.id, {
       id: socket.id,
-      name: playerName
+      name: playerName,
+      avatar
     });
 
     socket.join(roomCode);
-    sendPlayerList(room);
+    sendPlayerList(roomCode, room);
 
     console.log(`${playerName} joined room ${roomCode}`);
 
@@ -203,7 +265,7 @@ io.on("connection", (socket) => {
       }
 
       if (room.players.delete(socket.id)) {
-        sendPlayerList(room);
+        sendPlayerList(roomCode, room);
       }
     }
   });
