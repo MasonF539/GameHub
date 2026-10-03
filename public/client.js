@@ -1,6 +1,10 @@
 const socket = io();
 
 const connectionStatus = document.querySelector("#connection-status");
+const gameHubToastElement =
+  document.querySelector("#gamehub-toast");
+const gameHubToastMessage =
+  document.querySelector("#gamehub-toast-message");
 
 const entryView = document.querySelector("#entry-view");
 const lobbyView = document.querySelector("#lobby-view");
@@ -93,6 +97,16 @@ nextAvatarButton.addEventListener("click", () => {
 });
 
 updateAvatarPreview();
+
+function showToast(message) {
+  gameHubToastMessage.textContent = message;
+
+  const toast = bootstrap.Toast.getOrCreateInstance(
+    gameHubToastElement
+  );
+
+  toast.show();
+}
 
 function updateRoomCodeDisplay() {
   createdRoom.textContent = roomCodeHidden
@@ -294,7 +308,7 @@ toggleRoomLockButton.addEventListener("click", () => {
     },
     (response) => {
       if (!response.success) {
-        gameStatus.textContent = response.message;
+        showToast(response.message);
       }
     }
   );
@@ -406,7 +420,7 @@ socket.on("player-list", (players) => {
           },
           (response) => {
             if (!response.success) {
-              gameStatus.textContent = response.message;
+              showToast(response.message);
             }
           }
         );
@@ -471,11 +485,6 @@ socket.on(
       selectedGame,
       currentGameSettings
     );
-
-    if (!isCurrentUserHost) {
-      gameStatus.textContent =
-        "The host updated the game settings.";
-    }
   }
 );
 
@@ -491,7 +500,8 @@ socket.on("kicked-from-room", ({ message }) => {
 
   showEntry();
 
-  joinResult.textContent = message;
+  joinResult.textContent = "";
+  showToast(message);
   gameStatus.textContent = "";
   playerList.replaceChildren();
 
@@ -506,7 +516,8 @@ socket.on("room-closed", () => {
   hostedRoomCode = null;
   showEntry();
 
-  joinResult.textContent = "The host closed the room.";
+  joinResult.textContent = "";
+  showToast("The host closed the room.");
   gameStatus.textContent = "";
 
   joinRoomButton.disabled = false;
@@ -533,7 +544,7 @@ gameSelect.addEventListener("change", () => {
     },
     (response) => {
       if (!response.success) {
-        gameStatus.textContent = response.message;
+        showToast(response.message);
       }
     }
   );
@@ -581,7 +592,7 @@ saveGameSettingsButton.addEventListener("click", () => {
     },
     (response) => {
       if (!response.success) {
-        gameStatus.textContent = response.message;
+        showToast(response.message);
         return;
       }
 
@@ -591,7 +602,6 @@ saveGameSettingsButton.addEventListener("click", () => {
         );
 
       settingsModal.hide();
-      gameStatus.textContent = "Game settings saved.";
     }
   );
 });
@@ -608,7 +618,7 @@ createRoomButton.addEventListener("click", () => {
     },
     (response) => {
       if (!response.success) {
-        joinResult.textContent = response.message;
+        showToast(response.message);
         return;
       }
 
@@ -624,7 +634,7 @@ createRoomButton.addEventListener("click", () => {
 
 startGameButton.addEventListener("click", () => {
   if (hostedRoomCode === null) {
-    gameStatus.textContent = "Create a room first.";
+    showToast("Create a room first.");
     return;
   }
 
@@ -635,7 +645,7 @@ startGameButton.addEventListener("click", () => {
     },
     (response) => {
       if (!response.success) {
-        gameStatus.textContent = response.message;
+        showToast(response.message);
       }
     }
   );
@@ -655,7 +665,7 @@ joinRoomButton.addEventListener("click", () => {
     },
     (response) => {
       if (!response.success) {
-        joinResult.textContent = response.message;
+        showToast(response.message);
         return;
       }
 

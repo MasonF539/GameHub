@@ -162,6 +162,23 @@ body {
   font-weight: 600;
 }
 
+#gamehub-toast {
+  width: min(32rem, calc(100vw - 2rem));
+  max-width: none;
+  font-size: 1.1rem;
+  box-shadow: 0 1rem 3rem rgba(0, 0, 0, 0.45);
+}
+
+#gamehub-toast .toast-body {
+  padding: 1.25rem 1.5rem;
+  font-weight: 600;
+  text-align: center;
+}
+
+.gamehub-toast-container {
+  top: 16%;
+}
+
 #player-list:empty::after {
   display: block;
   padding: 1rem;
