@@ -21,6 +21,11 @@ body {
   backdrop-filter: blur(12px);
 }
 
+#lobby-view {
+  width: 100%;
+  max-width: 68rem;
+}
+
 .game-card .form-control,
 .game-card .form-select {
   color: #f8f9fa;
@@ -110,6 +115,12 @@ body {
   overflow: hidden;
   font-weight: 600;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.host-label {
+  color: #ffc107;
+  font-weight: 700;
   white-space: nowrap;
 }
 

@@ -1,198 +1,195 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GameHub</title>
-    <link
-      rel="stylesheet"
-      href="/vendor/bootstrap/css/bootstrap.min.css"
-    >
-    <link rel="stylesheet" href="/style.css">
-  </head>
 
-  <body>
-    <main class="container py-5">
-      <header class="text-center mb-5">
-        <h1 class="display-3 fw-bold">GameHub</h1>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GameHub</title>
+  <link rel="stylesheet" href="/vendor/bootstrap/css/bootstrap.min.css">
+  <link rel="stylesheet" href="/style.css">
+</head>
 
-        <p
-          id="connection-status"
-          class="badge rounded-pill text-bg-warning"
-        >
-          Connecting to server…
-        </p>
-      </header>
+<body>
+  <main class="container py-5">
+    <header class="text-center mb-5">
+      <h1 class="display-3 fw-bold">GameHub</h1>
 
-      <section id="entry-view" class="card game-card shadow mx-auto">
-        <div class="card-body p-4">
-          <h2 class="card-title text-center mb-4">
-            Enter GameHub
-          </h2>
+      <p id="connection-status" class="badge rounded-pill text-bg-warning">
+        Connecting to server…
+      </p>
+    </header>
 
-          <label for="player-name" class="form-label">
-            Player name
-          </label>
+    <section id="entry-view" class="card game-card shadow mx-auto">
+      <div class="card-body p-4">
+        <h2 class="card-title text-center mb-4">
+          Enter GameHub
+        </h2>
 
-          <input
-            id="player-name"
-            class="form-control form-control-lg mb-3"
-            type="text"
-            placeholder="Your name"
-            maxlength="20"
-            autocomplete="nickname"
-          >
+        <label for="player-name" class="form-label">
+          Player name
+        </label>
 
-          <label class="form-label d-block text-center">
-            Choose an avatar
-          </label>
+        <input id="player-name" class="form-control form-control-lg mb-3" type="text" placeholder="Your name"
+          maxlength="20" autocomplete="nickname">
 
-          <div
-            class="avatar-picker d-flex align-items-center justify-content-center gap-3 mb-3"
-          >
-            <button
-              id="previous-avatar"
-              class="btn btn-outline-light avatar-arrow"
-              type="button"
-              aria-label="Previous avatar"
-            >
-              &lt;
-            </button>
+        <label class="form-label d-block text-center">
+          Choose an avatar
+        </label>
 
-            <div
-              id="avatar-preview"
-              class="avatar-preview"
-              role="img"
-              aria-label="Selected avatar"
-            >
-              🐱
-            </div>
-
-            <button
-              id="next-avatar"
-              class="btn btn-outline-light avatar-arrow"
-              type="button"
-              aria-label="Next avatar"
-            >
-              &gt;
-            </button>
-          </div>
-
-          <div class="room-actions">
-            <div class="room-action room-action-create">
-              <h3 class="h5 text-center mb-3">
-                Create a new room
-              </h3>
-
-              <button
-                id="create-room"
-                class="btn btn-primary btn-lg w-100"
-              >
-                Create Room
-              </button>
-            </div>
-
-            <div
-              class="room-action-divider"
-              aria-hidden="true"
-            ></div>
-
-            <div class="room-action">
-              <h3 class="h5 text-center mb-3">
-                Join an existing room
-              </h3>
-
-              <label for="room-code" class="form-label">
-                Room code
-              </label>
-
-              <input
-                id="room-code"
-                class="form-control form-control-lg text-uppercase mb-3"
-                type="text"
-                placeholder="ABC123"
-                maxlength="6"
-                autocomplete="off"
-              >
-
-              <button
-                id="join-room"
-                class="btn btn-warning btn-lg w-100"
-              >
-                Join Room
-              </button>
-            </div>
-          </div>
-
-          <p
-            id="join-result"
-            class="status-message mt-3 mb-0"
-          ></p>
-        </div>
-      </section>
-
-      <section
-        id="lobby-view"
-        class="card game-card shadow mx-auto d-none"
-      >
-        <div class="card-body p-4">
-          <h2 class="card-title text-center">Game Lobby</h2>
-
-          <div
-            class="room-code-container d-flex align-items-center justify-content-center gap-1"
-          >
-            <p
-              id="created-room"
-              class="room-code fw-bold mb-0"
-            ></p>
-
-            <button
-              id="toggle-room-code"
-              class="room-code-eye btn"
-              type="button"
-              aria-label="Hide room code"
-              title="Hide room code"
-            >
-              <span aria-hidden="true">👁</span>
-            </button>
-          </div>
-
-          <hr>
-
-          <h3 class="h5">Players</h3>
-
-          <ul
-            id="player-list"
-            class="list-group mb-4"
-          ></ul>
-
-          <h3 class="h5">Choose a game</h3>
-
-          <select
-            id="game-select"
-            class="form-select form-select-lg mb-3"
-          >
-            <option value="">Loading games…</option>
-          </select>
-
-          <button
-            id="start-game"
-            class="btn btn-success btn-lg w-100"
-            disabled
-          >
-            Start Game
+        <div class="avatar-picker d-flex align-items-center justify-content-center gap-3 mb-3">
+          <button id="previous-avatar" class="btn btn-outline-light avatar-arrow" type="button"
+            aria-label="Previous avatar">
+            &lt;
           </button>
 
-          <p
-            id="game-status"
-            class="status-message mt-3 mb-0"
-          ></p>
-        </div>
-      </section>
-    </main>
+          <div id="avatar-preview" class="avatar-preview" role="img" aria-label="Selected avatar">
+            🐱
+          </div>
 
-    <script src="/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
-    <script src="/socket.io/socket.io.js"></script>
-    <script src="/client.js"></script>
-  </body>
+          <button id="next-avatar" class="btn btn-outline-light avatar-arrow" type="button" aria-label="Next avatar">
+            &gt;
+          </button>
+        </div>
+
+        <div class="room-actions">
+          <div class="room-action room-action-create">
+            <h3 class="h5 text-center mb-3">
+              Create a new room
+            </h3>
+
+            <button id="create-room" class="btn btn-primary btn-lg w-100">
+              Create Room
+            </button>
+          </div>
+
+          <div class="room-action-divider" aria-hidden="true"></div>
+
+          <div class="room-action">
+            <h3 class="h5 text-center mb-3">
+              Join an existing room
+            </h3>
+
+            <label for="room-code" class="form-label">
+              Room code
+            </label>
+
+            <input id="room-code" class="form-control form-control-lg text-uppercase mb-3" type="text"
+              placeholder="ABC123" maxlength="6" autocomplete="off">
+
+            <button id="join-room" class="btn btn-warning btn-lg w-100">
+              Join Room
+            </button>
+          </div>
+        </div>
+
+        <p id="join-result" class="status-message mt-3 mb-0"></p>
+      </div>
+    </section>
+
+    <section id="lobby-view" class="card game-card shadow mx-auto d-none">
+      <div class="card-body p-4">
+        <h2 class="card-title text-center">Game Lobby</h2>
+
+        <div class="room-code-container d-flex align-items-center justify-content-center gap-1">
+          <p id="created-room" class="room-code fw-bold mb-0"></p>
+
+          <button id="toggle-room-code" class="room-code-eye btn" type="button" aria-label="Hide room code"
+            title="Hide room code">
+            <span aria-hidden="true">👁</span>
+          </button>
+        </div>
+
+        <div class="d-flex align-items-center justify-content-center gap-2 mt-2">
+          <span id="room-lock-status" class="badge text-bg-success">
+            Lobby Open
+          </span>
+
+          <button id="toggle-room-lock" class="btn btn-outline-warning btn-sm d-none" type="button">
+            Lock Lobby
+          </button>
+        </div>
+
+        <hr>
+
+        <h3 class="h5">Players</h3>
+
+        <ul id="player-list" class="list-group mb-4"></ul>
+
+        <h3 class="h5">Choose a game</h3>
+
+        <select id="game-select" class="form-select form-select-lg mb-3">
+          <option value="">Loading games…</option>
+        </select>
+
+        <div class="row g-2 mb-3">
+          <div class="col">
+            <button id="how-to-play" class="btn btn-outline-info w-100" type="button" data-bs-toggle="modal"
+              data-bs-target="#rules-modal" disabled>
+              How to Play
+            </button>
+          </div>
+
+          <div class="col">
+            <button id="game-settings" class="btn btn-outline-light w-100" type="button" data-bs-toggle="modal"
+              data-bs-target="#settings-modal" disabled>
+              Settings
+            </button>
+          </div>
+        </div>
+
+        <button id="start-game" class="btn btn-success btn-lg w-100" disabled>
+          Start Game
+        </button>
+
+        <p id="game-status" class="status-message mt-3 mb-0"></p>
+      </div>
+    </section>
+    <div id="rules-modal" class="modal fade" tabindex="-1" aria-labelledby="rules-modal-title" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-scrollable modal-lg">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h2 id="rules-modal-title" class="modal-title fs-4">
+              How to Play
+            </h2>
+
+            <button class="btn-close" type="button" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+
+          <div id="rules-modal-body" class="modal-body"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="settings-modal" class="modal fade" tabindex="-1" aria-labelledby="settings-modal-title" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-scrollable modal-lg">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h2 id="settings-modal-title" class="modal-title fs-4">
+              Game Settings
+            </h2>
+
+            <button class="btn-close" type="button" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+
+          <div id="settings-modal-body" class="modal-body"></div>
+
+          <div class="modal-footer">
+            <button class="btn btn-secondary" type="button" data-bs-dismiss="modal">
+              Cancel
+            </button>
+
+            <button id="save-game-settings" class="btn btn-primary" type="button">
+              Save Settings
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script src="/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/client.js"></script>
+</body>
+
 </html>

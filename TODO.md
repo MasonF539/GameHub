@@ -2,6 +2,19 @@
 
 ## Planned features
 
+### Egyptian War gameplay
+
+- Create and shuffle the card deck on the server.
+- Deal all cards face down between 2–6 players.
+- Randomly select the first player.
+- Implement clockwise turns and face-card challenges.
+- Validate slap combinations using the saved game settings.
+- Handle simultaneous slaps and internet latency fairly.
+- Eliminate players who run out of cards.
+- Allow eliminated players to reenter by winning a valid slap.
+- Detect when one player has collected every card.
+- Return the room to the lobby after the game ends.
+
 ### Spectator mode for games in progress
 
 - Allow people to join a room after a game has started.

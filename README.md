@@ -18,8 +18,15 @@ The server runs locally in Docker and can optionally use a temporary Cloudflare 
 - Local and public hosting modes
 - PowerShell control menu
 - Docker-based setup with no local Node.js installation required
+- Reusable game rules and settings panels
+- Game-specific minimum and maximum player limits
+- Twelve-player lobby capacity
+- Host-controlled lobby locking and unlocking
+- Host-controlled player removal
+- Synchronized game selection and settings
+- Egyptian War rules and configurable slap settings
 
-The Reaction Test and Number Guess entries are currently placeholders. Playable game logic will be added next.
+Egyptian War is the first configured game. Its rules, player limits, and settings are available, but its playable card-game logic is still under development.
 
 ## Requirements
 
@@ -110,6 +117,9 @@ GameHub/
 │   ├── index.html
 │   └── style.css
 ├── src/
+│   ├── games/
+│   │   ├── egyptianWar.ts
+│   │   └── gameDefinition.ts
 │   └── server.ts
 ├── .dockerignore
 ├── .gitignore
