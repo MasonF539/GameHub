@@ -2,34 +2,6 @@
 
 ## Planned features
 
-### Egyptian War gameplay
-
-- [x] Create and shuffle the card deck on the server.
-- [x] Deal all cards face down between 2–6 players.
-- [x] Randomly select the first player.
-- [x] Implement clockwise turns and face-card challenges.
-- [x] Validate slap combinations using the saved game settings.
-- [x] Handle simultaneous slaps and internet latency fairly.
-- [x] Eliminate players who run out of cards.
-- [x] Allow eliminated players to reenter by winning a valid slap.
-- [x] Detect when one player has collected every card.
-- [x] Return the room to the lobby after the game ends.
-- [x] Add a configurable false-slap penalty (1–3 cards, default 2).
-- [x] Skip players who run out of cards; pass any remaining challenge attempts to the next player with cards.
-- [x] Add server-authoritative host pause/resume.
-- [x] Keep slap actions available during active play and animate each attempt.
-- [x] Animate pile transfers and game-winning card plays before ending the game.
-- [x] Add per-game chat capability and enable chat for Egyptian War.
-
-### Egyptian War presentation
-
-- [x] Position player name and card count beside the avatar with an underline below the details.
-- [x] Illuminate the full current-player seat.
-- [x] Add gold winner highlighting and card-transfer animations.
-- [x] Animate a hand slapping from the player's seat to the central pile.
-- [x] Add a host-only pause control in the upper-right of the gameplay panel.
-- [x] Add an in-game chat panel for games that enable chat.
-
 ### Spectator mode for games in progress
 
 - Allow people to join a room after a game has started.

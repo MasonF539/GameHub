@@ -1205,6 +1205,12 @@ function resumeSavedRoom(roomCode, resumeToken) {
   );
 }
 
+socket.on("latency-probe", (acknowledge) => {
+  if (typeof acknowledge === "function") {
+    acknowledge();
+  }
+});
+
 socket.on("connect", () => {
   if (!socket.recovered) {
     const savedRoomCode =

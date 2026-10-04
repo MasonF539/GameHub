@@ -33,6 +33,7 @@ Testing is left to the project owner; checked implementation items do not indica
 - [x] Implement Jack, Queen, King, Ace, and Joker challenge attempts (Jokers allow 5 attempts).
 - [x] Award the pile to the most recent challenge-card player when a challenge fails, except while a valid final-attempt slap window is active.
 - [x] Validate slaps on the server and resolve competing slaps fairly.
+- [x] Smooth server-measured round-trip times, adjust valid slap server-arrival times by half the estimated RTT (capped at 150 ms), collect competing requests for 200 ms, and randomly resolve adjusted arrivals within a 50 ms tie window.
 - [x] Skip players who run out of cards; continue the turn with the next eligible player.
 - [x] Pass an unfinished challenge to the next eligible player with the remaining attempts unchanged when its responder runs out of cards.
 - [x] Allow eliminated players to reenter through a valid slap.

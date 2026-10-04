@@ -1,5 +1,5 @@
 import express from "express";
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomInt } from "node:crypto";
 import http from "http";
 import path from "path";
 import { Server, type Socket } from "socket.io";
@@ -17,6 +17,11 @@ import {
   type EgyptianWarState
 } from "./games/egyptianWarEngine.js";
 import type { GameSetting } from "./games/gameDefinition.js";
+import {
+  estimateSlapLatencyCorrection,
+  getSlapCandidatesWithinTieWindow,
+  slapCollectionWindowMs
+} from "./games/slapArbitration.js";
 
 type GameSettingValue = boolean | number;
 
@@ -25,6 +30,11 @@ type Player = {
   name: string;
   avatar: string;
   isConnected: boolean;
+};
+
+type PendingSlapCandidate = {
+  playerId: string;
+  adjustedArrivalTime: number;
 };
 
 type Room = {
@@ -43,6 +53,10 @@ type Room = {
   turnTimeRemainingMs: number | null;
   reconnectGracePlayerId: string | null;
   reconnectGraceUsedThisTurn: boolean;
+  pendingSlapResolution: {
+    timer: ReturnType<typeof setTimeout>;
+    candidates: Map<string, PendingSlapCandidate>;
+  } | null;
   disconnectPausedPlayerId: string | null;
   wasPausedBeforeDisconnect: boolean;
 };
@@ -91,6 +105,7 @@ const playerResumeTokens =
   new Map<string, { roomCode: string; playerId: string }>();
 const revokedResumeTokenMessages = new Map<string, string>();
 const revokedSocketMessages = new Map<string, string>();
+const socketRoundTripTimes = new Map<string, number>();
 
 app.use(
   "/vendor/bootstrap",
@@ -124,6 +139,36 @@ function sendPlayerList(roomCode: string, room: Room): void {
   }));
 
   io.to(roomCode).emit("player-list", players);
+}
+
+function monitorSocketLatency(socket: Socket): void {
+  const measureRoundTripTime = (): void => {
+    const startedAt = performance.now();
+    socket.timeout(3_000).emit(
+      "latency-probe",
+      (error: Error | null) => {
+        if (error || !socket.connected) {
+          return;
+        }
+
+        const sample = performance.now() - startedAt;
+        const previous = socketRoundTripTimes.get(socket.id);
+        socketRoundTripTimes.set(
+          socket.id,
+          previous === undefined
+            ? sample
+            : previous * 0.8 + sample * 0.2
+        );
+      }
+    );
+  };
+
+  measureRoundTripTime();
+  const interval = setInterval(measureRoundTripTime, 5_000);
+  socket.on("disconnect", () => {
+    clearInterval(interval);
+    socketRoundTripTimes.delete(socket.id);
+  });
 }
 
 function createPlayerResumeToken(
@@ -304,7 +349,8 @@ function startTurnTimer(
     room.gameState === null ||
     room.gameState.status !== "playing" ||
     room.isPaused ||
-    room.isAnimating
+    room.isAnimating ||
+    room.pendingSlapResolution !== null
   ) {
     return;
   }
@@ -370,6 +416,80 @@ function startTurnTimer(
   }, delayMs);
 }
 
+function collectValidSlap(
+  roomCode: string,
+  playerId: string,
+  room: Room,
+  respond: (response: { success: boolean; message?: string }) => void
+): void {
+  let resolution = room.pendingSlapResolution;
+
+  if (resolution === null) {
+    resolution = {
+      timer: setTimeout(() => {
+        resolveCollectedSlaps(roomCode, room);
+      }, slapCollectionWindowMs),
+      candidates: new Map()
+    };
+    room.pendingSlapResolution = resolution;
+    suspendTurnTimer(room);
+  }
+
+  if (!resolution.candidates.has(playerId)) {
+    const roundTripTime = socketRoundTripTimes.get(playerId) ?? 0;
+    const latencyCorrection =
+      estimateSlapLatencyCorrection(roundTripTime);
+    resolution.candidates.set(playerId, {
+      playerId,
+      adjustedArrivalTime: performance.now() - latencyCorrection
+    });
+  }
+
+  respond({ success: true });
+}
+
+function resolveCollectedSlaps(
+  roomCode: string,
+  room: Room
+): void {
+  const resolution = room.pendingSlapResolution;
+  room.pendingSlapResolution = null;
+
+  if (
+    !resolution ||
+    rooms.get(roomCode) !== room ||
+    room.gameState === null ||
+    room.gameState.status !== "playing"
+  ) {
+    return;
+  }
+
+  const candidates = Array.from(resolution.candidates.values());
+  if (candidates.length === 0) {
+    if (!room.isPaused) {
+      startTurnTimer(roomCode, room);
+    }
+    return;
+  }
+
+  const tiedCandidates =
+    getSlapCandidatesWithinTieWindow(candidates);
+  const winner = tiedCandidates[randomInt(tiedCandidates.length)];
+
+  if (!winner) {
+    throw new Error("No slap candidate was selected.");
+  }
+
+  handleEgyptianWarAction(
+    roomCode,
+    winner.playerId,
+    "slap",
+    () => {},
+    false,
+    true
+  );
+}
+
 function sendEgyptianWarState(roomCode: string, room: Room): void {
   if (room.gameState === null) {
     return;
@@ -405,6 +525,10 @@ function completeEgyptianWar(roomCode: string, room: Room): void {
   }
 
   clearTurnTimer(room);
+  if (room.pendingSlapResolution !== null) {
+    clearTimeout(room.pendingSlapResolution.timer);
+    room.pendingSlapResolution = null;
+  }
   room.activeGameId = null;
   room.gameState = null;
   room.isPaused = false;
@@ -441,7 +565,8 @@ function handleEgyptianWarAction(
   playerId: string,
   action: EgyptianWarAction,
   respond: (response: { success: boolean; message?: string }) => void,
-  isTurnTimeout = false
+  isTurnTimeout = false,
+  isResolvedSlap = false
 ): void {
   const room = rooms.get(roomCode);
 
@@ -466,7 +591,7 @@ function handleEgyptianWarAction(
     return;
   }
 
-  if (room.isPaused) {
+  if (room.isPaused && !isResolvedSlap) {
     respond({
       success: false,
       message: "The host has paused the game."
@@ -474,7 +599,7 @@ function handleEgyptianWarAction(
     return;
   }
 
-  if (room.isAnimating) {
+  if (room.isAnimating && !isResolvedSlap) {
     respond({
       success: false,
       message: "Wait for the current action to finish."
@@ -483,6 +608,28 @@ function handleEgyptianWarAction(
   }
 
   const state = room.gameState;
+  if (
+    action === "slap" &&
+    !isTurnTimeout &&
+    !isResolvedSlap &&
+    state.pile.length > state.penaltyPileCardCount &&
+    isEgyptianWarPileSlappable(
+      state.pile.slice(state.penaltyPileCardCount),
+      state.settings
+    )
+  ) {
+    collectValidSlap(roomCode, playerId, room, respond);
+    return;
+  }
+
+  if (room.pendingSlapResolution !== null && !isResolvedSlap) {
+    respond({
+      success: false,
+      message: "A slap is being resolved. Please wait."
+    });
+    return;
+  }
+
   const currentPlayer = state.players[state.currentPlayerIndex];
   const currentPlayerIdBeforeAction = currentPlayer?.id ?? null;
   const isResolvingSlapWindow =
@@ -619,6 +766,7 @@ function handleEgyptianWarAction(
 
 io.on("connection", (socket) => {
   console.log(`Browser connected: ${socket.id}`);
+  monitorSocketLatency(socket);
 
   socket.emit("available-games", availableGames);
 
@@ -766,6 +914,17 @@ io.on("connection", (socket) => {
       room.reconnectGracePlayerId = socket.id;
     }
 
+    const pendingSlapCandidate =
+      room.pendingSlapResolution?.candidates.get(oldPlayerId);
+    if (pendingSlapCandidate) {
+      room.pendingSlapResolution?.candidates.delete(oldPlayerId);
+      pendingSlapCandidate.playerId = socket.id;
+      room.pendingSlapResolution?.candidates.set(
+        socket.id,
+        pendingSlapCandidate
+      );
+    }
+
     if (previousSocket && oldPlayerId !== socket.id) {
       previousSocket.emit("room-session-replaced");
       previousSocket.leave(session.roomCode);
@@ -856,6 +1015,7 @@ io.on("connection", (socket) => {
       turnTimeRemainingMs: null,
       reconnectGracePlayerId: null,
       reconnectGraceUsedThisTurn: false,
+      pendingSlapResolution: null,
       disconnectPausedPlayerId: null,
       wasPausedBeforeDisconnect: false
     };
@@ -1236,6 +1396,17 @@ io.on("connection", (socket) => {
       respond({
         success: false,
         message: "Wait for the current game animation to finish."
+      });
+      return;
+    }
+
+    if (
+      isActiveEgyptianWar &&
+      room.pendingSlapResolution !== null
+    ) {
+      respond({
+        success: false,
+        message: "Wait for the slap decision to finish."
       });
       return;
     }

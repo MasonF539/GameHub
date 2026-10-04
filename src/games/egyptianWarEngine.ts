@@ -217,6 +217,10 @@ const challengeAttempts: Partial<Record<CardRank, number>> = {
   joker: 5
 };
 
+function describeCardRank(rank: CardRank): string {
+  return `${rank === "ace" ? "an" : "a"} ${rank}`;
+}
+
 function nextPlayerIndex(
   state: EgyptianWarState,
   fromIndex: number,
@@ -755,7 +759,7 @@ export function applyEgyptianWarAction(
         awardPile(
           state,
           playerId,
-          `${player.name} played ${card.rank} with no opponent able to answer and won the pile.`
+          `${player.name} played ${describeCardRank(card.rank)} with no opponent able to answer and won the pile.`
         );
         return state.activityMessage;
       }
@@ -771,7 +775,7 @@ export function applyEgyptianWarAction(
       };
       state.currentPlayerIndex = nextIndex;
       state.activityMessage =
-        `${player.name} played ${card.rank}. ` +
+        `${player.name} played ${describeCardRank(card.rank)}. ` +
         `${state.players[nextIndex].name} must answer within ` +
         `${state.challenge.attemptsRemaining} ${state.challenge.attemptsRemaining === 1 ? "attempt" : "attempts"}.`;
       return state.activityMessage;
@@ -825,7 +829,7 @@ export function applyEgyptianWarAction(
     }
 
     state.activityMessage =
-      `${player.name} played ${card.rank}. ` +
+      `${player.name} played ${describeCardRank(card.rank)}. ` +
       `${state.challenge.attemptsRemaining} challenge ` +
       `${state.challenge.attemptsRemaining === 1 ? "attempt remains" : "attempts remain"}.`;
     return state.activityMessage;
@@ -838,7 +842,7 @@ export function applyEgyptianWarAction(
       awardPile(
         state,
         playerId,
-        `${player.name} played ${card.rank} with no opponent able to answer and won the pile.`
+        `${player.name} played ${describeCardRank(card.rank)} with no opponent able to answer and won the pile.`
       );
       return state.activityMessage;
     }
@@ -854,7 +858,7 @@ export function applyEgyptianWarAction(
     };
     state.currentPlayerIndex = nextIndex;
     state.activityMessage =
-      `${player.name} played ${card.rank}. ` +
+      `${player.name} played ${describeCardRank(card.rank)}. ` +
       `${state.players[nextIndex].name} must answer within ` +
       `${state.challenge.attemptsRemaining} ${state.challenge.attemptsRemaining === 1 ? "attempt" : "attempts"}.`;
     return state.activityMessage;
@@ -864,7 +868,8 @@ export function applyEgyptianWarAction(
     player.isEliminated = true;
     state.activityMessage = `${player.name} is out of cards and has been eliminated.`;
   } else {
-    state.activityMessage = `${player.name} played ${card.rank}.`;
+    state.activityMessage =
+      `${player.name} played ${describeCardRank(card.rank)}.`;
   }
 
   const nextIndex = nextPlayerIndex(state, playerIndex);

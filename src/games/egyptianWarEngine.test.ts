@@ -14,6 +14,10 @@ import {
   type EgyptianWarPlayerInput,
   type EgyptianWarSettings
 } from "./egyptianWarEngine.js";
+import {
+  estimateSlapLatencyCorrection,
+  getSlapCandidatesWithinTieWindow
+} from "./slapArbitration.js";
 
 const settings: EgyptianWarSettings = {
   includeJokers: true,
@@ -104,6 +108,28 @@ test("shuffles a copy without changing the source deck", () => {
     new Set(shuffledDeck.map((card) => card.id)),
     new Set(originalIds)
   );
+});
+
+test("caps server-measured slap latency correction at 150 milliseconds", () => {
+  assert.equal(estimateSlapLatencyCorrection(80), 40);
+  assert.equal(estimateSlapLatencyCorrection(400), 150);
+  assert.equal(estimateSlapLatencyCorrection(-1), 0);
+});
+
+test("treats adjusted slap arrivals within 50 milliseconds as a tie", () => {
+  const candidates = [
+    { playerId: "early", adjustedArrivalTime: 100 },
+    { playerId: "near-tie", adjustedArrivalTime: 150 },
+    { playerId: "late", adjustedArrivalTime: 151 }
+  ];
+
+  assert.deepEqual(
+    getSlapCandidatesWithinTieWindow(candidates).map(
+      (candidate) => candidate.playerId
+    ),
+    ["early", "near-tie"]
+  );
+  assert.deepEqual(getSlapCandidatesWithinTieWindow([]), []);
 });
 
 test("deals every card and randomly chooses the first player", () => {
@@ -280,6 +306,26 @@ test("plays a card and advances to the next active player", () => {
   assert.equal(state.players[0].isEliminated, true);
   assert.equal(state.currentPlayerIndex, 1);
   assert.equal(state.pile[0].id, "p1-2");
+});
+
+test("uses the correct article when announcing played cards", () => {
+  const numberCardState = makeState([
+    [card("2", "p1-2"), card("4", "p1-4")],
+    [card("3", "p2-3"), card("5", "p2-5")]
+  ]);
+  applyEgyptianWarAction(
+    numberCardState,
+    players[0].id,
+    "play-card"
+  );
+  assert.match(numberCardState.activityMessage, /played a 2\./);
+
+  const aceState = makeState([
+    [card("ace", "p1-ace"), card("4", "p1-4")],
+    [card("3", "p2-3"), card("5", "p2-5")]
+  ]);
+  applyEgyptianWarAction(aceState, players[0].id, "play-card");
+  assert.match(aceState.activityMessage, /played an ace\./);
 });
 
 test("starts and passes face-card challenges, then awards the pile to the challenger", () => {
