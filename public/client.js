@@ -41,7 +41,6 @@ const playerNameInput = document.querySelector("#player-name");
 const previousAvatarButton = document.querySelector("#previous-avatar");
 const avatarPreview = document.querySelector("#avatar-preview");
 const nextAvatarButton = document.querySelector("#next-avatar");
-const joinResult = document.querySelector("#join-result");
 
 const avatars = [
   "🐱",
@@ -62,8 +61,7 @@ const avatars = [
 ];
 
 let selectedAvatarIndex = 0;
-let hostedRoomCode = null;
-let currentRoomCode = "";
+let currentRoomCode = null;
 let roomCodeHidden = false;
 let isRoomLocked = false;
 let gameDefinitions = [];
@@ -177,6 +175,31 @@ function showLobby(roomCode, isHost) {
 function showEntry() {
   lobbyView.classList.add("d-none");
   entryView.classList.remove("d-none");
+}
+
+function resetRoomState() {
+  currentRoomCode = null;
+  roomCodeHidden = false;
+  isRoomLocked = false;
+  isCurrentUserHost = false;
+  selectedGameId = null;
+  currentGameSettings = {};
+  currentPlayers = [];
+
+  createdRoom.textContent = "";
+  gameStatus.textContent = "";
+  playerList.replaceChildren();
+
+  createRoomButton.disabled = false;
+  startGameButton.disabled = true;
+  joinRoomButton.disabled = false;
+  roomCodeInput.disabled = false;
+  playerNameInput.disabled = false;
+  previousAvatarButton.disabled = false;
+  nextAvatarButton.disabled = false;
+
+  howToPlayButton.disabled = true;
+  gameSettingsButton.disabled = true;
 }
 
 function displayGameInformation(game, settings) {
@@ -303,7 +326,7 @@ toggleRoomLockButton.addEventListener("click", () => {
   socket.emit(
     "set-room-locked",
     {
-      roomCode: hostedRoomCode,
+      roomCode: currentRoomCode,
       isLocked: !isRoomLocked
     },
     (response) => {
@@ -335,21 +358,8 @@ socket.on("disconnect", () => {
 
   connectionStatus.classList.add("text-bg-danger");
 
-  hostedRoomCode = null;
+  resetRoomState();
   showEntry();
-
-  createdRoom.textContent = "";
-  joinResult.textContent = "";
-  gameStatus.textContent = "";
-  playerList.replaceChildren();
-
-  createRoomButton.disabled = false;
-  startGameButton.disabled = true;
-  joinRoomButton.disabled = false;
-  roomCodeInput.disabled = false;
-  playerNameInput.disabled = false;
-  previousAvatarButton.disabled = false;
-  nextAvatarButton.disabled = false;
 });
 
 socket.on("available-games", (games) => {
@@ -415,7 +425,7 @@ socket.on("player-list", (players) => {
         socket.emit(
           "kick-player",
           {
-            roomCode: hostedRoomCode,
+            roomCode: currentRoomCode,
             playerId: player.id
           },
           (response) => {
@@ -493,38 +503,15 @@ socket.on("game-started", (game) => {
 });
 
 socket.on("kicked-from-room", ({ message }) => {
-  hostedRoomCode = null;
-  selectedGameId = null;
-  currentGameSettings = {};
-  currentPlayers = [];
-
+  resetRoomState();
   showEntry();
-
-  joinResult.textContent = "";
   showToast(message);
-  gameStatus.textContent = "";
-  playerList.replaceChildren();
-
-  joinRoomButton.disabled = false;
-  roomCodeInput.disabled = false;
-  playerNameInput.disabled = false;
-  previousAvatarButton.disabled = false;
-  nextAvatarButton.disabled = false;
 });
 
 socket.on("room-closed", () => {
-  hostedRoomCode = null;
+  resetRoomState();
   showEntry();
-
-  joinResult.textContent = "";
   showToast("The host closed the room.");
-  gameStatus.textContent = "";
-
-  joinRoomButton.disabled = false;
-  roomCodeInput.disabled = false;
-  playerNameInput.disabled = false;
-  previousAvatarButton.disabled = false;
-  nextAvatarButton.disabled = false;
 });
 
 gameSelect.addEventListener("change", () => {
@@ -539,7 +526,7 @@ gameSelect.addEventListener("change", () => {
   socket.emit(
     "select-game",
     {
-      roomCode: hostedRoomCode,
+      roomCode: currentRoomCode,
       gameId: selectedGame.id
     },
     (response) => {
@@ -587,7 +574,7 @@ saveGameSettingsButton.addEventListener("click", () => {
   socket.emit(
     "update-game-settings",
     {
-      roomCode: hostedRoomCode,
+      roomCode: currentRoomCode,
       settings
     },
     (response) => {
@@ -622,8 +609,6 @@ createRoomButton.addEventListener("click", () => {
         return;
       }
 
-      hostedRoomCode = response.roomCode;
-
       showLobby(response.roomCode, true);
 
       createRoomButton.disabled = true;
@@ -633,7 +618,7 @@ createRoomButton.addEventListener("click", () => {
 });
 
 startGameButton.addEventListener("click", () => {
-  if (hostedRoomCode === null) {
+  if (currentRoomCode === null) {
     showToast("Create a room first.");
     return;
   }
@@ -641,7 +626,7 @@ startGameButton.addEventListener("click", () => {
   socket.emit(
     "start-game",
     {
-      roomCode: hostedRoomCode,
+      roomCode: currentRoomCode,
     },
     (response) => {
       if (!response.success) {
@@ -668,9 +653,6 @@ joinRoomButton.addEventListener("click", () => {
         showToast(response.message);
         return;
       }
-
-      joinResult.textContent =
-        `Joined room ${response.roomCode} as ${response.playerName}.`;
 
       showLobby(response.roomCode, false);
 

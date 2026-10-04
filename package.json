@@ -1,13 +1,19 @@
 {
-  "name": "app",
+  "name": "gamehub",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "A self-hosted real-time browser game platform.",
+  "main": "dist/server.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "build": "tsc",
+    "check": "tsc --noEmit",
+    "start": "node dist/server.js"
   },
-  "keywords": [],
-  "author": "",
+  "keywords": [
+    "browser-game",
+    "socket.io",
+    "typescript"
+  ],
+  "author": "Mason Fong",
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {

@@ -1,5 +1,33 @@
 import type { GameDefinition } from "./gameDefinition.js";
 
+export type CardSuit =
+  | "clubs"
+  | "diamonds"
+  | "hearts"
+  | "spades";
+
+export type CardRank =
+  | "2"
+  | "3"
+  | "4"
+  | "5"
+  | "6"
+  | "7"
+  | "8"
+  | "9"
+  | "10"
+  | "jack"
+  | "queen"
+  | "king"
+  | "ace"
+  | "joker";
+
+export type Card = {
+  id: string;
+  suit: CardSuit | null;
+  rank: CardRank;
+};
+
 export const egyptianWar: GameDefinition = {
   id: "egyptian-war",
   name: "Egyptian War",
@@ -17,6 +45,7 @@ export const egyptianWar: GameDefinition = {
     "The next player must respond with another face card or Ace. A Jack allows 1 attempt, a Queen 2 attempts, a King 3 attempts, and an Ace 4 attempts.",
     "If the challenged player reveals another face card or Ace, the challenge passes to the next player with the new number of attempts.",
     "If the challenged player uses every attempt without revealing a face card or Ace, the player who began the latest challenge wins the central pile.",
+    "If a challenged player runs out of cards before completing their attempts and does not reveal another face card or Ace, they are eliminated from active play.",
     "A player who wins the pile places all of its cards at the bottom of their deck without shuffling and begins the next pile.",
     "When a valid slap combination appears, the first player to slap wins the central pile.",
     "An eliminated player may continue watching and can reenter the game by winning a valid slap.",

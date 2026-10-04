@@ -8,7 +8,7 @@ RUN npm ci
 COPY tsconfig.json ./
 COPY src ./src
 
-RUN npx tsc
+RUN npm run build
 
 
 FROM node:24-alpine
