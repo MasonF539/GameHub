@@ -48,6 +48,7 @@ const io = new Server(server);
 const port = Number(process.env.PORT) || 3000;
 const maxLobbyPlayers = 12;
 const rooms = new Map<string, Room>();
+const socketRoomCodes = new Map<string, string>();
 
 app.use(
   "/vendor/bootstrap",
@@ -106,6 +107,14 @@ io.on("connection", (socket) => {
   socket.emit("available-games", availableGames);
 
   socket.on("create-room", (data, respond) => {
+    if (socketRoomCodes.has(socket.id)) {
+      respond({
+        success: false,
+        message: "You are already in a room."
+      });
+      return;
+    }
+
     const playerName = String(data?.playerName ?? "").trim();
     const avatar = String(data?.avatar ?? "");
 
@@ -143,6 +152,7 @@ io.on("connection", (socket) => {
     });
 
     rooms.set(roomCode, room);
+    socketRoomCodes.set(socket.id, roomCode);
     socket.join(roomCode);
 
     sendPlayerList(roomCode, room);
@@ -157,6 +167,14 @@ io.on("connection", (socket) => {
   });
 
   socket.on("join-room", (data, respond) => {
+    if (socketRoomCodes.has(socket.id)) {
+      respond({
+        success: false,
+        message: "You are already in a room."
+      });
+      return;
+    }
+
     const roomCode = String(data?.roomCode ?? "").trim().toUpperCase();
     const playerName = String(data?.playerName ?? "").trim();
     const avatar = String(data?.avatar ?? "");
@@ -228,6 +246,7 @@ io.on("connection", (socket) => {
       avatar
     });
 
+    socketRoomCodes.set(socket.id, roomCode);
     socket.join(roomCode);
     sendPlayerList(roomCode, room);
 
@@ -501,6 +520,7 @@ io.on("connection", (socket) => {
     }
 
     room.players.delete(playerId);
+    socketRoomCodes.delete(playerId);
 
     const playerSocket = io.sockets.sockets.get(playerId);
 
@@ -574,6 +594,14 @@ io.on("connection", (socket) => {
       return;
     }
 
+    if (!game.isPlayable) {
+      respond({
+        success: false,
+        message: `${game.name} gameplay is still under development.`
+      });
+      return;
+    }
+
     if (room.players.size < game.minPlayers) {
       respond({
         success: false,
@@ -614,15 +642,24 @@ io.on("connection", (socket) => {
     for (const [roomCode, room] of rooms) {
       if (room.hostId === socket.id) {
         io.to(roomCode).emit("room-closed");
+
+        for (const playerId of room.players.keys()) {
+          socketRoomCodes.delete(playerId);
+        }
+
+        io.in(roomCode).socketsLeave(roomCode);
         rooms.delete(roomCode);
         console.log(`Room ${roomCode} closed`);
         continue;
       }
 
       if (room.players.delete(socket.id)) {
+        socketRoomCodes.delete(socket.id);
         sendPlayerList(roomCode, room);
       }
     }
+
+    socketRoomCodes.delete(socket.id);
   });
 });
 

@@ -69,6 +69,18 @@ let isCurrentUserHost = false;
 let selectedGameId = null;
 let currentGameSettings = {};
 let currentPlayers = [];
+let isRoomRequestPending = false;
+
+function setRoomRequestPending(isPending) {
+  isRoomRequestPending = isPending;
+
+  createRoomButton.disabled = isPending;
+  joinRoomButton.disabled = isPending;
+  roomCodeInput.disabled = isPending;
+  playerNameInput.disabled = isPending;
+  previousAvatarButton.disabled = isPending;
+  nextAvatarButton.disabled = isPending;
+}
 
 function updateAvatarPreview() {
   const selectedAvatar = avatars[selectedAvatarIndex];
@@ -185,6 +197,7 @@ function resetRoomState() {
   selectedGameId = null;
   currentGameSettings = {};
   currentPlayers = [];
+  isRoomRequestPending = false;
 
   createdRoom.textContent = "";
   gameStatus.textContent = "";
@@ -272,6 +285,13 @@ function updateStartGameAvailability() {
 
   if (!selectedGame) {
     startGameButton.disabled = true;
+    return;
+  }
+
+  if (!selectedGame.isPlayable) {
+    startGameButton.disabled = true;
+    gameStatus.textContent =
+      `${selectedGame.name} gameplay is still under development.`;
     return;
   }
 
@@ -371,7 +391,8 @@ socket.on("available-games", (games) => {
 
     option.value = game.id;
     option.textContent =
-      `${game.name} (${game.minPlayers}–${game.maxPlayers} players)`;
+      `${game.name} (${game.minPlayers}–${game.maxPlayers} players)` +
+      `${game.isPlayable ? "" : " — Coming soon"}`;
 
     gameSelect.appendChild(option);
   }
@@ -594,8 +615,14 @@ saveGameSettingsButton.addEventListener("click", () => {
 });
 
 createRoomButton.addEventListener("click", () => {
+  if (isRoomRequestPending || currentRoomCode !== null) {
+    return;
+  }
+
   const playerName = playerNameInput.value.trim();
   const selectedAvatar = avatars[selectedAvatarIndex];
+
+  setRoomRequestPending(true);
 
   socket.emit(
     "create-room",
@@ -605,10 +632,12 @@ createRoomButton.addEventListener("click", () => {
     },
     (response) => {
       if (!response.success) {
+        setRoomRequestPending(false);
         showToast(response.message);
         return;
       }
 
+      isRoomRequestPending = false;
       showLobby(response.roomCode, true);
 
       createRoomButton.disabled = true;
@@ -637,9 +666,15 @@ startGameButton.addEventListener("click", () => {
 });
 
 joinRoomButton.addEventListener("click", () => {
+  if (isRoomRequestPending || currentRoomCode !== null) {
+    return;
+  }
+
   const roomCode = roomCodeInput.value.trim().toUpperCase();
   const playerName = playerNameInput.value.trim();
   const selectedAvatar = avatars[selectedAvatarIndex];
+
+  setRoomRequestPending(true);
 
   socket.emit(
     "join-room",
@@ -650,10 +685,12 @@ joinRoomButton.addEventListener("click", () => {
     },
     (response) => {
       if (!response.success) {
+        setRoomRequestPending(false);
         showToast(response.message);
         return;
       }
 
+      isRoomRequestPending = false;
       showLobby(response.roomCode, false);
 
       joinRoomButton.disabled = true;

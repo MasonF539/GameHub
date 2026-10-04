@@ -9,6 +9,7 @@ export type GameDefinition = {
   id: string;
   name: string;
   description: string;
+  isPlayable: boolean;
   rules: string[];
   minPlayers: number;
   maxPlayers: number;

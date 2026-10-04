@@ -33,6 +33,7 @@ export const egyptianWar: GameDefinition = {
   name: "Egyptian War",
   description:
     "Play cards into a central pile, survive face-card challenges, and race to slap special combinations. The last player holding all the cards wins.",
+  isPlayable: false,
 
   minPlayers: 2,
   maxPlayers: 6,

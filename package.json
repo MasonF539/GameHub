@@ -6,6 +6,7 @@
   "scripts": {
     "build": "tsc",
     "check": "tsc --noEmit",
+    "test": "npm run build && node --test dist/games/egyptianWarEngine.test.js",
     "start": "node dist/server.js"
   },
   "keywords": [
