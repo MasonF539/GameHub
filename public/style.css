@@ -26,6 +26,41 @@ body {
   max-width: 68rem;
 }
 
+#gameplay-view {
+  width: 100%;
+  max-width: 68rem;
+}
+
+.egyptian-war-table {
+  background:
+    radial-gradient(ellipse at center, rgba(25, 135, 84, 0.42), rgba(9, 48, 35, 0.9));
+  border: 1px solid rgba(126, 231, 135, 0.35);
+  border-radius: 1rem;
+}
+
+.egyptian-war-top-card {
+  display: grid;
+  min-height: 8rem;
+  place-items: center;
+  color: #fff;
+  font-size: clamp(1.5rem, 6vw, 3rem);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.egyptian-war-top-card.is-red {
+  color: #ff8585;
+}
+
+.egyptian-war-player.is-current {
+  border-color: #7ee787;
+  box-shadow: inset 0 0 0 1px #7ee787;
+}
+
+.egyptian-war-player.is-eliminated {
+  opacity: 0.55;
+}
+
 .game-card .form-control,
 .game-card .form-select {
   color: #f8f9fa;
@@ -190,6 +225,12 @@ body {
 }
 
 #player-list .list-group-item {
+  color: #f8f9fa;
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+#egyptian-war-players .list-group-item {
   color: #f8f9fa;
   background: rgba(255, 255, 255, 0.08);
   border-color: rgba(255, 255, 255, 0.12);

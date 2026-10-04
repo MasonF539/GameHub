@@ -8,6 +8,22 @@ const gameHubToastMessage =
 
 const entryView = document.querySelector("#entry-view");
 const lobbyView = document.querySelector("#lobby-view");
+const gameplayView = document.querySelector("#gameplay-view");
+const egyptianWarTurn = document.querySelector("#egyptian-war-turn");
+const egyptianWarChallenge =
+  document.querySelector("#egyptian-war-challenge");
+const egyptianWarPileCount =
+  document.querySelector("#egyptian-war-pile-count");
+const egyptianWarTopCard =
+  document.querySelector("#egyptian-war-top-card");
+const egyptianWarPlayers =
+  document.querySelector("#egyptian-war-players");
+const egyptianWarPlayCardButton =
+  document.querySelector("#egyptian-war-play-card");
+const egyptianWarSlapButton =
+  document.querySelector("#egyptian-war-slap");
+const egyptianWarMessage =
+  document.querySelector("#egyptian-war-message");
 
 const createRoomButton = document.querySelector("#create-room");
 const createdRoom = document.querySelector("#created-room");
@@ -198,10 +214,19 @@ function resetRoomState() {
   currentGameSettings = {};
   currentPlayers = [];
   isRoomRequestPending = false;
+  gameplayView.classList.add("d-none");
 
   createdRoom.textContent = "";
   gameStatus.textContent = "";
   playerList.replaceChildren();
+  egyptianWarPlayers.replaceChildren();
+  egyptianWarTurn.textContent = "";
+  egyptianWarChallenge.textContent = "";
+  egyptianWarPileCount.textContent = "0";
+  egyptianWarTopCard.textContent = "No card played yet";
+  egyptianWarMessage.textContent = "";
+  egyptianWarPlayCardButton.disabled = true;
+  egyptianWarSlapButton.disabled = true;
 
   createRoomButton.disabled = false;
   startGameButton.disabled = true;
@@ -331,6 +356,106 @@ function updateStartGameAvailability() {
 
   gameStatus.textContent =
     `${selectedGame.name} is ready to start.`;
+}
+
+function renderEgyptianWarState(state) {
+  const currentPlayer = state.players.find(
+    (player) => player.id === state.currentPlayerId
+  );
+  const winner = state.players.find(
+    (player) => player.id === state.winnerId
+  );
+
+  egyptianWarTurn.textContent = winner
+    ? `${winner.name} wins!`
+    : currentPlayer
+      ? `${currentPlayer.name}'s turn`
+      : "Game complete";
+
+  if (state.challenge) {
+    const challenger = state.players.find(
+      (player) => player.id === state.challenge.challengerId
+    );
+    const responder = state.players.find(
+      (player) => player.id === state.challenge.responderId
+    );
+
+    egyptianWarChallenge.textContent =
+      `${challenger?.name ?? "A player"} challenged ` +
+      `${responder?.name ?? "the next player"}: ` +
+      `${state.challenge.attemptsRemaining} ` +
+      `${state.challenge.attemptsRemaining === 1 ? "attempt" : "attempts"} remaining.`;
+  } else {
+    egyptianWarChallenge.textContent = "";
+  }
+
+  egyptianWarPileCount.textContent = String(state.pileCardCount);
+
+  if (state.topCard === null) {
+    egyptianWarTopCard.textContent = "No card played yet";
+    egyptianWarTopCard.classList.remove("is-red");
+  } else {
+    const suitSymbols = {
+      clubs: "♣",
+      diamonds: "♦",
+      hearts: "♥",
+      spades: "♠"
+    };
+    const rank = state.topCard.rank;
+    const displayRank = rank[0].toUpperCase() + rank.slice(1);
+    const suit = state.topCard.suit === null
+      ? ""
+      : ` ${suitSymbols[state.topCard.suit]}`;
+
+    egyptianWarTopCard.textContent = `${displayRank}${suit}`;
+    egyptianWarTopCard.classList.toggle(
+      "is-red",
+      state.topCard.suit === "diamonds" ||
+        state.topCard.suit === "hearts"
+    );
+  }
+
+  egyptianWarPlayers.replaceChildren();
+
+  for (const player of state.players) {
+    const listItem = document.createElement("li");
+    listItem.className =
+      "list-group-item d-flex align-items-center gap-3 egyptian-war-player";
+    listItem.classList.toggle("is-current", player.isCurrentPlayer);
+    listItem.classList.toggle("is-eliminated", player.isEliminated);
+
+    const avatar = document.createElement("span");
+    avatar.className = "player-avatar";
+    avatar.textContent = player.avatar;
+
+    const name = document.createElement("span");
+    name.className = "player-name";
+    name.textContent = player.name;
+
+    const cardCount = document.createElement("span");
+    cardCount.className = "ms-auto text-body-secondary";
+    cardCount.textContent =
+      `${player.cardCount} ${player.cardCount === 1 ? "card" : "cards"}`;
+
+    listItem.append(avatar, name, cardCount);
+
+    if (player.isEliminated) {
+      const eliminated = document.createElement("span");
+      eliminated.className = "badge text-bg-secondary";
+      eliminated.textContent = "Out";
+      listItem.appendChild(eliminated);
+    }
+
+    egyptianWarPlayers.appendChild(listItem);
+  }
+
+  egyptianWarMessage.textContent = state.activityMessage;
+  egyptianWarPlayCardButton.disabled =
+    state.status !== "playing" ||
+    state.currentPlayerId !== socket.id;
+  egyptianWarSlapButton.disabled =
+    state.status !== "playing" ||
+    !state.isSlappable;
 }
 
 toggleRoomCodeButton.addEventListener("click", () => {
@@ -520,7 +645,23 @@ socket.on(
 );
 
 socket.on("game-started", (game) => {
-  gameStatus.textContent = `${game.name} is starting!`;
+  if (game.gameId !== "egyptian-war") {
+    return;
+  }
+
+  lobbyView.classList.add("d-none");
+  gameplayView.classList.remove("d-none");
+});
+
+socket.on("egyptian-war-state", (state) => {
+  renderEgyptianWarState(state);
+});
+
+socket.on("game-ended", ({ message }) => {
+  gameplayView.classList.add("d-none");
+  lobbyView.classList.remove("d-none");
+  updateStartGameAvailability();
+  gameStatus.textContent = message;
 });
 
 socket.on("kicked-from-room", ({ message }) => {
@@ -550,6 +691,38 @@ gameSelect.addEventListener("change", () => {
       roomCode: currentRoomCode,
       gameId: selectedGame.id
     },
+    (response) => {
+      if (!response.success) {
+        showToast(response.message);
+      }
+    }
+  );
+});
+
+egyptianWarPlayCardButton.addEventListener("click", () => {
+  if (currentRoomCode === null) {
+    return;
+  }
+
+  socket.emit(
+    "play-card",
+    { roomCode: currentRoomCode },
+    (response) => {
+      if (!response.success) {
+        showToast(response.message);
+      }
+    }
+  );
+});
+
+egyptianWarSlapButton.addEventListener("click", () => {
+  if (currentRoomCode === null) {
+    return;
+  }
+
+  socket.emit(
+    "slap",
+    { roomCode: currentRoomCode },
     (response) => {
       if (!response.success) {
         showToast(response.message);

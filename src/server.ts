@@ -3,6 +3,15 @@ import http from "http";
 import path from "path";
 import { Server } from "socket.io";
 import { egyptianWar } from "./games/egyptianWar.js";
+import {
+  applyEgyptianWarAction,
+  createEgyptianWarState,
+  createPublicEgyptianWarState,
+  type EgyptianWarAction,
+  EgyptianWarRuleError,
+  type EgyptianWarSettings,
+  type EgyptianWarState
+} from "./games/egyptianWarEngine.js";
 
 type Player = {
   id: string;
@@ -17,6 +26,7 @@ type Room = {
   gameSettings: Record<string, boolean>;
   isLocked: boolean;
   activeGameId: string | null;
+  gameState: EgyptianWarState | null;
 };
 
 const availableAvatars = [
@@ -101,6 +111,83 @@ function createDefaultSettings(
   );
 }
 
+function sendEgyptianWarState(roomCode: string, room: Room): void {
+  if (room.gameState === null) {
+    return;
+  }
+
+  io.to(roomCode).emit(
+    "egyptian-war-state",
+    createPublicEgyptianWarState(room.gameState)
+  );
+}
+
+function completeEgyptianWar(roomCode: string, room: Room): void {
+  const state = room.gameState;
+
+  if (state === null || state.status !== "finished") {
+    return;
+  }
+
+  room.activeGameId = null;
+  room.gameState = null;
+  io.to(roomCode).emit("game-ended", {
+    winnerId: state.winnerId,
+    message: state.activityMessage
+  });
+}
+
+function handleEgyptianWarAction(
+  roomCode: string,
+  playerId: string,
+  action: EgyptianWarAction,
+  respond: (response: { success: boolean; message?: string }) => void
+): void {
+  const room = rooms.get(roomCode);
+
+  if (!room || room.activeGameId !== egyptianWar.id || room.gameState === null) {
+    respond({
+      success: false,
+      message: "Egyptian War is not active in that room."
+    });
+    return;
+  }
+
+  if (!room.players.has(playerId)) {
+    respond({
+      success: false,
+      message: "You are not a player in that room."
+    });
+    return;
+  }
+
+  try {
+    applyEgyptianWarAction(room.gameState, playerId, action);
+  } catch (error) {
+    if (!(error instanceof EgyptianWarRuleError)) {
+      console.error(
+        `Unexpected error while processing ${action} in room ${roomCode}:`,
+        error
+      );
+      respond({
+        success: false,
+        message: "Unable to process that game action."
+      });
+      return;
+    }
+
+    respond({
+      success: false,
+      message: error.message
+    });
+    return;
+  }
+
+  sendEgyptianWarState(roomCode, room);
+  respond({ success: true });
+  completeEgyptianWar(roomCode, room);
+}
+
 io.on("connection", (socket) => {
   console.log(`Browser connected: ${socket.id}`);
 
@@ -142,7 +229,8 @@ io.on("connection", (socket) => {
       selectedGameId: null,
       gameSettings: {},
       isLocked: false,
-      activeGameId: null
+      activeGameId: null,
+      gameState: null
     };
 
     room.players.set(socket.id, {
@@ -501,6 +589,14 @@ io.on("connection", (socket) => {
       return;
     }
 
+    if (room.activeGameId !== null) {
+      respond({
+        success: false,
+        message: "Players cannot be kicked during a game."
+      });
+      return;
+    }
+
     if (playerId === room.hostId) {
       respond({
         success: false,
@@ -622,18 +718,69 @@ io.on("connection", (socket) => {
       return;
     }
 
+    const settings: EgyptianWarSettings = {
+      includeJokers: room.gameSettings.includeJokers === true,
+      allowDoubles: room.gameSettings.allowDoubles === true,
+      allowSandwiches: room.gameSettings.allowSandwiches === true,
+      allowFourInARow: room.gameSettings.allowFourInARow === true,
+      allowTopBottom: room.gameSettings.allowTopBottom === true,
+      allowTens: room.gameSettings.allowTens === true,
+      allowMarriage: room.gameSettings.allowMarriage === true
+    };
+
+    try {
+      room.gameState = createEgyptianWarState(
+        Array.from(room.players.values()),
+        settings
+      );
+    } catch (error) {
+      console.error(`Unable to initialize ${game.name} in room ${roomCode}:`, error);
+      respond({
+        success: false,
+        message: "Unable to initialize the game. Please try again."
+      });
+      return;
+    }
+
     room.activeGameId = game.id;
 
     io.to(roomCode).emit("game-started", {
-      ...game,
-      currentSettings: room.gameSettings
+      gameId: game.id,
+      name: game.name
     });
+    sendEgyptianWarState(roomCode, room);
 
     console.log(`${game.name} started in room ${roomCode}`);
 
     respond({
       success: true
     });
+  });
+
+  socket.on("play-card", (data, respond) => {
+    const roomCode = String(data?.roomCode ?? "")
+      .trim()
+      .toUpperCase();
+
+    handleEgyptianWarAction(
+      roomCode,
+      socket.id,
+      "play-card",
+      respond
+    );
+  });
+
+  socket.on("slap", (data, respond) => {
+    const roomCode = String(data?.roomCode ?? "")
+      .trim()
+      .toUpperCase();
+
+    handleEgyptianWarAction(
+      roomCode,
+      socket.id,
+      "slap",
+      respond
+    );
   });
 
   socket.on("disconnect", () => {
@@ -655,6 +802,16 @@ io.on("connection", (socket) => {
 
       if (room.players.delete(socket.id)) {
         socketRoomCodes.delete(socket.id);
+
+        if (room.gameState !== null) {
+          room.activeGameId = null;
+          room.gameState = null;
+          io.to(roomCode).emit("game-ended", {
+            winnerId: null,
+            message: "The game was stopped because a player disconnected."
+          });
+        }
+
         sendPlayerList(roomCode, room);
       }
     }

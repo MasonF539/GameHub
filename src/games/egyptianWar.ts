@@ -33,7 +33,7 @@ export const egyptianWar: GameDefinition = {
   name: "Egyptian War",
   description:
     "Play cards into a central pile, survive face-card challenges, and race to slap special combinations. The last player holding all the cards wins.",
-  isPlayable: false,
+  isPlayable: true,
 
   minPlayers: 2,
   maxPlayers: 6,
@@ -45,8 +45,8 @@ export const egyptianWar: GameDefinition = {
     "Play proceeds clockwise until someone plays a face card: Jack, Queen, and King, or an Ace.",
     "The next player must respond with another face card or Ace. A Jack allows 1 attempt, a Queen 2 attempts, a King 3 attempts, and an Ace 4 attempts.",
     "If the challenged player reveals another face card or Ace, the challenge passes to the next player with the new number of attempts.",
-    "If the challenged player uses every attempt without revealing a face card or Ace, the player who began the latest challenge wins the central pile.",
-    "If a challenged player runs out of cards before completing their attempts and does not reveal another face card or Ace, they are eliminated from active play.",
+    "If the challenged player uses every attempt without revealing a face card or Ace, they win the central pile.",
+    "If the challenged player runs out of cards before completing their attempts and does not reveal another face card or Ace, they win the central pile and can continue playing.",
     "A player who wins the pile places all of its cards at the bottom of their deck without shuffling and begins the next pile.",
     "When a valid slap combination appears, the first player to slap wins the central pile.",
     "An eliminated player may continue watching and can reenter the game by winning a valid slap.",

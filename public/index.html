@@ -154,6 +154,41 @@
         <p id="game-status" class="status-message mt-3 mb-0"></p>
       </div>
     </section>
+
+    <section id="gameplay-view" class="card game-card shadow mx-auto d-none">
+      <div class="card-body p-4">
+        <h2 class="card-title text-center">Egyptian War</h2>
+
+        <p id="egyptian-war-turn" class="h4 text-center" aria-live="polite"></p>
+        <p id="egyptian-war-challenge" class="text-center"></p>
+
+        <div class="egyptian-war-table text-center p-4 mb-4">
+          <p class="mb-1">Central pile: <span id="egyptian-war-pile-count">0</span> cards</p>
+          <div id="egyptian-war-top-card" class="egyptian-war-top-card" aria-live="polite">
+            No card played yet
+          </div>
+        </div>
+
+        <h3 class="h5">Players</h3>
+        <ul id="egyptian-war-players" class="list-group mb-4"></ul>
+
+        <div class="row g-2">
+          <div class="col">
+            <button id="egyptian-war-play-card" class="btn btn-success btn-lg w-100" type="button" disabled>
+              Play a Card
+            </button>
+          </div>
+          <div class="col">
+            <button id="egyptian-war-slap" class="btn btn-warning btn-lg w-100" type="button" disabled>
+              Slap!
+            </button>
+          </div>
+        </div>
+
+        <p id="egyptian-war-message" class="status-message mt-3 mb-0" aria-live="polite"></p>
+      </div>
+    </section>
+
     <div id="rules-modal" class="modal fade" tabindex="-1" aria-labelledby="rules-modal-title" aria-hidden="true">
       <div class="modal-dialog modal-dialog-scrollable modal-lg">
         <div class="modal-content">
