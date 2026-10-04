@@ -98,6 +98,10 @@
 
     <section id="lobby-view" class="card game-card shadow mx-auto d-none">
       <div class="card-body p-4">
+        <button id="close-lobby" class="btn btn-outline-danger btn-sm d-none"
+          type="button" data-bs-toggle="modal" data-bs-target="#close-lobby-modal">
+          Close Lobby
+        </button>
         <h2 class="card-title text-center">Game Lobby</h2>
 
         <div class="room-code-container d-flex align-items-center justify-content-center gap-1">
@@ -156,23 +160,64 @@
     </section>
 
     <section id="gameplay-view" class="card game-card shadow mx-auto d-none">
-      <div class="card-body p-4">
+      <div class="card-body p-4 egyptian-war-game-panel">
         <h2 class="card-title text-center">Egyptian War</h2>
+        <div class="egyptian-war-host-controls d-none" id="egyptian-war-host-controls">
+          <button id="egyptian-war-pause" class="btn btn-outline-light btn-sm"
+            type="button" aria-pressed="false">
+            Pause
+          </button>
+          <button id="egyptian-war-exit-game" class="btn btn-outline-danger btn-sm" type="button"
+            data-bs-toggle="modal" data-bs-target="#exit-game-modal">
+            Exit Game
+          </button>
+        </div>
+        <aside id="egyptian-war-slap-rules" class="egyptian-war-slap-rules"
+          aria-labelledby="egyptian-war-slap-rules-title">
+          <div class="egyptian-war-slap-rules-heading">
+            <h3 id="egyptian-war-slap-rules-title">Slap Rules</h3>
+            <button id="toggle-slap-rules" class="btn btn-outline-light btn-sm"
+              type="button" aria-expanded="true" aria-controls="egyptian-war-slap-rules-list">
+              Hide
+            </button>
+          </div>
+          <ul id="egyptian-war-slap-rules-list"></ul>
+        </aside>
 
         <p id="egyptian-war-turn" class="h4 text-center" aria-live="polite"></p>
-        <p id="egyptian-war-challenge" class="text-center"></p>
 
-        <div class="egyptian-war-table text-center p-4 mb-4">
-          <p class="mb-1">Central pile: <span id="egyptian-war-pile-count">0</span> cards</p>
-          <div id="egyptian-war-top-card" class="egyptian-war-top-card" aria-live="polite">
-            No card played yet
+        <div id="egyptian-war-arena" class="egyptian-war-arena">
+          <div id="egyptian-war-animation-layer" class="egyptian-war-animation-layer"
+            aria-hidden="true"></div>
+          <div class="egyptian-war-felt">
+            <div class="egyptian-war-table-info">
+              <p class="egyptian-war-pile-label mb-2">
+                Central pile: <span id="egyptian-war-pile-count">0 cards</span>
+              </p>
+              <div id="egyptian-war-pile-stack" class="egyptian-war-pile-stack"
+                aria-label="Central card pile">
+                <p id="egyptian-war-top-card" class="egyptian-war-empty-pile">
+                  No card played yet
+                </p>
+              </div>
+              <p id="egyptian-war-challenge" class="egyptian-war-challenge mb-1"></p>
+              <p id="egyptian-war-message" class="egyptian-war-message mb-0" aria-live="polite"></p>
+              <div id="egyptian-war-victory" class="egyptian-war-victory" hidden></div>
+            </div>
           </div>
+          <div id="egyptian-war-players" class="egyptian-war-seats" aria-label="Players around the table"></div>
         </div>
 
-        <h3 class="h5">Players</h3>
-        <ul id="egyptian-war-players" class="list-group mb-4"></ul>
+        <div id="egyptian-war-turn-timer" class="egyptian-war-turn-timer mb-2 is-hidden"
+          aria-hidden="true">
+          <div class="progress flex-grow-1" role="progressbar" aria-label="Time remaining for this turn"
+            aria-valuemin="0" aria-valuemax="100" aria-valuenow="100">
+            <div id="egyptian-war-turn-timer-bar" class="progress-bar bg-warning" style="width: 100%"></div>
+          </div>
+          <span id="egyptian-war-turn-timer-value" class="egyptian-war-turn-timer-value">15s</span>
+        </div>
 
-        <div class="row g-2">
+        <div class="row g-2 egyptian-war-controls">
           <div class="col">
             <button id="egyptian-war-play-card" class="btn btn-success btn-lg w-100" type="button" disabled>
               Play a Card
@@ -185,7 +230,24 @@
           </div>
         </div>
 
-        <p id="egyptian-war-message" class="status-message mt-3 mb-0" aria-live="polite"></p>
+        <aside class="egyptian-war-spectators mt-3" aria-labelledby="egyptian-war-spectators-title">
+          <h3 id="egyptian-war-spectators-title" class="h6 mb-2">Spectators</h3>
+          <p class="egyptian-war-spectators-empty mb-0">
+            Spectator mode is not available yet.
+          </p>
+        </aside>
+
+        <section id="egyptian-war-chat" class="egyptian-war-chat mt-3" aria-labelledby="egyptian-war-chat-title" hidden>
+          <h3 id="egyptian-war-chat-title" class="h6 mb-2">Game chat</h3>
+          <ol id="egyptian-war-chat-messages" class="egyptian-war-chat-messages"
+            aria-live="polite" aria-relevant="additions"></ol>
+          <form id="egyptian-war-chat-form" class="egyptian-war-chat-form">
+            <label class="visually-hidden" for="egyptian-war-chat-input">Message</label>
+            <input id="egyptian-war-chat-input" class="form-control" type="text"
+              maxlength="300" autocomplete="off" placeholder="Write a message">
+            <button class="btn btn-outline-light" type="submit">Send</button>
+          </form>
+        </section>
       </div>
     </section>
 
@@ -225,6 +287,48 @@
 
             <button id="save-game-settings" class="btn btn-primary" type="button">
               Save Settings
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="close-lobby-modal" class="modal fade" tabindex="-1"
+      aria-labelledby="close-lobby-modal-title" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h2 id="close-lobby-modal-title" class="modal-title fs-5">Close Lobby</h2>
+            <button class="btn-close" type="button" data-bs-dismiss="modal" aria-label="Cancel"></button>
+          </div>
+          <div class="modal-body">
+            Close this room and return all players to the home screen?
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-secondary" type="button" data-bs-dismiss="modal">Keep Lobby Open</button>
+            <button id="confirm-close-lobby" class="btn btn-danger" type="button">
+              Close Lobby
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="exit-game-modal" class="modal fade" tabindex="-1"
+      aria-labelledby="exit-game-modal-title" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h2 id="exit-game-modal-title" class="modal-title fs-5">Exit Game</h2>
+            <button class="btn-close" type="button" data-bs-dismiss="modal" aria-label="Cancel"></button>
+          </div>
+          <div class="modal-body">
+            End the current game and return all players to the lobby?
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-secondary" type="button" data-bs-dismiss="modal">Keep Playing</button>
+            <button id="confirm-exit-game" class="btn btn-danger" type="button">
+              Exit Game
             </button>
           </div>
         </div>
