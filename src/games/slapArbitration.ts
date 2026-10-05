@@ -1,99 +1,15 @@
 import { randomInt } from "node:crypto";
 
 export const slapCollectionWindowMs = 200;
-export const maxSlapLatencyCorrectionMs = 150;
 
 export const minimumSlapWindowMs = 20;
 export const maximumSlapWindowMs = 50;
-export const maximumLatencySamples = 12;
-export const minimumTrustedLatencySamples = 4;
 export const defaultSlapJitterMs = 25;
-export const rttSmoothingFactor = 0.2;
 
 const secureRandomRange = 0x1_0000_0000;
 
 function secureRandomUnitInterval(): number {
   return randomInt(secureRandomRange) / secureRandomRange;
-}
-
-export function appendRttSample(
-  samples: readonly number[],
-  sample: number
-): number[] {
-  const validSamples = samples.filter(
-    (existingSample) =>
-      Number.isFinite(existingSample) && existingSample >= 0
-  );
-
-  if (!Number.isFinite(sample) || sample < 0) {
-    return validSamples.slice(-maximumLatencySamples);
-  }
-
-  return [...validSamples, sample].slice(-maximumLatencySamples);
-}
-
-export function calculateRttJitter(
-  samples: readonly number[]
-): number {
-  const validSamples = samples.filter(
-    (sample) => Number.isFinite(sample) && sample >= 0
-  );
-
-  if (validSamples.length < minimumTrustedLatencySamples) {
-    return defaultSlapJitterMs;
-  }
-
-  const average =
-    validSamples.reduce((total, sample) => total + sample, 0) /
-    validSamples.length;
-
-  const variance =
-    validSamples.reduce(
-      (total, sample) =>
-        total + (sample - average) ** 2,
-      0
-    ) / validSamples.length;
-
-  return Math.sqrt(variance);
-}
-
-export function calculateSmoothedRttEstimate(
-  samples: readonly number[]
-): number {
-  const validSamples = samples.filter(
-    (sample) => Number.isFinite(sample) && sample >= 0
-  );
-
-  if (validSamples.length < minimumTrustedLatencySamples) {
-    return 0;
-  }
-
-  const sortedSamples = [...validSamples].sort(
-    (first, second) => first - second
-  );
-  const lastIndex = sortedSamples.length - 1;
-  const lowerQuartile =
-    sortedSamples[Math.floor(lastIndex * 0.25)] ?? 0;
-  const upperQuartile =
-    sortedSamples[Math.floor(lastIndex * 0.75)] ?? lowerQuartile;
-  const interquartileRange = upperQuartile - lowerQuartile;
-  const lowerFence = lowerQuartile - interquartileRange * 1.5;
-  const upperFence = upperQuartile + interquartileRange * 1.5;
-  const inlierSamples = validSamples.filter(
-    (sample) => sample >= lowerFence && sample <= upperFence
-  );
-  const firstSample = inlierSamples[0];
-
-  if (firstSample === undefined) {
-    return 0;
-  }
-
-  return inlierSamples.slice(1).reduce(
-    (smoothedRtt, sample) =>
-      smoothedRtt * (1 - rttSmoothingFactor) +
-      sample * rttSmoothingFactor,
-    firstSample
-  );
 }
 
 export function getSlapComparisonWindow(
@@ -118,19 +34,6 @@ export type TimedSlapCandidate = {
   adjustedArrivalTime: number;
   jitterMs: number;
 };
-
-export function estimateSlapLatencyCorrection(
-  roundTripTimeMs: number
-): number {
-  if (!Number.isFinite(roundTripTimeMs) || roundTripTimeMs < 0) {
-    return 0;
-  }
-
-  return Math.min(
-    maxSlapLatencyCorrectionMs,
-    roundTripTimeMs / 2
-  );
-}
 
 export function selectWeightedSlapWinner<
   T extends TimedSlapCandidate

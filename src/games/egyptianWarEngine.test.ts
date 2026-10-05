@@ -15,11 +15,6 @@ import {
   type EgyptianWarSettings
 } from "./egyptianWarEngine.js";
 import {
-  appendRttSample,
-  calculateSmoothedRttEstimate,
-  calculateRttJitter,
-  defaultSlapJitterMs,
-  estimateSlapLatencyCorrection,
   getSlapComparisonWindow,
   selectWeightedSlapWinner
 } from "./slapArbitration.js";
@@ -113,79 +108,6 @@ test("shuffles a copy without changing the source deck", () => {
     new Set(shuffledDeck.map((card) => card.id)),
     new Set(originalIds)
   );
-});
-
-test("caps server-measured slap latency correction at 150 milliseconds", () => {
-  assert.equal(estimateSlapLatencyCorrection(80), 40);
-  assert.equal(estimateSlapLatencyCorrection(400), 150);
-  assert.equal(estimateSlapLatencyCorrection(-1), 0);
-});
-
-test("calculates jitter from recent round-trip samples", () => {
-  const jitter = calculateRttJitter([
-    40,
-    42,
-    41,
-    39,
-    43
-  ]);
-
-  assert.ok(Math.abs(jitter - Math.sqrt(2)) < 0.001);
-  assert.equal(
-    calculateRttJitter([40, 42, 41]),
-    defaultSlapJitterMs
-  );
-  assert.equal(
-    calculateRttJitter([40, Number.NaN, 42, 41]),
-    defaultSlapJitterMs
-  );
-});
-
-test("smooths RTT after four samples while excluding isolated outliers", () => {
-  assert.equal(calculateSmoothedRttEstimate([40, 42, 41]), 0);
-  assert.ok(
-    Math.abs(calculateSmoothedRttEstimate([40, 42, 41, 400]) - 40.52) <
-      0.001
-  );
-  assert.ok(
-    calculateSmoothedRttEstimate([
-      40,
-      41,
-      42,
-      43,
-      44,
-      45,
-      46,
-      47,
-      48,
-      49,
-      500,
-      Number.NaN
-    ]) < 47
-  );
-});
-
-test("retains only the latest 12 valid RTT samples", () => {
-  let samples: number[] = [];
-
-  for (let sample = 1; sample <= 12; sample += 1) {
-    samples = appendRttSample(samples, sample);
-  }
-
-  assert.deepEqual(samples, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
-
-  samples = appendRttSample(samples, 1_000);
-  assert.deepEqual(samples, [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 1_000]);
-  assert.ok(calculateSmoothedRttEstimate(samples) < 10);
-
-  for (let sample = 13; sample <= 24; sample += 1) {
-    samples = appendRttSample(samples, sample);
-  }
-
-  assert.deepEqual(samples, [13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24]);
-  assert.ok(calculateSmoothedRttEstimate(samples) > 19);
-  assert.ok(calculateSmoothedRttEstimate(samples) < 21);
-  assert.deepEqual(appendRttSample(samples, Number.NaN), samples);
 });
 
 test("clamps slap comparison windows between 20 and 50 milliseconds", () => {

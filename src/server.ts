@@ -18,12 +18,7 @@ import {
 } from "./games/egyptianWarEngine.js";
 import type { GameSetting } from "./games/gameDefinition.js";
 import {
-  appendRttSample,
-  calculateSmoothedRttEstimate,
-  calculateRttJitter,
   defaultSlapJitterMs,
-  estimateSlapLatencyCorrection,
-  minimumTrustedLatencySamples,
   selectWeightedSlapWinner,
   slapCollectionWindowMs
 } from "./games/slapArbitration.js";
@@ -47,12 +42,6 @@ type SlapAnimationAttempt = {
   playerId: string;
   delayMs: number;
   isWinner: boolean;
-};
-
-type SocketLatencyStats = {
-  smoothedRttMs: number;
-  recentSamples: number[];
-  jitterMs: number;
 };
 
 type Room = {
@@ -113,15 +102,18 @@ const io = new Server(server, {
   }
 });
 
-const port = Number(process.env.PORT) || 3000;
-const configuredLatencyProbeIntervalMs = Number(
-  process.env.LATENCY_PROBE_INTERVAL_MS
-);
-const latencyProbeIntervalMs =
-  Number.isFinite(configuredLatencyProbeIntervalMs) &&
-  configuredLatencyProbeIntervalMs > 0
-    ? configuredLatencyProbeIntervalMs
-    : 5_000;
+const configuredPort = Number(process.env.PORT);
+const port =
+  Number.isInteger(configuredPort) &&
+  configuredPort >= 0 &&
+  configuredPort <= 65_535
+    ? configuredPort
+    : 3000;
+const deterministicTestRandomInteger =
+  process.env.NODE_ENV === "test" &&
+  process.env.GAMEHUB_DETERMINISTIC_DECK === "true"
+    ? (maxExclusive: number): number => maxExclusive - 1
+    : undefined;
 const maxLobbyPlayers = 12;
 const rooms = new Map<string, Room>();
 const socketRoomCodes = new Map<string, string>();
@@ -131,7 +123,6 @@ const playerResumeTokens =
   new Map<string, { roomCode: string; playerId: string }>();
 const revokedResumeTokenMessages = new Map<string, string>();
 const revokedSocketMessages = new Map<string, string>();
-const socketLatencyStats = new Map<string, SocketLatencyStats>();
 
 app.use(
   "/vendor/bootstrap",
@@ -165,64 +156,6 @@ function sendPlayerList(roomCode: string, room: Room): void {
   }));
 
   io.to(roomCode).emit("player-list", players);
-}
-
-function monitorSocketLatency(socket: Socket): void {
-  const measureRoundTripTime = (): void => {
-    const startedAt = performance.now();
-
-    socket.timeout(3_000).emit(
-      "latency-probe",
-      (error: Error | null) => {
-        if (error || !socket.connected) {
-          return;
-        }
-
-        const sample = performance.now() - startedAt;
-
-        if (
-          !Number.isFinite(sample) ||
-          sample < 0 ||
-          sample > 3_000
-        ) {
-          return;
-        }
-
-        const previous = socketLatencyStats.get(socket.id);
-
-        const recentSamples = appendRttSample(
-          previous?.recentSamples ?? [],
-          sample
-        );
-
-        const smoothedRttMs =
-          calculateSmoothedRttEstimate(recentSamples);
-
-        const jitterMs =
-          recentSamples.length >= minimumTrustedLatencySamples
-            ? calculateRttJitter(recentSamples)
-            : defaultSlapJitterMs;
-
-        socketLatencyStats.set(socket.id, {
-          smoothedRttMs,
-          recentSamples,
-          jitterMs
-        });
-      }
-    );
-  };
-
-  measureRoundTripTime();
-
-  const interval = setInterval(
-    measureRoundTripTime,
-    latencyProbeIntervalMs
-  );
-
-  socket.on("disconnect", () => {
-    clearInterval(interval);
-    socketLatencyStats.delete(socket.id);
-  });
 }
 
 function createPlayerResumeToken(
@@ -499,20 +432,10 @@ function collectValidSlap(
   }
 
   if (!resolution.candidates.has(playerId)) {
-    const latencyStats = socketLatencyStats.get(playerId);
-
-    const roundTripTime =
-      latencyStats?.smoothedRttMs ?? 0;
-
-    const latencyCorrection =
-      estimateSlapLatencyCorrection(roundTripTime);
-
     resolution.candidates.set(playerId, {
       playerId,
-      adjustedArrivalTime:
-        performance.now() - latencyCorrection,
-      jitterMs:
-        latencyStats?.jitterMs ?? defaultSlapJitterMs
+      adjustedArrivalTime: performance.now(),
+      jitterMs: defaultSlapJitterMs
     });
   }
 
@@ -888,8 +811,6 @@ function handleEgyptianWarAction(
 
 io.on("connection", (socket) => {
   console.log(`Browser connected: ${socket.id}`);
-  monitorSocketLatency(socket);
-
   socket.emit("available-games", availableGames);
 
   if (socket.recovered) {
@@ -1817,7 +1738,8 @@ io.on("connection", (socket) => {
     try {
       room.gameState = createEgyptianWarState(
         Array.from(room.players.values()),
-        settings
+        settings,
+        deterministicTestRandomInteger
       );
     } catch (error) {
       console.error(`Unable to initialize ${game.name} in room ${roomCode}:`, error);
@@ -2231,5 +2153,13 @@ io.on("connection", (socket) => {
 });
 
 server.listen(port, "0.0.0.0", () => {
-  console.log(`GameHub is running on http://localhost:${port}`);
+  const address = server.address();
+  const listeningPort =
+    typeof address === "object" && address !== null
+      ? address.port
+      : port;
+  console.log(`GameHub is running on http://localhost:${listeningPort}`);
+  if (process.send) {
+    process.send({ type: "server-listening", port: listeningPort });
+  }
 });
