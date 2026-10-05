@@ -15,8 +15,13 @@ import {
   type EgyptianWarSettings
 } from "./egyptianWarEngine.js";
 import {
+  appendRttSample,
+  calculateSmoothedRttEstimate,
+  calculateRttJitter,
+  defaultSlapJitterMs,
   estimateSlapLatencyCorrection,
-  getSlapCandidatesWithinTieWindow
+  getSlapComparisonWindow,
+  selectWeightedSlapWinner
 } from "./slapArbitration.js";
 
 const settings: EgyptianWarSettings = {
@@ -116,20 +121,170 @@ test("caps server-measured slap latency correction at 150 milliseconds", () => {
   assert.equal(estimateSlapLatencyCorrection(-1), 0);
 });
 
-test("treats adjusted slap arrivals within 50 milliseconds as a tie", () => {
+test("calculates jitter from recent round-trip samples", () => {
+  const jitter = calculateRttJitter([
+    40,
+    42,
+    41,
+    39,
+    43
+  ]);
+
+  assert.ok(Math.abs(jitter - Math.sqrt(2)) < 0.001);
+  assert.equal(
+    calculateRttJitter([40, 42, 41]),
+    defaultSlapJitterMs
+  );
+  assert.equal(
+    calculateRttJitter([40, Number.NaN, 42, 41]),
+    defaultSlapJitterMs
+  );
+});
+
+test("smooths RTT after four samples while excluding isolated outliers", () => {
+  assert.equal(calculateSmoothedRttEstimate([40, 42, 41]), 0);
+  assert.ok(
+    Math.abs(calculateSmoothedRttEstimate([40, 42, 41, 400]) - 40.52) <
+      0.001
+  );
+  assert.ok(
+    calculateSmoothedRttEstimate([
+      40,
+      41,
+      42,
+      43,
+      44,
+      45,
+      46,
+      47,
+      48,
+      49,
+      500,
+      Number.NaN
+    ]) < 47
+  );
+});
+
+test("retains only the latest 12 valid RTT samples", () => {
+  let samples: number[] = [];
+
+  for (let sample = 1; sample <= 12; sample += 1) {
+    samples = appendRttSample(samples, sample);
+  }
+
+  assert.deepEqual(samples, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+
+  samples = appendRttSample(samples, 1_000);
+  assert.deepEqual(samples, [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 1_000]);
+  assert.ok(calculateSmoothedRttEstimate(samples) < 10);
+
+  for (let sample = 13; sample <= 24; sample += 1) {
+    samples = appendRttSample(samples, sample);
+  }
+
+  assert.deepEqual(samples, [13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24]);
+  assert.ok(calculateSmoothedRttEstimate(samples) > 19);
+  assert.ok(calculateSmoothedRttEstimate(samples) < 21);
+  assert.deepEqual(appendRttSample(samples, Number.NaN), samples);
+});
+
+test("clamps slap comparison windows between 20 and 50 milliseconds", () => {
+  assert.equal(getSlapComparisonWindow(3, 4), 20);
+  assert.equal(getSlapComparisonWindow(15, 20), 35);
+  assert.equal(getSlapComparisonWindow(30, 40), 50);
+  assert.equal(
+    getSlapComparisonWindow(Number.NaN, 5),
+    30
+  );
+  assert.equal(
+    getSlapComparisonWindow(Number.POSITIVE_INFINITY, 5),
+    30
+  );
+  assert.equal(getSlapComparisonWindow(-10, -20), 20);
+});
+
+test("smoothly favors earlier slaps inside the jitter window", () => {
   const candidates = [
-    { playerId: "early", adjustedArrivalTime: 100 },
-    { playerId: "near-tie", adjustedArrivalTime: 150 },
-    { playerId: "late", adjustedArrivalTime: 151 }
+    {
+      playerId: "early",
+      adjustedArrivalTime: 100,
+      jitterMs: 2
+    },
+    {
+      playerId: "slightly-later",
+      adjustedArrivalTime: 115,
+      jitterMs: 2
+    }
   ];
 
-  assert.deepEqual(
-    getSlapCandidatesWithinTieWindow(candidates).map(
-      (candidate) => candidate.playerId
-    ),
-    ["early", "near-tie"]
+  assert.equal(
+    selectWeightedSlapWinner(candidates, 0)?.playerId,
+    "early"
   );
-  assert.deepEqual(getSlapCandidatesWithinTieWindow([]), []);
+
+  assert.equal(
+    selectWeightedSlapWinner(candidates, 0.99)?.playerId,
+    "slightly-later"
+  );
+});
+
+test("excludes slaps outside their jitter comparison window", () => {
+  const candidates = [
+    {
+      playerId: "early",
+      adjustedArrivalTime: 100,
+      jitterMs: 2
+    },
+    {
+      playerId: "too-late",
+      adjustedArrivalTime: 121,
+      jitterMs: 2
+    }
+  ];
+
+  assert.equal(
+    selectWeightedSlapWinner(candidates, 0.999)?.playerId,
+    "early"
+  );
+
+  assert.equal(selectWeightedSlapWinner([]), undefined);
+});
+
+test("rejects non-finite slap candidates and random values safely", () => {
+  const validCandidate = {
+    playerId: "valid",
+    adjustedArrivalTime: 100,
+    jitterMs: 5
+  };
+  const invalidCandidates = [
+    {
+      playerId: "nan-arrival",
+      adjustedArrivalTime: Number.NaN,
+      jitterMs: 5
+    },
+    {
+      playerId: "infinite-arrival",
+      adjustedArrivalTime: Number.POSITIVE_INFINITY,
+      jitterMs: 5
+    },
+    {
+      playerId: "nan-jitter",
+      adjustedArrivalTime: 90,
+      jitterMs: Number.NaN
+    }
+  ];
+
+  assert.equal(
+    selectWeightedSlapWinner(
+      [invalidCandidates[0], validCandidate],
+      Number.NaN
+    )?.playerId,
+    "valid"
+  );
+  assert.equal(
+    selectWeightedSlapWinner(invalidCandidates),
+    undefined
+  );
 });
 
 test("deals every card and randomly chooses the first player", () => {

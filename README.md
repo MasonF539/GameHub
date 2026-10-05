@@ -25,8 +25,9 @@ The server runs locally in Docker and can optionally use a temporary Cloudflare 
 - Host-controlled player removal
 - Synchronized game selection and settings
 - Egyptian War rules and configurable slap settings
+- Playable, server-authoritative Egyptian War with challenges, slap arbitration, turn timers, pausing, and reconnect recovery
 
-Egyptian War is the first configured game. Its rules, player limits, and settings are available, but its playable card-game logic is still under development.
+Egyptian War is the first playable game. Its hidden decks, turns, challenges, slap validation, latency-aware arbitration, penalties, pile awards, timers, and win conditions are controlled by the server.
 
 ## Requirements
 
@@ -112,6 +113,8 @@ docker compose --profile public down
 GameHub/
 ├── .vscode/
 │   └── tasks.json
+├── docs/
+│   └── egyptian-war-design.md
 ├── public/
 │   ├── client.js
 │   ├── index.html
@@ -119,8 +122,14 @@ GameHub/
 ├── src/
 │   ├── games/
 │   │   ├── egyptianWar.ts
+│   │   ├── egyptianWarEngine.ts
+│   │   ├── egyptianWarEngine.test.ts
+│   │   ├── slapArbitration.ts
 │   │   └── gameDefinition.ts
+│   ├── server.integration.test.ts
 │   └── server.ts
+├── test/
+│   └── clientAnimation.test.js
 ├── .dockerignore
 ├── .gitignore
 ├── compose.yaml
@@ -162,11 +171,11 @@ The resulting `node_modules` folder is excluded from Git.
 ## Current limitations
 
 - Rooms are stored in memory and disappear when the server stops.
-- Refreshing the host page closes its room.
+- Active-game reconnect recovery is temporary and remains in memory only.
 - Quick Tunnels have no uptime guarantee.
 - The public address changes when the tunnel restarts.
-- The listed games do not have playable implementations yet.
-- Accounts, persistent data, moderation tools, and reconnect support have not been implemented.
+- Egyptian War is currently the only playable game.
+- Accounts, persistent data, and moderation tools have not been implemented.
 
 ## Security model
 

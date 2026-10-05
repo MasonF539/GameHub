@@ -3,7 +3,7 @@
 ## Implementation status
 
 This document distinguishes implemented behavior from planned gameplay. A checked item means the behavior exists in the application, not merely that its design has been selected.
-Testing is left to the project owner; checked implementation items do not indicate that the current work has been tested.
+Checked implementation items do not imply that every multiplayer interaction has completed manual gameplay testing; automated engine, arbitration, Socket.IO integration, and browser-animation tests run during the Docker build.
 
 ### Game availability
 
@@ -33,7 +33,8 @@ Testing is left to the project owner; checked implementation items do not indica
 - [x] Implement Jack, Queen, King, Ace, and Joker challenge attempts (Jokers allow 5 attempts).
 - [x] Award the pile to the most recent challenge-card player when a challenge fails, except while a valid final-attempt slap window is active.
 - [x] Validate slaps on the server and resolve competing slaps fairly.
-- [x] Smooth server-measured round-trip times, adjust valid slap server-arrival times by half the estimated RTT (capped at 150 ms), collect competing requests for 200 ms, and randomly resolve adjusted arrivals within a 50 ms tie window.
+- [x] Probe each socket every five seconds and retain its latest 12 valid RTT samples. After four samples, exclude isolated RTT outliers using interquartile fences and calculate an exponentially smoothed RTT with a 0.2 weighting for each newer sample; use standard deviation as estimated jitter (otherwise default to 25 ms). Adjust valid slap arrivals by half the smoothed RTT capped at 150 ms, collect requests for 200 ms, clamp each combined-jitter comparison window to 20–50 ms, and select eligible candidates with smooth exponential weighting driven by Node's cryptographically secure random source. Application-level acknowledgements remain a client-dependent estimate rather than proof of network latency.
+- [x] Finish accepted slap arbitration before honoring a host pause, and allow candidates accepted before a disconnect-triggered pause to resolve instead of silently discarding them.
 - [x] Skip players who run out of cards; continue the turn with the next eligible player.
 - [x] Pass an unfinished challenge to the next eligible player with the remaining attempts unchanged when its responder runs out of cards.
 - [x] Allow eliminated players to reenter through a valid slap.
@@ -85,7 +86,8 @@ Testing is left to the project owner; checked implementation items do not indica
 - [x] Show a chat panel only for games whose definitions enable chat.
 - [x] Show the synchronized turn countdown below the table while reserving its layout space when hidden.
 - [x] Keep slaps available during active play even when no pattern matches; disable them only when no face-up cards are present, the game is paused or finished, or an action animation is in progress.
-- [ ] Support a complete state snapshot for reconnection and future spectators.
+- [x] Restore active players from a complete reconnect snapshot.
+- [ ] Define and support the appropriately limited snapshot required for future spectators.
 
 ### Table presentation
 

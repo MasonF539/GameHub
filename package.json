@@ -6,7 +6,7 @@
   "scripts": {
     "build": "tsc",
     "check": "tsc --noEmit",
-    "test": "npm run build && node --test dist/games/egyptianWarEngine.test.js",
+    "test": "npm run build && node --test dist/*.test.js dist/games/*.test.js test/*.test.js",
     "start": "node dist/server.js"
   },
   "keywords": [
@@ -25,6 +25,8 @@
   "devDependencies": {
     "@types/express": "^5.0.6",
     "@types/node": "^26.6.4",
+    "jsdom": "^30.1.2",
+    "socket.io-client": "^4.8.4",
     "typescript": "^7.0.2"
   }
 }

@@ -263,9 +263,9 @@ function updateEgyptianWarTurnTimer(state) {
   egyptianWarTimerRemainingMs = state.turnTimeRemainingMs;
   egyptianWarTimerDeadline =
     state.status === "playing" &&
-    !state.isPaused &&
-    !state.isAnimating &&
-    state.turnTimeRemainingMs !== null
+      !state.isPaused &&
+      !state.isAnimating &&
+      state.turnTimeRemainingMs !== null
       ? performance.now() + state.turnTimeRemainingMs
       : null;
   setEgyptianWarTimerHidden(
@@ -761,6 +761,9 @@ function getEgyptianWarCenter(element, within) {
 }
 
 function animateEgyptianWarOutcome(animation) {
+  const prefersReducedMotion = window.matchMedia(
+    "(prefers-reduced-motion: reduce)"
+  ).matches;
   egyptianWarAnimationLayer.replaceChildren();
   const arena = document.querySelector("#egyptian-war-arena");
   const center = getEgyptianWarCenter(
@@ -782,15 +785,86 @@ function animateEgyptianWarOutcome(animation) {
     ? getEgyptianWarCenter(winnerSeat, arena)
     : center;
 
+  const slapAttempts =
+    Array.isArray(animation.slapAttempts) &&
+      animation.slapAttempts.length > 0
+      ? animation.slapAttempts
+      : [
+        {
+          playerId: animation.actorId,
+          delayMs: 0,
+          isWinner: true
+        }
+      ];
+
   if (animation.action === "slap") {
-    const hand = document.createElement("span");
-    hand.className = "egyptian-war-flying-hand";
-    hand.textContent = "🖐️";
-    hand.style.left = `${actorCenter.x}px`;
-    hand.style.top = `${actorCenter.y}px`;
-    hand.style.setProperty("--hand-x", `${center.x - actorCenter.x}px`);
-    hand.style.setProperty("--hand-y", `${center.y - actorCenter.y}px`);
-    egyptianWarAnimationLayer.appendChild(hand);
+    slapAttempts.forEach((attempt, index) => {
+      const playerId = attempt.playerId;
+      const playerSeat = egyptianWarPlayers.querySelector(
+        `[data-player-id="${CSS.escape(playerId)}"]`
+      );
+
+      if (!playerSeat) {
+        return;
+      }
+
+      const playerCenter = getEgyptianWarCenter(
+        playerSeat,
+        arena
+      );
+
+      const directionX = center.x - playerCenter.x;
+      const directionY = center.y - playerCenter.y;
+
+      const distance =
+        Math.hypot(directionX, directionY) || 1;
+
+      const normalizedX = directionX / distance;
+      const normalizedY = directionY / distance;
+
+      // Leave each hand slightly toward its player's table position.
+      const pileOffset = 24;
+      const destinationX =
+        center.x - normalizedX * pileOffset;
+      const destinationY =
+        center.y - normalizedY * pileOffset;
+
+      const rotation =
+        Math.atan2(directionY, directionX) *
+        (180 / Math.PI) +
+        90;
+
+      const hand = document.createElement("span");
+      hand.className = "egyptian-war-flying-hand";
+      hand.textContent = "🖐️";
+
+      hand.style.left = `${playerCenter.x}px`;
+      hand.style.top = `${playerCenter.y}px`;
+      hand.style.zIndex = String(5 + index);
+      const delayMs =
+        !prefersReducedMotion && Number.isFinite(attempt.delayMs)
+          ? Math.max(0, attempt.delayMs)
+          : 0;
+
+      hand.style.animationDelay = `${delayMs}ms`;
+
+      hand.style.setProperty(
+        "--hand-x",
+        `${destinationX - playerCenter.x}px`
+      );
+
+      hand.style.setProperty(
+        "--hand-y",
+        `${destinationY - playerCenter.y}px`
+      );
+
+      hand.style.setProperty(
+        "--hand-rotation",
+        `${rotation}deg`
+      );
+
+      egyptianWarAnimationLayer.appendChild(hand);
+    });
   }
 
   const transferCount = animation.isFinalWin
@@ -829,16 +903,35 @@ function animateEgyptianWarOutcome(animation) {
         "--card-y",
         `${destination.y - source.y}px`
       );
-      back.style.animationDelay =
-        `${animation.isFinalWin ? index * 45 : index * 35}ms`;
+      back.style.animationDelay = prefersReducedMotion
+        ? "0ms"
+        : `${animation.isFinalWin ? index * 45 : index * 35}ms`;
       egyptianWarAnimationLayer.appendChild(back);
     }
   };
 
+  const latestSlapDelay = slapAttempts.reduce(
+    (latestDelay, attempt) =>
+      Math.max(
+        latestDelay,
+        Number.isFinite(attempt.delayMs)
+          ? Math.max(0, attempt.delayMs)
+          : 0
+      ),
+    0
+  );
+
+  const lastHandLandingDelay =
+    prefersReducedMotion ? 1 : latestSlapDelay + 520;
+
   const transferDelay = animation.transferCardCount > 0
-    ? animation.playedCard
-      ? 700
-      : 350
+    ? prefersReducedMotion
+      ? 0
+      : animation.action === "slap"
+        ? lastHandLandingDelay + 250
+        : animation.playedCard
+          ? 700
+          : 350
     : 0;
 
   clearTimeout(egyptianWarTransferTimeout);
@@ -885,6 +978,9 @@ function animateEgyptianWarOutcome(animation) {
         : animation.playedCard
           ? 650
           : 450;
+  const presentationDuration = prefersReducedMotion
+    ? 100
+    : duration;
 
   clearTimeout(egyptianWarAnimationTimeout);
   egyptianWarAnimationTimeout = setTimeout(() => {
@@ -894,8 +990,10 @@ function animateEgyptianWarOutcome(animation) {
       .querySelectorAll(".is-pile-winner")
       .forEach((seat) => seat.classList.remove("is-pile-winner"));
     activeEgyptianWarAnimation = null;
-    egyptianWarVictory.hidden = true;
-  }, duration);
+    if (!animation.isFinalWin) {
+      egyptianWarVictory.hidden = true;
+    }
+  }, presentationDuration);
 }
 
 function renderEgyptianWarState(state) {
@@ -909,7 +1007,7 @@ function renderEgyptianWarState(state) {
   );
   const isNewAnimation =
     animation !== null &&
-      animation.id !== lastEgyptianWarAnimationId;
+    animation.id !== lastEgyptianWarAnimationId;
   const isShowingCollectedPile =
     state.isAnimating &&
     animation?.transferCardCount > 0;
@@ -1476,6 +1574,12 @@ socket.on("egyptian-war-pause-changed", ({ isPaused }) => {
     String(isPaused)
   );
 });
+
+if (typeof module !== "undefined" && module.exports) {
+  module.exports = {
+    animateEgyptianWarOutcome
+  };
+}
 
 socket.on("game-chat-message", (chatMessage) => {
   const item = document.createElement("li");

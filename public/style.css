@@ -135,7 +135,7 @@ body {
   margin: 0;
 }
 
-.egyptian-war-slap-rules li + li {
+.egyptian-war-slap-rules li+li {
   margin-top: 0.2rem;
 }
 
@@ -228,8 +228,7 @@ body {
   font-family: Georgia, "Times New Roman", serif;
   font-weight: 700;
   transform:
-    translate(calc(-50% + var(--stack-x, 0px)), calc(-50% + var(--stack-y, 0px)))
-    rotate(var(--stack-rotation, 0deg));
+    translate(calc(-50% + var(--stack-x, 0px)), calc(-50% + var(--stack-y, 0px))) rotate(var(--stack-rotation, 0deg));
 }
 
 .playing-card.is-red {
@@ -418,42 +417,37 @@ body {
   font-size: clamp(2.5rem, 7vw, 4.5rem);
   filter: drop-shadow(0 0.4rem 0.35rem rgba(0, 0, 0, 0.55));
   pointer-events: none;
-  animation: egyptian-war-hand-slap 680ms cubic-bezier(0.2, 0.8, 0.25, 1) both;
+  transform-origin: center;
+  animation:
+    egyptian-war-hand-slap 520ms cubic-bezier(0.2, 0.8, 0.25, 1) both;
 }
 
 @keyframes egyptian-war-hand-slap {
   0% {
-    transform: translate(-50%, -50%) rotate(-28deg) scale(0.65);
     opacity: 0;
+    transform:
+      translate(-50%, -50%) rotate(calc(var(--hand-rotation) - 18deg)) scale(0.65);
   }
 
-  55% {
-    transform:
-      translate(
-        calc(-50% + var(--hand-x)),
-        calc(-50% + var(--hand-y))
-      )
-      rotate(12deg) scale(1.15);
+  60% {
     opacity: 1;
+    transform:
+      translate(calc(-50% + var(--hand-x)),
+        calc(-50% + var(--hand-y))) rotate(calc(var(--hand-rotation) + 6deg)) scale(1.12);
   }
 
-  72% {
+  78% {
+    opacity: 1;
     transform:
-      translate(
-        calc(-50% + var(--hand-x)),
-        calc(-50% + var(--hand-y))
-      )
-      rotate(-8deg) scale(0.98);
+      translate(calc(-50% + var(--hand-x)),
+        calc(-50% + var(--hand-y))) rotate(calc(var(--hand-rotation) - 3deg)) scale(0.97);
   }
 
   100% {
+    opacity: 1;
     transform:
-      translate(
-        calc(-50% + var(--hand-x)),
-        calc(-50% + var(--hand-y))
-      )
-      rotate(0) scale(1);
-    opacity: 0;
+      translate(calc(-50% + var(--hand-x)),
+        calc(-50% + var(--hand-y))) rotate(var(--hand-rotation)) scale(1);
   }
 }
 
@@ -502,11 +496,8 @@ body {
 
   to {
     transform:
-      translate(
-        calc(-50% + var(--card-x)),
-        calc(-50% + var(--card-y))
-      )
-      rotate(18deg) scale(0.55);
+      translate(calc(-50% + var(--card-x)),
+        calc(-50% + var(--card-y))) rotate(18deg) scale(0.55);
     opacity: 0.15;
   }
 }
@@ -519,11 +510,8 @@ body {
 
   to {
     transform:
-      translate(
-        calc(-50% + var(--card-x)),
-        calc(-50% + var(--card-y))
-      )
-      rotate(-12deg) scale(0.55);
+      translate(calc(-50% + var(--card-x)),
+        calc(-50% + var(--card-y))) rotate(-12deg) scale(0.55);
     opacity: 0.2;
   }
 }
@@ -860,6 +848,7 @@ body {
 
 /* Honors the user's operating-system motion preference. */
 @media (prefers-reduced-motion: reduce) {
+
   .btn,
   .egyptian-war-seat {
     transition: none;
