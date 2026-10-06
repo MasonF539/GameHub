@@ -3,7 +3,7 @@ import { fork, type ChildProcess } from "node:child_process";
 import path from "node:path";
 import test from "node:test";
 import { io as createClient, type Socket } from "socket.io-client";
-import type { PublicEgyptianWarState } from "./games/egyptianWarEngine.js";
+import type { PublicEgyptianWarState } from "./games/egyptianWar/engine.js";
 
 type Ack = { success: boolean; message?: string; roomCode?: string };
 

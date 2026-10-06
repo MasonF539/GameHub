@@ -1,5 +1,5 @@
 import { randomInt } from "node:crypto";
-import type { Card, CardRank, CardSuit } from "./egyptianWar.js";
+import type { Card, CardRank, CardSuit } from "./definition.js";
 
 export type EgyptianWarSettings = {
   includeJokers: boolean;

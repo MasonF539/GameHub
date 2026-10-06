@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { Card } from "./egyptianWar.js";
+import type { Card } from "./definition.js";
 import {
   applyEgyptianWarAction,
   createDeck,
@@ -13,7 +13,7 @@ import {
   type EgyptianWarState,
   type EgyptianWarPlayerInput,
   type EgyptianWarSettings
-} from "./egyptianWarEngine.js";
+} from "./engine.js";
 import {
   getSlapComparisonWindow,
   selectWeightedSlapWinner

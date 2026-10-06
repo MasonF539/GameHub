@@ -3,7 +3,7 @@ import { randomBytes } from "node:crypto";
 import http from "http";
 import path from "path";
 import { Server, type Socket } from "socket.io";
-import { egyptianWar } from "./games/egyptianWar.js";
+import { egyptianWar } from "./games/egyptianWar/definition.js";
 import {
   applyEgyptianWarAction,
   createEgyptianWarState,
@@ -15,13 +15,13 @@ import {
   EgyptianWarRuleError,
   type EgyptianWarSettings,
   type EgyptianWarState
-} from "./games/egyptianWarEngine.js";
+} from "./games/egyptianWar/engine.js";
 import type { GameSetting } from "./games/gameDefinition.js";
 import {
   defaultSlapJitterMs,
   selectWeightedSlapWinner,
   slapCollectionWindowMs
-} from "./games/slapArbitration.js";
+} from "./games/egyptianWar/slapArbitration.js";
 
 type GameSettingValue = boolean | number;
 

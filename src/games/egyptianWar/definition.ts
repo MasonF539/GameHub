@@ -1,4 +1,4 @@
-import type { GameDefinition } from "./gameDefinition.js";
+import type { GameDefinition } from "../gameDefinition.js";
 
 export type CardSuit =
   | "clubs"

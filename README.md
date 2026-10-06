@@ -123,10 +123,11 @@ GameHub/
 │   └── style.css
 ├── src/
 │   ├── games/
-│   │   ├── egyptianWar.ts
-│   │   ├── egyptianWarEngine.ts
-│   │   ├── egyptianWarEngine.test.ts
-│   │   ├── slapArbitration.ts
+│   │   ├── egyptianWar/
+│   │   │   ├── definition.ts
+│   │   │   ├── engine.ts
+│   │   │   ├── engine.test.ts
+│   │   │   └── slapArbitration.ts
 │   │   └── gameDefinition.ts
 │   ├── server.integration.test.ts
 │   └── server.ts
