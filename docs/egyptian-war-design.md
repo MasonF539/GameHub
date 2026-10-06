@@ -85,6 +85,7 @@ Checked implementation items do not imply that every multiplayer interaction has
 - [x] Keep turn-state messages neutral; do not announce when the current pile matches a slap pattern.
 - [x] Show a chat panel only for games whose definitions enable chat.
 - [x] Show the synchronized turn countdown below the table while reserving its layout space when hidden.
+- [x] Show each browser its latest display-only network round-trip time in the upper-right; never use that client-acknowledged measurement for slap arbitration.
 - [x] Keep slaps available during active play even when no pattern matches; disable them only when no face-up cards are present, the game is paused or finished, or an action animation is in progress.
 - [x] Restore active players from a complete reconnect snapshot.
 - [ ] Define and support the appropriately limited snapshot required for future spectators.

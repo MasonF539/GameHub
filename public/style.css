@@ -80,11 +80,27 @@ body {
   position: relative;
 }
 
-.egyptian-war-host-controls {
+.egyptian-war-top-right {
   position: absolute;
   top: 1.5rem;
   right: 1.5rem;
   z-index: 4;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.45rem;
+}
+
+.network-ping {
+  padding: 0.2rem 0.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+  background: rgba(14, 24, 19, 0.82);
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.egyptian-war-host-controls {
   display: flex;
   gap: 0.5rem;
 }
@@ -414,7 +430,7 @@ body {
 .egyptian-war-flying-hand {
   position: absolute;
   z-index: 5;
-  font-size: clamp(2.5rem, 7vw, 4.5rem);
+  font-size: clamp(3.5rem, 7.8vw, 5.25rem);
   filter: drop-shadow(0 0.4rem 0.35rem rgba(0, 0, 0, 0.55));
   pointer-events: none;
   transform-origin: center;
@@ -814,7 +830,7 @@ body {
     font-size: 0.65rem;
   }
 
-  .egyptian-war-host-controls {
+  .egyptian-war-top-right {
     top: 0.8rem;
     right: 0.8rem;
   }

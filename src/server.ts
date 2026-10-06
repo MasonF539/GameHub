@@ -158,6 +158,29 @@ function sendPlayerList(roomCode: string, room: Room): void {
   io.to(roomCode).emit("player-list", players);
 }
 
+function monitorSocketLatency(socket: Socket): void {
+  const measureRoundTripTime = (): void => {
+    const startedAt = performance.now();
+    socket.timeout(3_000).emit(
+      "latency-probe",
+      (error: Error | null) => {
+        if (error || !socket.connected) {
+          return;
+        }
+
+        const rttMs = performance.now() - startedAt;
+        if (Number.isFinite(rttMs) && rttMs >= 0) {
+          socket.emit("latency-update", { rttMs });
+        }
+      }
+    );
+  };
+
+  measureRoundTripTime();
+  const interval = setInterval(measureRoundTripTime, 5_000);
+  socket.on("disconnect", () => clearInterval(interval));
+}
+
 function createPlayerResumeToken(
   roomCode: string,
   playerId: string
@@ -810,6 +833,7 @@ function handleEgyptianWarAction(
 }
 
 io.on("connection", (socket) => {
+  monitorSocketLatency(socket);
   console.log(`Browser connected: ${socket.id}`);
   socket.emit("available-games", availableGames);
 

@@ -9,6 +9,7 @@ const gameHubToastMessage =
 const entryView = document.querySelector("#entry-view");
 const lobbyView = document.querySelector("#lobby-view");
 const gameplayView = document.querySelector("#gameplay-view");
+const networkPing = document.querySelector("#network-ping");
 const egyptianWarTurn = document.querySelector("#egyptian-war-turn");
 const egyptianWarTurnTimer =
   document.querySelector("#egyptian-war-turn-timer");
@@ -823,7 +824,7 @@ function animateEgyptianWarOutcome(animation) {
       const normalizedY = directionY / distance;
 
       // Leave each hand slightly toward its player's table position.
-      const pileOffset = 24;
+      const pileOffset = 14;
       const destinationX =
         center.x - normalizedX * pileOffset;
       const destinationY =
@@ -1330,7 +1331,20 @@ socket.on("connect", () => {
   connectionStatus.classList.add("text-bg-success");
 });
 
+socket.on("latency-probe", (acknowledge) => {
+  if (typeof acknowledge === "function") {
+    acknowledge();
+  }
+});
+
+socket.on("latency-update", ({ rttMs }) => {
+  if (Number.isFinite(rttMs) && rttMs >= 0) {
+    networkPing.textContent = `Ping: ${Math.round(rttMs)} ms`;
+  }
+});
+
 socket.on("disconnect", () => {
+  networkPing.textContent = "Ping: -- ms";
   connectionStatus.textContent = "Disconnected from server";
 
   connectionStatus.classList.remove(

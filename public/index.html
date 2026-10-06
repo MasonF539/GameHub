@@ -162,15 +162,19 @@
     <section id="gameplay-view" class="card game-card shadow mx-auto d-none">
       <div class="card-body p-4 egyptian-war-game-panel">
         <h2 class="card-title text-center">Egyptian War</h2>
-        <div class="egyptian-war-host-controls d-none" id="egyptian-war-host-controls">
-          <button id="egyptian-war-pause" class="btn btn-outline-light btn-sm"
-            type="button" aria-pressed="false">
-            Pause
-          </button>
-          <button id="egyptian-war-exit-game" class="btn btn-outline-danger btn-sm" type="button"
-            data-bs-toggle="modal" data-bs-target="#exit-game-modal">
-            Exit Game
-          </button>
+        <div class="egyptian-war-top-right">
+          <span id="network-ping" class="network-ping" aria-label="Current network ping"
+            aria-live="polite">Ping: -- ms</span>
+          <div class="egyptian-war-host-controls d-none" id="egyptian-war-host-controls">
+            <button id="egyptian-war-pause" class="btn btn-outline-light btn-sm"
+              type="button" aria-pressed="false">
+              Pause
+            </button>
+            <button id="egyptian-war-exit-game" class="btn btn-outline-danger btn-sm" type="button"
+              data-bs-toggle="modal" data-bs-target="#exit-game-modal">
+              Exit Game
+            </button>
+          </div>
         </div>
         <aside id="egyptian-war-slap-rules" class="egyptian-war-slap-rules"
           aria-labelledby="egyptian-war-slap-rules-title">
