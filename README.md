@@ -27,6 +27,7 @@ The server runs locally in Docker and can optionally use a temporary Cloudflare 
 - Egyptian War rules and configurable slap settings
 - Playable, server-authoritative Egyptian War with challenges, slap arbitration, turn timers, pausing, and reconnect recovery
 - Display-only network ping indicator that does not influence gameplay arbitration
+- Viewport-fitted Egyptian War interface with a casino-style table, responsive player seats and controls, and a tabbed chat/spectator overlay
 
 Egyptian War is the first playable game. Its hidden decks, turns, challenges, slap validation, server-receipt-time arbitration, penalties, pile awards, timers, and win conditions are controlled by the server.
 

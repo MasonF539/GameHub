@@ -85,8 +85,11 @@ Checked implementation items do not imply that every multiplayer interaction has
 - [x] Keep turn-state messages neutral; do not announce when the current pile matches a slap pattern.
 - [x] Show a chat panel only for games whose definitions enable chat.
 - [x] Show the synchronized turn countdown below the table while reserving its layout space when hidden.
+- [x] Decorate the countdown's uncovered track with a blue gradient and progressively revealed sleep marks, ending with a sleeping bear, without changing authoritative timer behavior.
 - [x] Show each browser its latest display-only network round-trip time in the upper-right; never use that client-acknowledged measurement for slap arbitration.
+- [x] Show server connection state as a colored dot with status text on the main menu, in the lobby, and beside the gameplay controls.
 - [x] Fit active gameplay into the browser viewport without page scrolling; overlay Chat and Spectators in one wide bottom-left tab panel with an explicit viewport-relative Expand/Collapse control; place the timer and same-level action buttons in the open bottom-right area; and show turn text directly above the central pile count.
+- [x] Style "Play a Card" and "Slap" buttons as prominent game-action controls, with a secondary "Bring the pain" label and fire accents on Slap.
 - [x] Keep slaps available during active play even when no pattern matches; disable them only when no face-up cards are present, the game is paused or finished, or an action animation is in progress.
 - [x] Restore active players from a complete reconnect snapshot.
 - [ ] Define and support the appropriately limited snapshot required for future spectators.
@@ -94,6 +97,9 @@ Checked implementation items do not imply that every multiplayer interaction has
 ### Table presentation
 
 - [x] Draw the table with CSS until a project-owned table image is available.
+- [x] Give the CSS table a layered casino-felt, wooden-rail, depth, and drop-shadow treatment while retaining its original oval shape.
 - [x] Draw cards as accessible HTML/CSS playing-card faces; do not depend on external card image assets.
+- [x] Render mirrored card corners, distinct face-card styling, and a Joker with vertical JOKER labels and a decorative center that is distinguishable from a Jack.
+- [x] Scale slap hands and their stopping distance with the rendered card size, keep their shadows visually below the hand at every seat rotation, and layer later collected attempts above the official winner.
 - [x] Keep the table, player seats, card motion, spectator area, and controls usable on narrow screens and with reduced-motion preferences.
 - Offer chat per game rather than requiring it in every game; games that rely on secrecy or fast rounds can opt out, while social multiplayer games can enable it.
