@@ -1,6 +1,8 @@
 const socket = io();
 
 const connectionStatus = document.querySelector("#connection-status");
+const gameplayConnectionStatus =
+  document.querySelector("#gameplay-connection-status");
 const gameHubToastElement =
   document.querySelector("#gamehub-toast");
 const gameHubToastMessage =
@@ -63,6 +65,16 @@ const egyptianWarChatInput =
   document.querySelector("#egyptian-war-chat-input");
 const egyptianWarChatMessages =
   document.querySelector("#egyptian-war-chat-messages");
+const egyptianWarSpectators =
+  document.querySelector("#egyptian-war-spectators");
+const showGameChatButton =
+  document.querySelector("#show-game-chat");
+const showGameSpectatorsButton =
+  document.querySelector("#show-game-spectators");
+const toggleGameSidePanelButton =
+  document.querySelector("#toggle-game-side-panel");
+const egyptianWarSidePanel =
+  document.querySelector(".egyptian-war-side-panel");
 
 const createRoomButton = document.querySelector("#create-room");
 const createdRoom = document.querySelector("#created-room");
@@ -255,8 +267,51 @@ function showEgyptianWarGame(game) {
   );
   currentGameSettings = game.settings ?? currentGameSettings;
   renderEgyptianWarSlapRules(currentGameSettings);
-  egyptianWarChat.hidden = !game.chatEnabled;
+  setEgyptianWarSidePanelExpanded(false);
+  configureEgyptianWarSidePanel(game.chatEnabled === true);
   egyptianWarChatMessages.replaceChildren();
+}
+
+function showEgyptianWarSidePanel(panel) {
+  const showChat =
+    panel === "chat" && !showGameChatButton.disabled;
+  egyptianWarChat.hidden = !showChat;
+  egyptianWarSpectators.hidden = showChat;
+  showGameChatButton.setAttribute("aria-selected", String(showChat));
+  showGameSpectatorsButton.setAttribute(
+    "aria-selected",
+    String(!showChat)
+  );
+  showGameChatButton.classList.toggle("btn-light", showChat);
+  showGameChatButton.classList.toggle("btn-outline-light", !showChat);
+  showGameSpectatorsButton.classList.toggle("btn-light", !showChat);
+  showGameSpectatorsButton.classList.toggle(
+    "btn-outline-light",
+    showChat
+  );
+}
+
+function configureEgyptianWarSidePanel(chatEnabled) {
+  showGameChatButton.disabled = !chatEnabled;
+  showEgyptianWarSidePanel(chatEnabled ? "chat" : "spectators");
+}
+
+function setEgyptianWarSidePanelExpanded(isExpanded) {
+  egyptianWarSidePanel.classList.toggle("is-expanded", isExpanded);
+  toggleGameSidePanelButton.setAttribute(
+    "aria-expanded",
+    String(isExpanded)
+  );
+  const actionLabel = isExpanded ? "Collapse panel" : "Expand panel";
+  toggleGameSidePanelButton.setAttribute("aria-label", actionLabel);
+  toggleGameSidePanelButton.title = actionLabel;
+  toggleGameSidePanelButton.classList.toggle("is-collapse", isExpanded);
+  const chevrons = Array.from({ length: 2 }, () => {
+    const line = document.createElement("span");
+    line.setAttribute("aria-hidden", "true");
+    return line;
+  });
+  toggleGameSidePanelButton.replaceChildren(...chevrons);
 }
 
 function updateEgyptianWarTurnTimer(state) {
@@ -706,7 +761,7 @@ function createEgyptianWarCard(card, offset = 0) {
     queen: "Q",
     king: "K",
     ace: "A",
-    joker: "JOKER"
+    joker: "J"
   };
   const suitSymbols = {
     clubs: "♣",
@@ -740,14 +795,36 @@ function createEgyptianWarCard(card, offset = 0) {
     cardElement.classList.add("is-joker");
   }
 
+  if (["jack", "queen", "king"].includes(card.rank)) {
+    cardElement.classList.add("is-face-card");
+  }
+
   const corner = document.createElement("span");
   corner.className = "playing-card-corner";
-  corner.textContent = `${rankLabel}\n${suitSymbol}`;
+  corner.textContent = card.suit === null
+    ? "JOKER"
+    : `${rankLabel}\n${suitSymbol}`;
+
+  const oppositeCorner = corner.cloneNode(true);
+  oppositeCorner.classList.add("is-opposite");
 
   const center = document.createElement("span");
   center.className = "playing-card-center";
-  center.textContent = suitSymbol;
-  cardElement.append(corner, center);
+
+  if (card.suit === null) {
+    const jokerMonogram = document.createElement("span");
+    jokerMonogram.className = "playing-card-joker-monogram";
+    jokerMonogram.textContent = "J";
+
+    const jokerOrnament = document.createElement("span");
+    jokerOrnament.className = "playing-card-joker-ornament";
+    jokerOrnament.textContent = "★ ◆ ★";
+    center.append(jokerMonogram, jokerOrnament);
+  } else {
+    center.textContent = suitSymbol;
+  }
+
+  cardElement.append(corner, center, oppositeCorner);
   return cardElement;
 }
 
@@ -824,7 +901,12 @@ function animateEgyptianWarOutcome(animation) {
       const normalizedY = directionY / distance;
 
       // Leave each hand slightly toward its player's table position.
-      const pileOffset = 14;
+      const visiblePileCard = egyptianWarPileStack.querySelector(
+        ".playing-card"
+      );
+      const renderedCardWidth =
+        visiblePileCard?.getBoundingClientRect().width ?? 0;
+      const pileOffset = Math.max(14, renderedCardWidth * 0.25);
       const destinationX =
         center.x - normalizedX * pileOffset;
       const destinationY =
@@ -837,7 +919,10 @@ function animateEgyptianWarOutcome(animation) {
 
       const hand = document.createElement("span");
       hand.className = "egyptian-war-flying-hand";
-      hand.textContent = "🖐️";
+      const handGlyph = document.createElement("span");
+      handGlyph.className = "egyptian-war-flying-hand-glyph";
+      handGlyph.textContent = "🖐️";
+      hand.appendChild(handGlyph);
 
       hand.style.left = `${playerCenter.x}px`;
       hand.style.top = `${playerCenter.y}px`;
@@ -1329,6 +1414,12 @@ socket.on("connect", () => {
   );
 
   connectionStatus.classList.add("text-bg-success");
+  gameplayConnectionStatus.textContent = "Connected to server";
+  gameplayConnectionStatus.classList.remove(
+    "text-bg-warning",
+    "text-bg-danger"
+  );
+  gameplayConnectionStatus.classList.add("text-bg-success");
 });
 
 socket.on("latency-probe", (acknowledge) => {
@@ -1353,6 +1444,12 @@ socket.on("disconnect", () => {
   );
 
   connectionStatus.classList.add("text-bg-danger");
+  gameplayConnectionStatus.textContent = "Disconnected from server";
+  gameplayConnectionStatus.classList.remove(
+    "text-bg-warning",
+    "text-bg-success"
+  );
+  gameplayConnectionStatus.classList.add("text-bg-danger");
 
   if (currentRoomCode !== null) {
     showToast(
@@ -1759,6 +1856,20 @@ egyptianWarChatForm.addEventListener("submit", (event) => {
 
       egyptianWarChatInput.value = "";
     }
+  );
+});
+
+showGameChatButton.addEventListener("click", () => {
+  showEgyptianWarSidePanel("chat");
+});
+
+showGameSpectatorsButton.addEventListener("click", () => {
+  showEgyptianWarSidePanel("spectators");
+});
+
+toggleGameSidePanelButton.addEventListener("click", () => {
+  setEgyptianWarSidePanelExpanded(
+    !egyptianWarSidePanel.classList.contains("is-expanded")
   );
 });
 
