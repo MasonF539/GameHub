@@ -191,6 +191,7 @@ test("shows the winner avatar and collected-card total in the victory banner", (
 
   const victory = document.querySelector("#egyptian-war-victory");
   assert.equal(victory.hidden, false);
+  assert.equal(victory.parentElement.id, "egyptian-war-arena");
   assert.equal(
     victory.querySelector(".egyptian-war-victory-avatar").textContent,
     "🐸"
