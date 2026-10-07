@@ -86,7 +86,16 @@ const toggleRoomLockButton =
   document.querySelector("#toggle-room-lock");
 const playerList = document.querySelector("#player-list");
 
-const gameSelect = document.querySelector("#game-select");
+const openGamePickerButton =
+  document.querySelector("#open-game-picker");
+const gamePickerModalElement =
+  document.querySelector("#game-picker-modal");
+const gamePickerHelp = document.querySelector("#game-picker-help");
+const gamePickerGrid = document.querySelector("#game-picker-grid");
+const selectedGameName =
+  document.querySelector("#selected-game-name");
+const selectedGamePlayerCount =
+  document.querySelector("#selected-game-player-count");
 const howToPlayButton = document.querySelector("#how-to-play");
 const gameSettingsButton = document.querySelector("#game-settings");
 const rulesModalTitle = document.querySelector("#rules-modal-title");
@@ -138,6 +147,7 @@ let selectedGameId = null;
 let currentGameSettings = {};
 let currentPlayers = [];
 let isRoomRequestPending = false;
+let isGameSelectionPending = false;
 let previousEgyptianWarState = null;
 let visibleEgyptianWarCards = [];
 let activeEgyptianWarAnimation = null;
@@ -458,9 +468,9 @@ function showLobby(roomCode, isHost) {
   isRoomLocked = false;
 
   closeLobbyButton.classList.toggle("d-none", !isHost);
-  gameSelect.disabled = !isHost;
   toggleRoomLockButton.classList.toggle("d-none", !isHost);
   startGameButton.classList.toggle("d-none", !isHost);
+  updateGamePicker();
 
   updateRoomLockDisplay();
 
@@ -469,8 +479,7 @@ function showLobby(roomCode, isHost) {
     selectedGameId === null &&
     gameDefinitions.length > 0
   ) {
-    gameSelect.value = gameDefinitions[0].id;
-    gameSelect.dispatchEvent(new Event("change"));
+    requestGameSelection(gameDefinitions[0].id);
   }
 }
 
@@ -488,6 +497,7 @@ function resetRoomState() {
   currentGameSettings = {};
   currentPlayers = [];
   isRoomRequestPending = false;
+  isGameSelectionPending = false;
   previousEgyptianWarState = null;
   visibleEgyptianWarCards = [];
   activeEgyptianWarAnimation = null;
@@ -533,6 +543,284 @@ function resetRoomState() {
 
   howToPlayButton.disabled = true;
   gameSettingsButton.disabled = true;
+  selectedGameName.textContent = gameDefinitions.length > 0
+    ? "No game selected"
+    : "Loading games…";
+  selectedGamePlayerCount.textContent = "";
+  updateGamePicker();
+}
+
+function createGamePreview(game) {
+  const preview = document.createElement("span");
+  preview.className = "game-picker-preview";
+  preview.setAttribute("aria-hidden", "true");
+
+  if (game.id === "egyptian-war") {
+    preview.classList.add("is-egyptian-war");
+
+    const createElement = (className, text = "") => {
+      const element = document.createElement("span");
+      element.className = className;
+      element.textContent = text;
+      return element;
+    };
+
+    const createScene = (className, status, pileCount, card) => {
+      const scene = createElement(`game-picker-scene ${className}`);
+      const table = createElement("game-picker-preview-table");
+      const information = createElement("game-picker-preview-info");
+      const turn = createElement("game-picker-preview-turn", status);
+      const count = createElement(
+        "game-picker-preview-pile-count",
+        `Central pile: ${pileCount}`
+      );
+      const pileCard = createElement(
+        "game-picker-preview-playing-card",
+        card
+      );
+      information.append(turn, count, pileCard);
+      table.appendChild(information);
+
+      for (const [position, avatar, cards] of [
+        ["top", "🐱", "18 cards"],
+        ["left", "🦊", "16 cards"],
+        ["bottom", "🐸", "20 cards"]
+      ]) {
+        const player = createElement(
+          `game-picker-preview-player is-${position}`
+        );
+        player.append(
+          createElement("game-picker-preview-avatar", avatar),
+          createElement("game-picker-preview-card-count", cards)
+        );
+        table.appendChild(player);
+      }
+
+      scene.appendChild(table);
+      return scene;
+    };
+
+    const playScene = createScene(
+      "is-card-play",
+      "Frog's turn",
+      "5 cards",
+      "Q♥"
+    );
+    playScene.querySelector(".game-picker-preview-table").append(
+      createElement("game-picker-preview-moving-card", "7♣"),
+      createElement("game-picker-preview-play-hand", "🖐️")
+    );
+
+    const slapScene = createScene(
+      "is-slap",
+      "Valid slap!",
+      "8 cards",
+      "7♠"
+    );
+    const slapTable = slapScene.querySelector(
+      ".game-picker-preview-table"
+    );
+    for (const position of ["left", "top", "bottom"]) {
+      slapTable.appendChild(
+        createElement(
+          `game-picker-preview-slap-hand is-${position}`,
+          "🖐️"
+        )
+      );
+    }
+
+    const victoryScene = createScene(
+      "is-victory",
+      "",
+      "0 cards",
+      ""
+    );
+    victoryScene.querySelector(".game-picker-preview-info").remove();
+    for (const player of victoryScene.querySelectorAll(
+      ".game-picker-preview-player"
+    )) {
+      const isWinner = player.classList.contains("is-bottom");
+      player.querySelector(".game-picker-preview-card-count")
+        .textContent = isWinner ? "54 cards" : "0 cards";
+      player.classList.toggle("is-winner", isWinner);
+    }
+
+    const victory = createElement("game-picker-preview-victory");
+    const winnerCollection = createElement(
+      "game-picker-preview-winner-collection"
+    );
+    const winnerDeck = createElement("game-picker-preview-winner-deck");
+    for (let index = 0; index < 4; index += 1) {
+      winnerDeck.appendChild(
+        createElement("game-picker-preview-card-back")
+      );
+    }
+    winnerCollection.append(
+      createElement("game-picker-preview-winner-avatar", "🐸"),
+      winnerDeck,
+      createElement("game-picker-preview-winner-total", "54")
+    );
+    victory.append(
+      winnerCollection,
+      createElement(
+        "game-picker-preview-victory-heading",
+        "All cards collected"
+      ),
+      createElement(
+        "game-picker-preview-victory-winner",
+        "Frog wins!"
+      )
+    );
+    victoryScene.appendChild(victory);
+
+    preview.append(playScene, slapScene, victoryScene);
+  } else {
+    preview.textContent = "Preview coming soon";
+  }
+
+  return preview;
+}
+
+function updateSelectedGameSummary() {
+  const selectedGame = gameDefinitions.find(
+    (game) => game.id === selectedGameId
+  );
+
+  if (!selectedGame) {
+    selectedGameName.textContent = gameDefinitions.length > 0
+      ? "No game selected"
+      : "Loading games…";
+    selectedGamePlayerCount.textContent = "";
+    return;
+  }
+
+  selectedGameName.textContent = selectedGame.name;
+  selectedGamePlayerCount.textContent =
+    `${selectedGame.minPlayers}–${selectedGame.maxPlayers} players`;
+}
+
+function updateGamePicker() {
+  openGamePickerButton.disabled = gameDefinitions.length === 0;
+  gamePickerHelp.textContent = isCurrentUserHost
+    ? "Select a game for everyone in the lobby."
+    : "Browse available games. The host chooses what the lobby will play.";
+  gamePickerGrid.replaceChildren();
+
+  if (gameDefinitions.length === 0) {
+    const loading = document.createElement("p");
+    loading.className = "game-picker-loading mb-0";
+    loading.textContent = "Loading games…";
+    gamePickerGrid.appendChild(loading);
+    updateSelectedGameSummary();
+    return;
+  }
+
+  for (const game of gameDefinitions) {
+    const card = document.createElement("button");
+    const isSelected = game.id === selectedGameId;
+    card.type = "button";
+    card.className = "game-picker-card";
+    card.dataset.gameId = game.id;
+    card.classList.toggle("is-selected", isSelected);
+    card.classList.toggle("is-unavailable", !game.isPlayable);
+    card.setAttribute("aria-pressed", String(isSelected));
+
+    if (!isCurrentUserHost || !game.isPlayable) {
+      card.setAttribute("aria-disabled", "true");
+    }
+
+    const preview = createGamePreview(game);
+    const body = document.createElement("span");
+    body.className = "game-picker-card-body";
+
+    const heading = document.createElement("span");
+    heading.className = "game-picker-card-heading";
+
+    const name = document.createElement("strong");
+    name.className = "game-picker-card-name";
+    name.textContent = game.name;
+
+    const status = document.createElement("span");
+    status.className = game.isPlayable
+      ? "badge text-bg-success"
+      : "badge text-bg-secondary";
+    status.textContent = game.isPlayable ? "Ready" : "Coming soon";
+    heading.append(name, status);
+
+    const description = document.createElement("span");
+    description.className = "game-picker-card-description";
+    description.textContent = game.description;
+
+    const footer = document.createElement("span");
+    footer.className = "game-picker-card-footer";
+
+    const playerCount = document.createElement("span");
+    playerCount.textContent =
+      `${game.minPlayers}–${game.maxPlayers} players`;
+
+    const selection = document.createElement("span");
+    selection.className = "game-picker-selection-label";
+    selection.textContent = isSelected
+      ? "Selected"
+      : isCurrentUserHost && game.isPlayable
+        ? "Choose game"
+        : "View only";
+
+    footer.append(playerCount, selection);
+    body.append(heading, description, footer);
+    card.append(preview, body);
+
+    card.addEventListener("click", () => {
+      if (isCurrentUserHost && game.isPlayable) {
+        requestGameSelection(game.id);
+      }
+    });
+
+    gamePickerGrid.appendChild(card);
+  }
+
+  updateSelectedGameSummary();
+}
+
+function requestGameSelection(gameId) {
+  const selectedGame = gameDefinitions.find(
+    (game) => game.id === gameId
+  );
+
+  if (
+    !selectedGame ||
+    !selectedGame.isPlayable ||
+    !isCurrentUserHost ||
+    currentRoomCode === null ||
+    isGameSelectionPending ||
+    selectedGameId === gameId
+  ) {
+    return;
+  }
+
+  isGameSelectionPending = true;
+  gamePickerGrid.classList.add("is-pending");
+
+  socket.emit(
+    "select-game",
+    {
+      roomCode: currentRoomCode,
+      gameId
+    },
+    (response) => {
+      isGameSelectionPending = false;
+      gamePickerGrid.classList.remove("is-pending");
+
+      if (!response.success) {
+        showToast(response.message);
+        return;
+      }
+
+      bootstrap.Modal.getOrCreateInstance(
+        gamePickerModalElement
+      ).hide();
+    }
+  );
 }
 
 function displayGameInformation(game, settings) {
@@ -863,6 +1151,79 @@ function animateEgyptianWarOutcome(animation) {
     ? getEgyptianWarCenter(winnerSeat, arena)
     : center;
 
+  if (
+    animation.playedCard &&
+    actorSeat &&
+    animation.action !== "slap" &&
+    !prefersReducedMotion
+  ) {
+    const directionX = center.x - actorCenter.x;
+    const directionY = center.y - actorCenter.y;
+    const distance = Math.hypot(directionX, directionY) || 1;
+    const normalizedX = directionX / distance;
+    const normalizedY = directionY / distance;
+    const dealtCard = egyptianWarPileStack.querySelector(
+      ".playing-card.is-dealing"
+    );
+    const dealtCardRect = dealtCard?.getBoundingClientRect();
+    const dealtCardWidth = dealtCardRect?.width || 84;
+    const dealtCardHeight = dealtCardRect?.height || 120;
+    const horizontalEdgeDistance = Math.abs(normalizedX) > 0.001
+      ? dealtCardWidth / 2 / Math.abs(normalizedX)
+      : Number.POSITIVE_INFINITY;
+    const verticalEdgeDistance = Math.abs(normalizedY) > 0.001
+      ? dealtCardHeight / 2 / Math.abs(normalizedY)
+      : Number.POSITIVE_INFINITY;
+    const cardEdgeDistance = Math.min(
+      horizontalEdgeDistance,
+      verticalEdgeDistance
+    );
+    const handLandingOffset =
+      cardEdgeDistance + dealtCardWidth * 0.22;
+    const effectiveHandLandingOffset = Math.min(
+      handLandingOffset,
+      distance * 0.82
+    );
+    const handTargetX =
+      center.x - normalizedX * effectiveHandLandingOffset;
+    const handTargetY =
+      center.y - normalizedY * effectiveHandLandingOffset;
+    const handTravelX = handTargetX - actorCenter.x;
+    const handTravelY = handTargetY - actorCenter.y;
+    const rotation =
+      Math.atan2(directionY, directionX) * (180 / Math.PI) + 90;
+    const hand = document.createElement("span");
+    const handGlyph = document.createElement("span");
+
+    hand.className = "egyptian-war-card-play-hand";
+    handGlyph.className = "egyptian-war-card-play-hand-glyph";
+    handGlyph.textContent = "🖐️";
+    hand.appendChild(handGlyph);
+    hand.style.left = `${actorCenter.x}px`;
+    hand.style.top = `${actorCenter.y}px`;
+    hand.style.setProperty(
+      "--play-hand-x",
+      `${handTravelX}px`
+    );
+    hand.style.setProperty(
+      "--play-hand-y",
+      `${handTravelY}px`
+    );
+    hand.style.setProperty(
+      "--play-hand-retreat-x",
+      `${handTravelX * 0.82}px`
+    );
+    hand.style.setProperty(
+      "--play-hand-retreat-y",
+      `${handTravelY * 0.82}px`
+    );
+    hand.style.setProperty(
+      "--play-hand-rotation",
+      `${rotation}deg`
+    );
+    egyptianWarAnimationLayer.appendChild(hand);
+  }
+
   const slapAttempts =
     Array.isArray(animation.slapAttempts) &&
       animation.slapAttempts.length > 0
@@ -1046,13 +1407,28 @@ function animateEgyptianWarOutcome(animation) {
     collected.className = "egyptian-war-victory-heading";
     collected.textContent = "ALL CARDS COLLECTED";
 
+    const winnerAvatar = document.createElement("span");
+    winnerAvatar.className = "egyptian-war-victory-avatar";
+    winnerAvatar.textContent = winner?.avatar ?? "🏆";
+    winnerAvatar.setAttribute("aria-hidden", "true");
+
+    const winnerDetails = document.createElement("span");
+    winnerDetails.className = "egyptian-war-victory-details";
+
     const winnerMessage = document.createElement("span");
     winnerMessage.className = "egyptian-war-victory-winner";
     winnerMessage.textContent = winner
       ? `${winner.name} wins!`
       : "Game won!";
 
-    egyptianWarVictory.replaceChildren(collected, winnerMessage);
+    const championLabel = document.createElement("span");
+    championLabel.className = "egyptian-war-victory-champion";
+    championLabel.textContent = winner
+      ? `🏆 Champion • ${winner.cardCount} cards`
+      : "🏆 Egyptian War champion";
+
+    winnerDetails.append(collected, winnerMessage, championLabel);
+    egyptianWarVictory.replaceChildren(winnerAvatar, winnerDetails);
   }
 
   const duration = animation.isFinalWin
@@ -1435,6 +1811,8 @@ socket.on("latency-update", ({ rttMs }) => {
 });
 
 socket.on("disconnect", () => {
+  isGameSelectionPending = false;
+  gamePickerGrid.classList.remove("is-pending");
   networkPing.textContent = "Ping: -- ms";
   connectionStatus.textContent = "Disconnected from server";
 
@@ -1462,7 +1840,6 @@ socket.on("room-resumed", (room) => {
   selectedGameId = room.selectedGameId;
   currentGameSettings = room.gameSettings ?? {};
   isRoomLocked = room.isLocked;
-  gameSelect.value = room.selectedGameId ?? "";
   showLobby(room.roomCode, room.isHost);
   updateRoomLockDisplay();
   if (room.activeGameId === "egyptian-war") {
@@ -1517,17 +1894,15 @@ socket.on("room-session-replaced", () => {
 
 socket.on("available-games", (games) => {
   gameDefinitions = games;
-  gameSelect.replaceChildren();
+  updateGamePicker();
 
-  for (const game of gameDefinitions) {
-    const option = document.createElement("option");
-
-    option.value = game.id;
-    option.textContent =
-      `${game.name} (${game.minPlayers}–${game.maxPlayers} players)` +
-      `${game.isPlayable ? "" : " — Coming soon"}`;
-
-    gameSelect.appendChild(option);
+  if (
+    isCurrentUserHost &&
+    currentRoomCode !== null &&
+    selectedGameId === null &&
+    gameDefinitions.length > 0
+  ) {
+    requestGameSelection(gameDefinitions[0].id);
   }
 });
 
@@ -1603,7 +1978,6 @@ socket.on("game-selected", ({ gameId, settings }) => {
   currentGameSettings = settings;
   egyptianWarChat.hidden = !selectedGame.chatEnabled;
 
-  gameSelect.value = gameId;
   howToPlayButton.disabled = false;
   gameSettingsButton.disabled = false;
 
@@ -1612,6 +1986,7 @@ socket.on("game-selected", ({ gameId, settings }) => {
     currentGameSettings
   );
 
+  updateGamePicker();
   updateStartGameAvailability();
 });
 
@@ -1714,29 +2089,6 @@ socket.on("room-closed", () => {
   resetRoomState();
   showEntry();
   showToast("The host closed the room.");
-});
-
-gameSelect.addEventListener("change", () => {
-  const selectedGame = gameDefinitions.find(
-    (game) => game.id === gameSelect.value
-  );
-
-  if (!selectedGame || !isCurrentUserHost) {
-    return;
-  }
-
-  socket.emit(
-    "select-game",
-    {
-      roomCode: currentRoomCode,
-      gameId: selectedGame.id
-    },
-    (response) => {
-      if (!response.success) {
-        showToast(response.message);
-      }
-    }
-  );
 });
 
 egyptianWarPlayCardButton.addEventListener("click", () => {
@@ -1960,7 +2312,7 @@ createRoomButton.addEventListener("click", () => {
       saveResumeSession(response.roomCode, response.resumeToken);
 
       createRoomButton.disabled = true;
-      startGameButton.disabled = gameSelect.value === "";
+      startGameButton.disabled = selectedGameId === null;
     }
   );
 });

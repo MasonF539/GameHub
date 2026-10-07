@@ -42,6 +42,608 @@ body {
   display: none;
 }
 
+.selected-game-panel {
+  display: flex;
+  min-height: 5.25rem;
+  padding: 1rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  background:
+    linear-gradient(135deg, rgba(111, 66, 193, 0.2), rgba(13, 110, 253, 0.12)),
+    rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 1rem;
+}
+
+.selected-game-panel>div {
+  display: grid;
+  gap: 0.1rem;
+}
+
+.selected-game-label {
+  color: #adb5bd;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+#selected-game-name {
+  font-size: 1.2rem;
+}
+
+.selected-game-player-count {
+  color: #c6ced8;
+  font-size: 0.88rem;
+}
+
+.game-picker-modal-content {
+  color: #f8f9fa;
+  background:
+    radial-gradient(circle at 15% 0%, rgba(111, 66, 193, 0.24), transparent 34%),
+    radial-gradient(circle at 90% 100%, rgba(13, 110, 253, 0.18), transparent 35%),
+    #181c25;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 1.25rem;
+  box-shadow: 0 1.5rem 4rem rgba(0, 0, 0, 0.55);
+}
+
+.game-picker-modal-content .modal-header {
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.game-picker-modal-content .text-body-secondary {
+  color: #adb5bd !important;
+}
+
+.game-picker-modal-content .btn-close {
+  filter: invert(1) grayscale(100%) brightness(200%);
+}
+
+.game-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1.25rem;
+}
+
+.game-picker-grid.is-pending {
+  pointer-events: none;
+  opacity: 0.65;
+}
+
+.game-picker-loading {
+  grid-column: 1 / -1;
+  padding: 3rem 1rem;
+  color: #adb5bd;
+  text-align: center;
+}
+
+.game-picker-card {
+  display: flex;
+  min-width: 0;
+  padding: 0;
+  overflow: hidden;
+  flex-direction: column;
+  color: #f8f9fa;
+  text-align: left;
+  background: rgba(32, 37, 49, 0.96);
+  border: 2px solid rgba(255, 255, 255, 0.13);
+  border-radius: 1rem;
+  box-shadow: 0 0.75rem 1.75rem rgba(0, 0, 0, 0.22);
+  transition:
+    border-color 150ms ease,
+    box-shadow 150ms ease,
+    transform 150ms ease;
+}
+
+.game-picker-card:not([aria-disabled="true"]):hover,
+.game-picker-card:not([aria-disabled="true"]):focus-visible {
+  border-color: #79aefb;
+  box-shadow: 0 1rem 2.2rem rgba(13, 110, 253, 0.24);
+  outline: none;
+  transform: translateY(-0.2rem);
+}
+
+.game-picker-card.is-selected {
+  border-color: #7ee787;
+  box-shadow:
+    0 0 0 0.2rem rgba(46, 160, 67, 0.2),
+    0 1rem 2.2rem rgba(0, 0, 0, 0.3);
+}
+
+.game-picker-card[aria-disabled="true"] {
+  cursor: default;
+}
+
+.game-picker-card.is-unavailable {
+  filter: saturate(0.55);
+  opacity: 0.7;
+}
+
+.game-picker-card-body {
+  display: grid;
+  min-height: 13.5rem;
+  padding: 1.1rem;
+  gap: 0.75rem;
+}
+
+.game-picker-card-heading,
+.game-picker-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.game-picker-card-name {
+  font-size: 1.18rem;
+}
+
+.game-picker-card-description {
+  color: #cbd3dd;
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+
+.game-picker-card-footer {
+  align-self: end;
+  color: #adb5bd;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.game-picker-selection-label {
+  color: #9ec5fe;
+}
+
+.game-picker-card.is-selected .game-picker-selection-label {
+  color: #7ee787;
+}
+
+.game-picker-preview {
+  position: relative;
+  display: block;
+  width: min(calc(100% - 1.5rem), 20rem);
+  aspect-ratio: 16 / 9;
+  margin: 0.75rem auto 0;
+  overflow: hidden;
+  color: #adb5bd;
+  background: linear-gradient(145deg, #242936, #151820);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 0.7rem;
+  box-shadow: 0 0.55rem 1.1rem rgba(0, 0, 0, 0.3);
+}
+
+.game-picker-preview.is-egyptian-war {
+  background: #1d222d;
+}
+
+.game-picker-scene {
+  position: absolute;
+  inset: 0;
+  display: block;
+  overflow: hidden;
+  opacity: 0;
+}
+
+.game-picker-scene.is-card-play {
+  animation: game-picker-play-scene 9s linear infinite;
+}
+
+.game-picker-scene.is-slap {
+  animation: game-picker-slap-scene 9s linear infinite;
+}
+
+.game-picker-scene.is-victory {
+  animation: game-picker-victory-scene 9s linear infinite;
+}
+
+.game-picker-preview-table {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  background:
+    radial-gradient(ellipse 67% 72% at 50% 51%,
+      #24794e 0 78%,
+      #8d6039 79% 83%,
+      #38251a 84% 87%,
+      transparent 88%),
+    radial-gradient(circle at 50% 50%, #343944, #181c25 72%);
+}
+
+.game-picker-preview-info {
+  position: absolute;
+  z-index: 2;
+  top: 43%;
+  left: 50%;
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  color: #fff;
+  font-size: clamp(0.42rem, 1.5vw, 0.62rem);
+  font-weight: 800;
+  line-height: 1.15;
+  text-align: center;
+  text-shadow: 0 1px 2px #000;
+  transform: translate(-50%, -50%);
+}
+
+.game-picker-preview-turn {
+  white-space: nowrap;
+}
+
+.game-picker-preview-pile-count {
+  margin-top: 0.08rem;
+  white-space: nowrap;
+}
+
+.game-picker-preview-playing-card,
+.game-picker-preview-moving-card {
+  display: grid;
+  width: clamp(1.35rem, 4.5vw, 1.85rem);
+  height: clamp(1.9rem, 6vw, 2.6rem);
+  padding: 0.12rem;
+  place-items: start;
+  color: #17191e;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(0.48rem, 1.6vw, 0.68rem);
+  font-weight: 900;
+  background: #fffdf5;
+  border: 1px solid #d6d0c3;
+  border-radius: 0.2rem;
+  box-shadow: 0 0.35rem 0.7rem rgba(0, 0, 0, 0.35);
+}
+
+.game-picker-preview-playing-card {
+  margin-top: 0.3rem;
+}
+
+.game-picker-preview-player {
+  position: absolute;
+  z-index: 3;
+  display: flex;
+  min-width: 3rem;
+  padding: 0.18rem 0.3rem;
+  align-items: center;
+  gap: 0.2rem;
+  color: #fff;
+  font-size: clamp(0.36rem, 1.25vw, 0.52rem);
+  font-weight: 700;
+  background: rgba(22, 27, 35, 0.94);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 0.4rem;
+  box-shadow: 0 0.25rem 0.45rem rgba(0, 0, 0, 0.35);
+}
+
+.game-picker-preview-player.is-top {
+  top: 4%;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.game-picker-preview-player.is-left {
+  top: 48%;
+  left: 2%;
+  transform: translateY(-50%);
+}
+
+.game-picker-preview-player.is-bottom {
+  bottom: 3%;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.game-picker-preview-avatar {
+  font-size: clamp(0.75rem, 2.4vw, 1.05rem);
+}
+
+.game-picker-preview-card-count {
+  white-space: nowrap;
+}
+
+.game-picker-preview-moving-card {
+  position: absolute;
+  z-index: 4;
+  top: 72%;
+  left: 50%;
+  animation: game-picker-card-play 9s cubic-bezier(0.2, 0.8, 0.3, 1) infinite;
+}
+
+.game-picker-preview-play-hand,
+.game-picker-preview-slap-hand {
+  position: absolute;
+  z-index: 6;
+  font-size: clamp(1.6rem, 6vw, 2.8rem);
+  filter: drop-shadow(0 0.25rem 0.2rem rgba(0, 0, 0, 0.5));
+}
+
+.game-picker-preview-play-hand {
+  bottom: -5%;
+  left: 52%;
+  animation: game-picker-card-hand 9s ease-in-out infinite;
+}
+
+.game-picker-preview-slap-hand.is-left {
+  top: 50%;
+  left: 14%;
+  animation: game-picker-left-slap 9s ease-out infinite;
+}
+
+.game-picker-preview-slap-hand.is-top {
+  top: 15%;
+  left: 50%;
+  animation: game-picker-top-slap 9s ease-out infinite;
+}
+
+.game-picker-preview-slap-hand.is-bottom {
+  top: 85%;
+  left: 50%;
+  animation: game-picker-bottom-slap 9s ease-out infinite;
+}
+
+.game-picker-preview-victory {
+  position: absolute;
+  z-index: 8;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  color: #fff;
+  text-align: center;
+  background: rgba(8, 18, 13, 0.77);
+  text-shadow: 0 2px 4px #000;
+  animation: game-picker-victory-text 9s ease-out infinite;
+}
+
+.game-picker-preview-victory-heading {
+  color: #d9e2ec;
+  font-size: clamp(0.58rem, 2vw, 0.82rem);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.game-picker-preview-victory-winner {
+  color: #ffd86b;
+  font-size: clamp(1rem, 3.5vw, 1.5rem);
+  font-weight: 900;
+}
+
+.game-picker-preview-winner-collection {
+  position: relative;
+  display: flex;
+  height: 2.75rem;
+  margin-bottom: 0.15rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.15rem;
+}
+
+.game-picker-preview-winner-avatar {
+  z-index: 3;
+  font-size: clamp(1.35rem, 4.2vw, 1.85rem);
+}
+
+.game-picker-preview-winner-deck {
+  position: relative;
+  width: 2.65rem;
+  height: 2.5rem;
+}
+
+.game-picker-preview-card-back {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1.45rem;
+  height: 2rem;
+  background:
+    repeating-linear-gradient(45deg,
+      #583b8a 0 0.16rem,
+      #7651b0 0.16rem 0.32rem);
+  border: 0.12rem solid #f5efe0;
+  border-radius: 0.18rem;
+  box-shadow: 0 0.15rem 0.25rem rgba(0, 0, 0, 0.35);
+  transform: translateX(var(--deck-x, 0)) rotate(var(--deck-rotation, 0deg));
+}
+
+.game-picker-preview-card-back:nth-child(1) {
+  --deck-x: 0;
+  --deck-rotation: -6deg;
+}
+
+.game-picker-preview-card-back:nth-child(2) {
+  --deck-x: 0.35rem;
+  --deck-rotation: -2deg;
+}
+
+.game-picker-preview-card-back:nth-child(3) {
+  --deck-x: 0.7rem;
+  --deck-rotation: 2deg;
+}
+
+.game-picker-preview-card-back:nth-child(4) {
+  --deck-x: 1.05rem;
+  --deck-rotation: 6deg;
+}
+
+.game-picker-preview-winner-total {
+  display: grid;
+  z-index: 4;
+  width: 1.45rem;
+  height: 1.45rem;
+  margin-left: -0.75rem;
+  place-items: center;
+  color: #1c1f26;
+  font-size: 0.62rem;
+  font-weight: 900;
+  background: #ffd86b;
+  border: 2px solid #fff2bd;
+  border-radius: 50%;
+  box-shadow: 0 0.2rem 0.35rem rgba(0, 0, 0, 0.4);
+}
+
+@keyframes game-picker-play-scene {
+  0%, 30% {
+    opacity: 1;
+  }
+
+  33%, 100% {
+    opacity: 0;
+  }
+}
+
+@keyframes game-picker-slap-scene {
+  0%, 31% {
+    opacity: 0;
+  }
+
+  34%, 64% {
+    opacity: 1;
+  }
+
+  67%, 100% {
+    opacity: 0;
+  }
+}
+
+@keyframes game-picker-victory-scene {
+  0%, 65% {
+    opacity: 0;
+  }
+
+  68%, 97% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes game-picker-card-play {
+  0%, 3% {
+    opacity: 0;
+    transform: translate(-50%, 1.6rem) rotate(-14deg) scale(0.75);
+  }
+
+  8%, 26% {
+    opacity: 1;
+    transform: translate(-50%, -2.6rem) rotate(5deg) scale(1);
+  }
+
+  31%, 100% {
+    opacity: 0;
+    transform: translate(-50%, -2.6rem) rotate(5deg) scale(1);
+  }
+}
+
+@keyframes game-picker-card-hand {
+  0%, 3% {
+    opacity: 0;
+    transform: translate(-50%, 1.5rem) rotate(-8deg);
+  }
+
+  7%, 15% {
+    opacity: 1;
+    transform: translate(-50%, -1rem) rotate(-8deg);
+  }
+
+  21%, 100% {
+    opacity: 0;
+    transform: translate(-50%, 0) rotate(-8deg);
+  }
+}
+
+@keyframes game-picker-left-slap {
+  0%, 36% {
+    top: 50%;
+    left: 14%;
+    opacity: 0;
+    transform: translate(-50%, -50%) rotate(90deg);
+  }
+
+  43%, 59% {
+    top: 50%;
+    left: 50%;
+    opacity: 1;
+    transform: translate(-50%, -50%) rotate(90deg);
+  }
+
+  65%, 100% {
+    top: 50%;
+    left: 50%;
+    opacity: 0;
+    transform: translate(-50%, -50%) rotate(90deg);
+  }
+}
+
+@keyframes game-picker-top-slap {
+  0%, 38% {
+    top: 15%;
+    left: 50%;
+    opacity: 0;
+    transform: translate(-50%, -50%) rotate(180deg);
+  }
+
+  46%, 59% {
+    top: 50%;
+    left: 50%;
+    opacity: 1;
+    transform: translate(-50%, -50%) rotate(180deg);
+  }
+
+  65%, 100% {
+    top: 50%;
+    left: 50%;
+    opacity: 0;
+    transform: translate(-50%, -50%) rotate(180deg);
+  }
+}
+
+@keyframes game-picker-bottom-slap {
+  0%, 40% {
+    top: 85%;
+    left: 50%;
+    opacity: 0;
+    transform: translate(-50%, -50%) rotate(0deg);
+  }
+
+  49%, 59% {
+    top: 50%;
+    left: 50%;
+    opacity: 1;
+    transform: translate(-50%, -50%) rotate(0deg);
+  }
+
+  65%, 100% {
+    top: 50%;
+    left: 50%;
+    opacity: 0;
+    transform: translate(-50%, -50%) rotate(0deg);
+  }
+}
+
+@keyframes game-picker-victory-text {
+  0%, 67% {
+    opacity: 0;
+    transform: scale(0.82);
+  }
+
+  72%, 96% {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  100% {
+    opacity: 0;
+    transform: scale(1);
+  }
+}
+
 #gameplay-view {
   width: 100%;
   max-width: 76rem;
@@ -575,6 +1177,65 @@ body:has(#gameplay-view:not(.d-none)) #gameplay-view {
   }
 }
 
+.egyptian-war-card-play-hand {
+  position: absolute;
+  z-index: 7;
+  font-size: calc(var(--egyptian-war-card-width) * 0.78);
+  filter: drop-shadow(0 0.35rem 0.3rem rgba(0, 0, 0, 0.55));
+  pointer-events: none;
+  animation: egyptian-war-card-play-hand-travel 620ms cubic-bezier(0.2, 0.78, 0.28, 1) both;
+}
+
+.egyptian-war-card-play-hand-glyph {
+  display: block;
+  transform-origin: center;
+  animation: egyptian-war-card-play-hand-turn 620ms cubic-bezier(0.2, 0.78, 0.28, 1) both;
+}
+
+@keyframes egyptian-war-card-play-hand-travel {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%);
+  }
+
+  12% {
+    opacity: 1;
+  }
+
+  68%,
+  78% {
+    opacity: 1;
+    transform:
+      translate(calc(-50% + var(--play-hand-x)),
+        calc(-50% + var(--play-hand-y)));
+  }
+
+  100% {
+    opacity: 0;
+    transform:
+      translate(calc(-50% + var(--play-hand-retreat-x)),
+        calc(-50% + var(--play-hand-retreat-y)));
+  }
+}
+
+@keyframes egyptian-war-card-play-hand-turn {
+  0% {
+    transform: rotate(calc(var(--play-hand-rotation) - 12deg)) scale(0.72);
+  }
+
+  68% {
+    transform: rotate(var(--play-hand-rotation)) scale(1);
+  }
+
+  78% {
+    transform: rotate(calc(var(--play-hand-rotation) + 3deg)) scale(0.96);
+  }
+
+  100% {
+    transform: rotate(var(--play-hand-rotation)) scale(0.78);
+  }
+}
+
 .egyptian-war-challenge {
   min-height: 1.4rem;
   font-size: 0.88rem;
@@ -841,28 +1502,99 @@ body:has(#gameplay-view:not(.d-none)) #gameplay-view {
 }
 
 .egyptian-war-victory:not([hidden]) {
-  display: flex;
-  flex-direction: column;
-  margin-top: 0.6rem;
+  display: grid;
+  width: min(100%, 24rem);
+  margin: 0.75rem auto 0;
+  padding: clamp(0.6rem, 1.5vw, 0.85rem) clamp(0.8rem, 2vw, 1.1rem);
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: clamp(0.65rem, 1.8vw, 1rem);
   color: #fff0b3;
-  font-size: clamp(1.05rem, 3vw, 1.65rem);
+  text-align: left;
+  background:
+    radial-gradient(circle at 12% 20%, rgba(255, 216, 107, 0.22), transparent 35%),
+    linear-gradient(145deg, rgba(18, 39, 28, 0.97), rgba(10, 24, 17, 0.96));
+  border: 1px solid rgba(255, 216, 107, 0.72);
+  border-radius: 1rem;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    0 0 1.2rem rgba(245, 189, 53, 0.26),
+    0 0.7rem 1.4rem rgba(0, 0, 0, 0.42);
+  animation: egyptian-war-victory-banner 650ms cubic-bezier(0.2, 0.85, 0.3, 1) both;
+}
+
+.egyptian-war-victory-avatar {
+  position: relative;
+  display: grid;
+  width: clamp(3.25rem, 8vw, 4.25rem);
+  height: clamp(3.25rem, 8vw, 4.25rem);
+  place-items: center;
+  font-size: clamp(2rem, 5vw, 2.8rem);
+  line-height: 1;
+  background: linear-gradient(145deg, #fff5bf, #dcae38);
+  border: 0.16rem solid #fff1a8;
+  border-radius: 50%;
+  box-shadow:
+    inset 0 0.18rem 0.35rem rgba(255, 255, 255, 0.52),
+    0 0.35rem 0.8rem rgba(0, 0, 0, 0.38);
+}
+
+.egyptian-war-victory-avatar::before {
+  position: absolute;
+  top: -0.8rem;
+  left: 50%;
+  content: "♛";
+  color: #ffd86b;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 1.1rem;
+  text-shadow: 0 2px 3px rgba(0, 0, 0, 0.7);
+  transform: translateX(-50%);
+}
+
+.egyptian-war-victory-details {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.egyptian-war-victory-heading {
+  color: #d8e3dc;
+  font-size: clamp(0.55rem, 1.4vw, 0.72rem);
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.egyptian-war-victory-winner {
+  overflow: hidden;
+  color: #ffe07b;
+  font-size: clamp(1.15rem, 3vw, 1.75rem);
   font-weight: 900;
-  letter-spacing: 0.04em;
+  line-height: 1.1;
+  text-overflow: ellipsis;
   text-shadow:
-    0 0 0.6rem #f5bd35,
-    0 2px 5px rgba(0, 0, 0, 0.8);
-  animation: egyptian-war-victory-banner 650ms ease-in-out infinite alternate;
+    0 0 0.55rem rgba(245, 189, 53, 0.7),
+    0 2px 4px rgba(0, 0, 0, 0.85);
+  white-space: nowrap;
+}
+
+.egyptian-war-victory-champion {
+  margin-top: 0.2rem;
+  color: #f3d98d;
+  font-size: clamp(0.62rem, 1.5vw, 0.8rem);
+  font-weight: 750;
+  letter-spacing: 0.03em;
 }
 
 @keyframes egyptian-war-victory-banner {
   from {
-    transform: scale(0.96);
-    opacity: 0.82;
+    opacity: 0;
+    transform: translateY(0.5rem) scale(0.92);
   }
 
   to {
-    transform: scale(1.04);
     opacity: 1;
+    transform: translateY(0) scale(1);
   }
 }
 
@@ -1291,7 +2023,26 @@ body:has(#gameplay-view:not(.d-none)) #gameplay-view {
   box-shadow: 0 0.6rem 1.25rem rgba(0, 0, 0, 0.2);
 }
 
+@media (max-width: 991.98px) {
+  .game-picker-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 767.98px) {
+  .game-picker-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .selected-game-panel {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .game-picker-card-body {
+    min-height: 0;
+  }
+
   .egyptian-war-play-layout {
     position: relative;
     display: block;
@@ -1401,6 +2152,7 @@ body:has(#gameplay-view:not(.d-none)) #gameplay-view {
 @media (prefers-reduced-motion: reduce) {
 
   .btn,
+  .game-picker-card,
   .egyptian-war-seat {
     transition: none;
   }
@@ -1411,6 +2163,33 @@ body:has(#gameplay-view:not(.d-none)) #gameplay-view {
 
   .playing-card.is-dealing {
     animation-duration: 1ms;
+  }
+
+  .game-picker-scene,
+  .game-picker-preview-moving-card,
+  .game-picker-preview-play-hand,
+  .game-picker-preview-slap-hand,
+  .game-picker-preview-victory {
+    animation: none;
+  }
+
+  .game-picker-scene.is-card-play {
+    opacity: 1;
+  }
+
+  .game-picker-scene.is-slap,
+  .game-picker-scene.is-victory {
+    display: none;
+  }
+
+  .game-picker-preview-moving-card {
+    opacity: 1;
+    transform: translate(-50%, -2.6rem) rotate(5deg) scale(1);
+  }
+
+  .game-picker-preview-play-hand {
+    opacity: 1;
+    transform: translate(-50%, -1rem) rotate(-8deg);
   }
 
   .egyptian-war-flying-hand,

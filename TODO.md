@@ -15,14 +15,14 @@
 
 ### Visual game selection
 
-- Replace the game dropdown with a Bootstrap modal.
-- Display each available game as a selectable card.
-- Give each card a game name, description, and animated preview.
-- Prefer optimized animated WebP or short muted video previews over large GIF files.
-- Clearly highlight the currently selected game.
-- Allow every player to browse the available games.
-- Decide whether non-host players can vote for games.
-- Keep final game-starting permission restricted to the host.
+- [x] Replace the game dropdown with a Bootstrap modal.
+- [x] Display each available game as a selectable card.
+- [x] Give each card a game name, description, player count, and lightweight animated preview.
+- [x] Clearly highlight the currently selected game.
+- [x] Allow every player to browse the available games.
+- [x] Keep game selection and final game-starting permission restricted to the host.
+- [ ] Consider optimized animated WebP or short muted video previews if a future game needs more detail than a CSS preview can provide.
+- [ ] Revisit optional non-host voting after the picker and additional games have been tested; voting is not part of the initial picker.
 
 ## Architecture requirements
 

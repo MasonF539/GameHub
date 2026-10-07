@@ -139,3 +139,69 @@ test("removes slap and transfer delays for reduced motion", () => {
   assert.equal(document.querySelectorAll(".is-transferring").length, 2);
   close();
 });
+
+test("moves a hand with a played card from the player seat to the pile", () => {
+  const { client, close, addSeat } = createClient();
+  addSeat("player", 20, 170);
+  const dealtCard = document.createElement("div");
+  dealtCard.className = "playing-card is-dealing";
+  dealtCard.getBoundingClientRect = () => ({
+    left: 250,
+    top: 130,
+    width: 100,
+    height: 140
+  });
+  document.querySelector("#egyptian-war-pile-stack")
+    .appendChild(dealtCard);
+
+  client.animateEgyptianWarOutcome(animation({
+    action: "play-card",
+    actorId: "player",
+    winnerId: null,
+    playedCard: { id: "card-1", rank: "7", suit: "clubs" }
+  }));
+
+  const hand = document.querySelector(".egyptian-war-card-play-hand");
+  assert.ok(hand);
+  assert.equal(hand.style.left, "50px");
+  assert.equal(hand.style.top, "200px");
+  assert.equal(hand.style.getPropertyValue("--play-hand-x"), "178px");
+  assert.equal(hand.style.getPropertyValue("--play-hand-y"), "0px");
+  assert.equal(
+    hand.style.getPropertyValue("--play-hand-rotation"),
+    "90deg"
+  );
+  close();
+});
+
+test("shows the winner avatar and collected-card total in the victory banner", () => {
+  const { client, close, addSeat } = createClient(true);
+  addSeat("winner", 270, 20);
+
+  client.animateEgyptianWarOutcome(animation({
+    isFinalWin: true,
+    transferCardCount: 54,
+    players: [{
+      id: "winner",
+      name: "Frog",
+      avatar: "🐸",
+      cardCount: 54
+    }]
+  }));
+
+  const victory = document.querySelector("#egyptian-war-victory");
+  assert.equal(victory.hidden, false);
+  assert.equal(
+    victory.querySelector(".egyptian-war-victory-avatar").textContent,
+    "🐸"
+  );
+  assert.equal(
+    victory.querySelector(".egyptian-war-victory-winner").textContent,
+    "Frog wins!"
+  );
+  assert.match(
+    victory.querySelector(".egyptian-war-victory-champion").textContent,
+    /54 cards/
+  );
+  close();
+});

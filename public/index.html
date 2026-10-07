@@ -129,11 +129,20 @@
 
         <ul id="player-list" class="list-group mb-4"></ul>
 
-        <h3 class="h5">Choose a game</h3>
+        <h3 class="h5">Game</h3>
 
-        <select id="game-select" class="form-select form-select-lg mb-3">
-          <option value="">Loading games…</option>
-        </select>
+        <div class="selected-game-panel mb-3">
+          <div>
+            <span class="selected-game-label">Selected game</span>
+            <strong id="selected-game-name">Loading games…</strong>
+            <span id="selected-game-player-count" class="selected-game-player-count"></span>
+          </div>
+
+          <button id="open-game-picker" class="btn btn-primary" type="button" data-bs-toggle="modal"
+            data-bs-target="#game-picker-modal" disabled>
+            Browse Games
+          </button>
+        </div>
 
         <div class="row g-2 mb-3">
           <div class="col">
@@ -248,7 +257,8 @@
                   </div>
                   <p id="egyptian-war-challenge" class="egyptian-war-challenge mb-1"></p>
                   <p id="egyptian-war-message" class="egyptian-war-message mb-0" aria-live="polite"></p>
-                  <div id="egyptian-war-victory" class="egyptian-war-victory" hidden></div>
+                  <div id="egyptian-war-victory" class="egyptian-war-victory" role="status" aria-live="assertive"
+                    hidden></div>
                 </div>
               </div>
               <div id="egyptian-war-players" class="egyptian-war-seats"
@@ -305,6 +315,30 @@
         </div>
       </div>
     </section>
+
+    <div id="game-picker-modal" class="modal fade" tabindex="-1" aria-labelledby="game-picker-modal-title"
+      aria-describedby="game-picker-help" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-xl">
+        <div class="modal-content game-picker-modal-content">
+          <div class="modal-header">
+            <div>
+              <h2 id="game-picker-modal-title" class="modal-title fs-4">Choose a Game</h2>
+              <p id="game-picker-help" class="mb-0 text-body-secondary">
+                Browse the games available in this lobby.
+              </p>
+            </div>
+
+            <button class="btn-close" type="button" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+
+          <div class="modal-body">
+            <div id="game-picker-grid" class="game-picker-grid" aria-live="polite">
+              <p class="game-picker-loading mb-0">Loading games…</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <div id="rules-modal" class="modal fade" tabindex="-1" aria-labelledby="rules-modal-title" aria-hidden="true">
       <div class="modal-dialog modal-dialog-scrollable modal-lg">
