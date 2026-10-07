@@ -12,6 +12,178 @@ body {
   color: #f8f9fa;
 }
 
+.app-settings-button {
+  position: fixed;
+  z-index: 1040;
+  top: 1rem;
+  right: 1rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: rgba(16, 19, 26, 0.82);
+  box-shadow: 0 0.4rem 1rem rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(8px);
+}
+
+.app-settings-icon {
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+@media (max-width: 575.98px) {
+  .app-settings-label {
+    display: none;
+  }
+}
+
+.app-settings-modal-content {
+  color: #f8f9fa;
+  background: #181c25;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 1.1rem;
+  box-shadow: 0 1.5rem 4rem rgba(0, 0, 0, 0.55);
+}
+
+.app-settings-modal-content .modal-header {
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.app-settings-modal-content .text-body-secondary {
+  color: #adb5bd !important;
+}
+
+.app-settings-modal-content .btn-close {
+  filter: invert(1) grayscale(100%) brightness(200%);
+}
+
+.app-settings-layout {
+  display: grid;
+  grid-template-columns: 9.5rem minmax(0, 1fr);
+  gap: 0;
+}
+
+.app-settings-navigation {
+  align-self: start;
+  padding: 0.75rem 0 0.75rem 0.5rem;
+  flex-direction: column;
+  gap: 0;
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-right: 0;
+  border-radius: 0.8rem 0 0 0.8rem;
+}
+
+.app-settings-navigation-button {
+  width: 100%;
+  min-height: 3.5rem;
+  padding: 0.75rem 1.1rem;
+  color: #cbd5e1;
+  font-weight: 700;
+  text-align: left;
+  border-radius: 0.7rem 0 0 0.7rem !important;
+}
+
+.app-settings-navigation-button:hover,
+.app-settings-navigation-button:focus-visible {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.app-settings-navigation .app-settings-navigation-button.active {
+  color: #fff;
+  background: linear-gradient(135deg, #6f42c1, #0d6efd);
+  box-shadow: -0.35rem 0.35rem 0.9rem rgba(13, 110, 253, 0.22);
+}
+
+.app-settings-section {
+  display: grid;
+  padding: 1.1rem;
+  gap: 1rem;
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(100, 175, 255, 0.32);
+  border-left: 0.3rem solid #0d6efd;
+  border-radius: 0 0.8rem 0.8rem 0;
+}
+
+.app-settings-section-heading {
+  display: block;
+}
+
+.audio-settings-list {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.audio-setting {
+  padding: 1rem;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 0.85rem;
+}
+
+.audio-setting-header,
+.audio-volume-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.audio-setting-header {
+  justify-content: space-between;
+}
+
+.audio-setting-title {
+  font-weight: 700;
+}
+
+.audio-setting-description {
+  color: #adb5bd;
+  font-size: 0.875rem;
+}
+
+.audio-volume-row {
+  margin-top: 0.8rem;
+}
+
+.audio-volume-row .form-range {
+  min-width: 0;
+  margin: 0;
+}
+
+.audio-volume-row output {
+  width: 3.4rem;
+  flex: 0 0 auto;
+  color: #dbeafe;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+@media (max-width: 575.98px) {
+  .app-settings-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .app-settings-navigation {
+    padding: 0.5rem 0.5rem 0;
+    flex-direction: row;
+    border-right: 1px solid rgba(255, 255, 255, 0.1);
+    border-bottom: 0;
+    border-radius: 0.8rem 0.8rem 0 0;
+  }
+
+  .app-settings-navigation-button {
+    min-height: auto;
+    text-align: center;
+    border-radius: 0.7rem 0.7rem 0 0 !important;
+  }
+
+  .app-settings-section {
+    border-top: 0.3rem solid #0d6efd;
+    border-left: 1px solid rgba(100, 175, 255, 0.32);
+    border-radius: 0 0 0.8rem 0.8rem;
+  }
+}
+
 .game-card {
   overflow: hidden;
   color: #f8f9fa;

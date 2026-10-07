@@ -94,6 +94,8 @@ Checked implementation items do not imply that every multiplayer interaction has
 - [x] Keep slaps available during active play even when no pattern matches; disable them only when no face-up cards are present, the game is paused or finished, or an action animation is in progress.
 - [x] Restore active players from a complete reconnect snapshot.
 - [x] Reuse the limited public game-state projection for spectators so they receive the visible pile, public player state, timers, and live animations without hidden decks.
+- [x] Use game-specific background music and synchronize card, slap, pile-win, and game-win sounds with their corresponding presentation animations.
+- [x] Expose persistent, independently adjustable music, player-join, and gameplay volume controls through the personal GameHub Settings Audio tab (0% disables a category), and wait for browser-approved user interaction before starting music.
 
 ### Table presentation
 

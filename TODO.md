@@ -23,6 +23,7 @@
 - [x] Keep game selection and final game-starting permission restricted to the host.
 - [x] Replace the temporary Egyptian War CSS animation with an optimized, muted, looping MP4 and a static reduced-motion poster.
 - [ ] Consider optimized animated WebP or short muted video previews when future games need more detail than a CSS preview can provide.
+- [ ] Consider explicit game-card audio-preview buttons later; avoid automatic hover sounds that can trigger accidentally and do not translate well to touch controls.
 - [ ] Revisit optional non-host voting after the picker and additional games have been tested; voting is not part of the initial picker.
 
 ## Architecture requirements

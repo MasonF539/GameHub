@@ -11,6 +11,8 @@ function createClient(reducedMotion = false) {
   );
   const dom = new JSDOM(html, { url: "http://localhost" });
   const handlers = new Map();
+  const playedEffects = [];
+  const audioScenes = [];
 
   global.window = dom.window;
   global.document = dom.window.document;
@@ -20,6 +22,14 @@ function createClient(reducedMotion = false) {
     global.CSS.escape = (value) => String(value);
   }
   window.matchMedia = () => ({ matches: reducedMotion });
+  window.GameHubAudio = {
+    playEffect(effectName) {
+      playedEffects.push(effectName);
+    },
+    setScene(sceneName) {
+      audioScenes.push(sceneName);
+    }
+  };
   global.bootstrap = {
     Toast: { getOrCreateInstance: () => ({ show() {} }) },
     Modal: {
@@ -64,7 +74,7 @@ function createClient(reducedMotion = false) {
     dom.window.close();
   };
 
-  return { client, close, addSeat };
+  return { client, close, addSeat, playedEffects, audioScenes };
 }
 
 function animation(overrides = {}) {
@@ -83,8 +93,8 @@ function animation(overrides = {}) {
   };
 }
 
-test("orders slap hands and delays pile transfer until every hand lands", async () => {
-  const { client, close, addSeat } = createClient();
+test("orders slap hands, sounds, and pile transfer after every hand lands", async () => {
+  const { client, close, addSeat, playedEffects } = createClient();
   const winnerSeat = addSeat("winner", 20, 170);
   addSeat("later", 520, 170);
   const message = document.querySelector("#egyptian-war-message");
@@ -105,10 +115,12 @@ test("orders slap hands and delays pile transfer until every hand lands", async 
   assert.equal(document.querySelectorAll(".is-transferring").length, 0);
   assert.equal(winnerSeat.classList.contains("is-pile-winner"), false);
   assert.equal(message.textContent, "Waiting for slaps.");
+  assert.deepEqual(playedEffects, []);
 
   await new Promise((resolve) => setTimeout(resolve, 550));
   assert.equal(winnerSeat.classList.contains("is-pile-winner"), false);
   assert.equal(message.textContent, "Waiting for slaps.");
+  assert.deepEqual(playedEffects, ["slap"]);
 
   await new Promise((resolve) => setTimeout(resolve, 80));
   assert.equal(winnerSeat.classList.contains("is-pile-winner"), true);
@@ -116,6 +128,7 @@ test("orders slap hands and delays pile transfer until every hand lands", async 
     message.textContent,
     "Winner slapped first and won the pile."
   );
+  assert.deepEqual(playedEffects, ["slap", "slap", "pile-win"]);
   assert.equal(document.querySelectorAll(".is-transferring").length, 0);
 
   await new Promise((resolve) => setTimeout(resolve, 240));
@@ -158,8 +171,8 @@ test("removes slap and transfer delays for reduced motion", () => {
   close();
 });
 
-test("moves a hand with a played card from the player seat to the pile", () => {
-  const { client, close, addSeat } = createClient();
+test("moves and sounds a played card from the player seat to the pile", async () => {
+  const { client, close, addSeat, playedEffects } = createClient();
   addSeat("player", 20, 170);
   const dealtCard = document.createElement("div");
   dealtCard.className = "playing-card is-dealing";
@@ -189,11 +202,14 @@ test("moves a hand with a played card from the player seat to the pile", () => {
     hand.style.getPropertyValue("--play-hand-rotation"),
     "90deg"
   );
+  assert.deepEqual(playedEffects, []);
+  await new Promise((resolve) => setTimeout(resolve, 440));
+  assert.deepEqual(playedEffects, ["card-play"]);
   close();
 });
 
-test("shows the winner avatar and collected-card total in the victory banner", () => {
-  const { client, close, addSeat } = createClient(true);
+test("shows and sounds the game winner distinctly", async () => {
+  const { client, close, addSeat, playedEffects } = createClient(true);
   addSeat("winner", 270, 20);
 
   client.animateEgyptianWarOutcome(animation({
@@ -222,5 +238,7 @@ test("shows the winner avatar and collected-card total in the victory banner", (
     victory.querySelector(".egyptian-war-victory-champion").textContent,
     /54 cards/
   );
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.deepEqual(playedEffects, ["slap", "game-win"]);
   close();
 });

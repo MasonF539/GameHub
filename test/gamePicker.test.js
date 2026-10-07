@@ -12,6 +12,8 @@ function createClient({ prefersReducedMotion = false } = {}) {
   const dom = new JSDOM(html, { url: "http://localhost" });
   const handlers = new Map();
   const emitted = [];
+  const playedEffects = [];
+  const audioScenes = [];
   let modalHideCount = 0;
 
   global.window = dom.window;
@@ -22,6 +24,14 @@ function createClient({ prefersReducedMotion = false } = {}) {
     global.CSS.escape = (value) => String(value);
   }
   window.matchMedia = () => ({ matches: prefersReducedMotion });
+  window.GameHubAudio = {
+    playEffect(effectName) {
+      playedEffects.push(effectName);
+    },
+    setScene(sceneName) {
+      audioScenes.push(sceneName);
+    }
+  };
   global.bootstrap = {
     Toast: { getOrCreateInstance: () => ({ show() {} }) },
     Modal: {
@@ -65,6 +75,8 @@ function createClient({ prefersReducedMotion = false } = {}) {
     close,
     emitted,
     handlers,
+    playedEffects,
+    audioScenes,
     getModalHideCount: () => modalHideCount
   };
 }
@@ -119,6 +131,41 @@ test("uses the static picker poster when reduced motion is preferred", () => {
   assert.equal(preview.autoplay, false);
   assert.equal(preview.loop, false);
   assert.equal(preview.preload, "none");
+  close();
+});
+
+test("sounds only subsequent player joins, not spectators", () => {
+  const { close, handlers, playedEffects } = createClient();
+  const host = {
+    id: "host",
+    name: "Host",
+    avatar: "🐱",
+    isHost: true,
+    isConnected: true
+  };
+
+  handlers.get("player-list")([host]);
+  assert.deepEqual(playedEffects, []);
+
+  handlers.get("spectator-list")([{
+    id: "spectator",
+    name: "Viewer",
+    avatar: "👻",
+    isConnected: true
+  }]);
+  assert.deepEqual(playedEffects, []);
+
+  handlers.get("player-list")([
+    host,
+    {
+      id: "guest",
+      name: "Guest",
+      avatar: "🐶",
+      isHost: false,
+      isConnected: true
+    }
+  ]);
+  assert.deepEqual(playedEffects, ["player-join"]);
   close();
 });
 

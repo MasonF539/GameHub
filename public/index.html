@@ -10,6 +10,13 @@
 </head>
 
 <body>
+  <button id="app-settings-button" class="app-settings-button btn btn-outline-light btn-sm" type="button"
+    data-bs-toggle="modal" data-bs-target="#app-settings-modal" aria-label="Open GameHub settings"
+    title="GameHub settings">
+    <span class="app-settings-icon" aria-hidden="true">&#9881;</span>
+    <span class="app-settings-label">Settings</span>
+  </button>
+
   <main class="container py-5">
     <header class="text-center mb-5">
       <h1 class="display-3 fw-bold">GameHub</h1>
@@ -315,6 +322,90 @@
       </div>
     </section>
 
+    <div id="app-settings-modal" class="modal fade" tabindex="-1" aria-labelledby="app-settings-modal-title"
+      aria-describedby="app-settings-modal-description" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-lg">
+        <div class="modal-content app-settings-modal-content">
+          <div class="modal-header">
+            <div>
+              <h2 id="app-settings-modal-title" class="modal-title fs-4">GameHub Settings</h2>
+              <p id="app-settings-modal-description" class="mb-0 text-body-secondary">
+                Personal settings apply only to this browser.
+              </p>
+            </div>
+
+            <button class="btn-close" type="button" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+
+          <div class="modal-body app-settings-layout">
+            <div class="app-settings-navigation nav nav-pills" role="tablist" aria-label="Settings categories">
+              <button id="app-settings-audio-tab" class="app-settings-navigation-button nav-link active" type="button"
+                role="tab" aria-selected="true" aria-controls="app-settings-audio-panel" data-bs-toggle="pill"
+                data-bs-target="#app-settings-audio-panel">
+                Audio
+              </button>
+            </div>
+
+            <section id="app-settings-audio-panel" class="app-settings-section tab-pane fade show active" role="tabpanel"
+              aria-labelledby="app-settings-audio-tab" tabindex="0">
+              <div class="app-settings-section-heading">
+                <div>
+                  <h3 id="audio-settings-title" class="h5 mb-1">Audio</h3>
+                  <p class="mb-0 text-body-secondary">
+                    Choose which sounds play and adjust each category independently.
+                  </p>
+                </div>
+              </div>
+
+              <div class="audio-settings-list">
+                <div class="audio-setting" data-audio-category="music">
+                  <div class="audio-setting-header">
+                    <div>
+                      <label class="audio-setting-title" for="audio-music-volume">Music</label>
+                      <p class="audio-setting-description mb-0">Menu, lobby, and game background music.</p>
+                    </div>
+                  </div>
+                  <div class="audio-volume-row">
+                    <input id="audio-music-volume" class="form-range" type="range" min="0" max="100" step="1"
+                      value="100" aria-label="Music volume">
+                    <output id="audio-music-volume-value" for="audio-music-volume">100%</output>
+                  </div>
+                </div>
+
+                <div class="audio-setting" data-audio-category="join">
+                  <div class="audio-setting-header">
+                    <div>
+                      <label class="audio-setting-title" for="audio-join-volume">Player joins</label>
+                      <p class="audio-setting-description mb-0">The notification when a player joins your lobby.</p>
+                    </div>
+                  </div>
+                  <div class="audio-volume-row">
+                    <input id="audio-join-volume" class="form-range" type="range" min="0" max="100" step="1"
+                      value="100" aria-label="Player join sound volume">
+                    <output id="audio-join-volume-value" for="audio-join-volume">100%</output>
+                  </div>
+                </div>
+
+                <div class="audio-setting" data-audio-category="game">
+                  <div class="audio-setting-header">
+                    <div>
+                      <label class="audio-setting-title" for="audio-game-volume">Game sounds</label>
+                      <p class="audio-setting-description mb-0">Cards, slaps, pile wins, and game victories.</p>
+                    </div>
+                  </div>
+                  <div class="audio-volume-row">
+                    <input id="audio-game-volume" class="form-range" type="range" min="0" max="100" step="1"
+                      value="100" aria-label="Game sound volume">
+                    <output id="audio-game-volume-value" for="audio-game-volume">100%</output>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div id="game-picker-modal" class="modal fade" tabindex="-1" aria-labelledby="game-picker-modal-title"
       aria-describedby="game-picker-help" aria-hidden="true">
       <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-xl">
@@ -426,6 +517,7 @@
 
   <script src="/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
   <script src="/socket.io/socket.io.js"></script>
+  <script src="/audio.js"></script>
   <script src="/client.js"></script>
 </body>
 

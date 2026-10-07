@@ -30,6 +30,7 @@ The server runs locally in Docker and can optionally use a temporary Cloudflare 
 - Late-game joining as a read-only spectator, with live public state, spectator reconnect support, in-game chat, and promotion into the lobby after a game ends
 - Display-only network ping indicator that does not influence gameplay arbitration
 - Viewport-fitted Egyptian War interface with a casino-style table, responsive player seats and controls, and a tabbed chat/spectator overlay
+- A tabbed personal GameHub Settings panel with persistent, independent music, player-join, and gameplay volume controls; setting a category to 0% disables it
 
 Egyptian War is the first playable game. Its hidden decks, turns, challenges, slap validation, server-receipt-time arbitration, penalties, pile awards, timers, and win conditions are controlled by the server.
 
@@ -120,6 +121,12 @@ GameHub/
 ├── docs/
 │   └── egyptian-war-design.md
 ├── public/
+│   ├── assets/
+│   │   ├── audio/
+│   │   │   ├── effects/
+│   │   │   └── music/
+│   │   └── game-previews/
+│   ├── audio.js
 │   ├── client.js
 │   ├── index.html
 │   └── style.css
@@ -134,7 +141,9 @@ GameHub/
 │   ├── server.integration.test.ts
 │   └── server.ts
 ├── test/
-│   └── clientAnimation.test.js
+│   ├── audio.test.js
+│   ├── clientAnimation.test.js
+│   └── gamePicker.test.js
 ├── .dockerignore
 ├── .gitignore
 ├── compose.yaml

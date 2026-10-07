@@ -11,6 +11,11 @@ const gameHubToastMessage =
 const entryView = document.querySelector("#entry-view");
 const lobbyView = document.querySelector("#lobby-view");
 const gameplayView = document.querySelector("#gameplay-view");
+const gameHubAudio = window.GameHubAudio ?? {
+  playEffect() {},
+  setScene() {}
+};
+gameHubAudio.setScene("menu");
 const networkPing = document.querySelector("#network-ping");
 const egyptianWarTurn = document.querySelector("#egyptian-war-turn");
 const egyptianWarTurnTimer =
@@ -149,6 +154,7 @@ let isCurrentUserSpectator = false;
 let selectedGameId = null;
 let currentGameSettings = {};
 let currentPlayers = [];
+let hasReceivedPlayerList = false;
 let isRoomRequestPending = false;
 let isGameSelectionPending = false;
 let previousEgyptianWarState = null;
@@ -158,6 +164,7 @@ let lastEgyptianWarAnimationId = 0;
 let egyptianWarAnimationTimeout = null;
 let egyptianWarTransferTimeout = null;
 let egyptianWarWinnerRevealTimeout = null;
+let egyptianWarSoundTimeouts = [];
 let revealedEgyptianWarWinnerAnimationId = null;
 let egyptianWarTimerDurationMs = 15000;
 let egyptianWarTimerRemainingMs = null;
@@ -230,6 +237,29 @@ function setEgyptianWarTimerHidden(isHidden) {
   );
 }
 
+function clearEgyptianWarSoundTimeouts() {
+  for (const timeout of egyptianWarSoundTimeouts) {
+    clearTimeout(timeout);
+  }
+
+  egyptianWarSoundTimeouts = [];
+}
+
+function queueEgyptianWarSound(effectName, delayMs = 0) {
+  if (delayMs <= 0) {
+    gameHubAudio.playEffect(effectName);
+    return;
+  }
+
+  const timeout = setTimeout(() => {
+    gameHubAudio.playEffect(effectName);
+    egyptianWarSoundTimeouts = egyptianWarSoundTimeouts.filter(
+      (candidate) => candidate !== timeout
+    );
+  }, delayMs);
+  egyptianWarSoundTimeouts.push(timeout);
+}
+
 function renderEgyptianWarTurnTimer() {
   if (egyptianWarTurnTimer.classList.contains("is-hidden")) {
     return;
@@ -257,6 +287,7 @@ function renderEgyptianWarTurnTimer() {
 }
 
 function showEgyptianWarGame(game) {
+  gameHubAudio.setScene("egyptian-war");
   lobbyView.classList.add("d-none");
   gameplayView.classList.remove("d-none");
   previousEgyptianWarState = null;
@@ -267,6 +298,7 @@ function showEgyptianWarGame(game) {
   clearTimeout(egyptianWarAnimationTimeout);
   clearTimeout(egyptianWarTransferTimeout);
   clearTimeout(egyptianWarWinnerRevealTimeout);
+  clearEgyptianWarSoundTimeouts();
   egyptianWarAnimationLayer.replaceChildren();
   egyptianWarVictory.hidden = true;
   setEgyptianWarTimerHidden(true);
@@ -464,6 +496,7 @@ function updateRoomLockDisplay() {
 }
 
 function showLobby(roomCode, isHost) {
+  gameHubAudio.setScene("menu");
   entryView.classList.add("d-none");
   lobbyView.classList.remove("d-none");
 
@@ -491,6 +524,7 @@ function showLobby(roomCode, isHost) {
 }
 
 function showEntry() {
+  gameHubAudio.setScene("menu");
   lobbyView.classList.add("d-none");
   entryView.classList.remove("d-none");
 }
@@ -503,6 +537,7 @@ function resetRoomState() {
   selectedGameId = null;
   currentGameSettings = {};
   currentPlayers = [];
+  hasReceivedPlayerList = false;
   isCurrentUserSpectator = false;
   isRoomRequestPending = false;
   isGameSelectionPending = false;
@@ -514,6 +549,7 @@ function resetRoomState() {
   clearTimeout(egyptianWarAnimationTimeout);
   clearTimeout(egyptianWarTransferTimeout);
   clearTimeout(egyptianWarWinnerRevealTimeout);
+  clearEgyptianWarSoundTimeouts();
   egyptianWarAnimationLayer.replaceChildren();
   gameplayView.classList.add("d-none");
 
@@ -1044,6 +1080,7 @@ function animateEgyptianWarOutcome(animation) {
   const prefersReducedMotion = window.matchMedia(
     "(prefers-reduced-motion: reduce)"
   ).matches;
+  clearEgyptianWarSoundTimeouts();
   egyptianWarAnimationLayer.replaceChildren();
   const arena = document.querySelector("#egyptian-war-arena");
   const center = getEgyptianWarCenter(
@@ -1138,6 +1175,13 @@ function animateEgyptianWarOutcome(animation) {
     egyptianWarAnimationLayer.appendChild(hand);
   }
 
+  if (animation.playedCard && animation.action !== "slap") {
+    queueEgyptianWarSound(
+      "card-play",
+      prefersReducedMotion ? 0 : 420
+    );
+  }
+
   const slapAttempts =
     Array.isArray(animation.slapAttempts) &&
       animation.slapAttempts.length > 0
@@ -1208,6 +1252,11 @@ function animateEgyptianWarOutcome(animation) {
           : 0;
 
       hand.style.animationDelay = `${delayMs}ms`;
+
+      queueEgyptianWarSound(
+        "slap",
+        prefersReducedMotion ? 0 : delayMs + 520
+      );
 
       hand.style.setProperty(
         "--hand-x",
@@ -1324,6 +1373,12 @@ function animateEgyptianWarOutcome(animation) {
     ) {
       egyptianWarMessage.textContent = animation.activityMessage;
     }
+
+    if (animation.action === "slap") {
+      gameHubAudio.playEffect(
+        animation.isFinalWin ? "game-win" : "pile-win"
+      );
+    }
   };
 
   if (winnerSeat && animation.action === "slap") {
@@ -1333,6 +1388,10 @@ function animateEgyptianWarOutcome(animation) {
     );
   } else if (winnerSeat) {
     revealPileWinner();
+    queueEgyptianWarSound(
+      animation.isFinalWin ? "game-win" : "pile-win",
+      animation.playedCard && !prefersReducedMotion ? 620 : 0
+    );
   }
 
   if (animation.isFinalWin) {
@@ -1388,6 +1447,7 @@ function animateEgyptianWarOutcome(animation) {
     egyptianWarAnimationLayer.replaceChildren();
     clearTimeout(egyptianWarTransferTimeout);
     clearTimeout(egyptianWarWinnerRevealTimeout);
+    clearEgyptianWarSoundTimeouts();
     egyptianWarPlayers
       .querySelectorAll(".is-pile-winner")
       .forEach((seat) => seat.classList.remove("is-pile-winner"));
@@ -1788,6 +1848,7 @@ socket.on("disconnect", () => {
 });
 
 socket.on("room-resumed", (room) => {
+  hasReceivedPlayerList = false;
   selectedGameId = room.selectedGameId;
   currentGameSettings = room.gameSettings ?? {};
   isRoomLocked = room.isLocked;
@@ -1859,7 +1920,28 @@ socket.on("available-games", (games) => {
 });
 
 socket.on("player-list", (players) => {
+  const previousPlayerIds = new Set(
+    currentPlayers.map((player) => player.id)
+  );
+  const previousPlayerSignatures = new Set(
+    currentPlayers.map((player) => `${player.name}\u0000${player.avatar}`)
+  );
+  const hasNewLobbyPlayer =
+    hasReceivedPlayerList &&
+    players.some((player) =>
+      !previousPlayerIds.has(player.id) &&
+      !previousPlayerSignatures.has(
+        `${player.name}\u0000${player.avatar}`
+      )
+    );
+
   currentPlayers = players;
+  hasReceivedPlayerList = true;
+
+  if (hasNewLobbyPlayer) {
+    gameHubAudio.playEffect("player-join");
+  }
+
   playerList.replaceChildren();
 
   for (const player of players) {
@@ -2027,6 +2109,7 @@ socket.on("game-ended", ({ message }) => {
   clearTimeout(egyptianWarAnimationTimeout);
   clearTimeout(egyptianWarTransferTimeout);
   clearTimeout(egyptianWarWinnerRevealTimeout);
+  clearEgyptianWarSoundTimeouts();
   activeEgyptianWarAnimation = null;
   revealedEgyptianWarWinnerAnimationId = null;
   egyptianWarAnimationLayer.replaceChildren();
@@ -2038,6 +2121,7 @@ socket.on("game-ended", ({ message }) => {
   egyptianWarChat.hidden = true;
   egyptianWarHostControls.classList.add("d-none");
   lobbyView.classList.remove("d-none");
+  gameHubAudio.setScene("menu");
   isCurrentUserSpectator = false;
   updateStartGameAvailability();
   gameStatus.textContent = message;
@@ -2289,6 +2373,7 @@ createRoomButton.addEventListener("click", () => {
   const selectedAvatar = avatars[selectedAvatarIndex];
 
   setRoomRequestPending(true);
+  hasReceivedPlayerList = false;
 
   socket.emit(
     "create-room",
@@ -2342,6 +2427,7 @@ joinRoomButton.addEventListener("click", () => {
   const selectedAvatar = avatars[selectedAvatarIndex];
 
   setRoomRequestPending(true);
+  hasReceivedPlayerList = false;
 
   socket.emit(
     "join-room",
