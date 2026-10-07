@@ -61,10 +61,20 @@ export const egyptianWar: GameDefinition = {
 
   settings: [
     {
+      type: "number",
+      key: "deckCount",
+      label: "Number of Decks",
+      description:
+        "Choose whether the game uses one, two, or three complete decks of cards.",
+      defaultValue: 1,
+      options: [1, 2, 3],
+      unit: "deck"
+    },
+    {
       key: "includeJokers",
       label: "Include Jokers",
       description:
-        "Add two Jokers to the deck. Playing a Joker starts a five-attempt challenge and makes the pile slappable.",
+        "Add two Jokers per deck. Playing a Joker starts a five-attempt challenge and makes the pile slappable.",
       defaultValue: true
     },
     {

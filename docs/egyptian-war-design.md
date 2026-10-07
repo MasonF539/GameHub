@@ -17,6 +17,7 @@ Checked implementation items do not imply that every multiplayer interaction has
 
 - [x] Support 2–6 players in the game definition.
 - [x] Define standard cards and optional Jokers.
+- [x] Configure one, two, or three complete decks, defaulting to one; include two Jokers per deck when Jokers are enabled.
 - [x] Configure Jokers, doubles, sandwiches, four in a row, top-bottom, tens, and marriage as lobby settings.
 - [x] Apply the saved settings to server-side slap validation.
 - [x] Configure the false-slap penalty to 1, 2, or 3 cards, defaulting to 2.

@@ -21,7 +21,8 @@
 - [x] Clearly highlight the currently selected game.
 - [x] Allow every player to browse the available games.
 - [x] Keep game selection and final game-starting permission restricted to the host.
-- [ ] Consider optimized animated WebP or short muted video previews if a future game needs more detail than a CSS preview can provide.
+- [x] Replace the temporary Egyptian War CSS animation with an optimized, muted, looping MP4 and a static reduced-motion poster.
+- [ ] Consider optimized animated WebP or short muted video previews when future games need more detail than a CSS preview can provide.
 - [ ] Revisit optional non-host voting after the picker and additional games have been tested; voting is not part of the initial picker.
 
 ## Architecture requirements

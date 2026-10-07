@@ -157,6 +157,8 @@ let activeEgyptianWarAnimation = null;
 let lastEgyptianWarAnimationId = 0;
 let egyptianWarAnimationTimeout = null;
 let egyptianWarTransferTimeout = null;
+let egyptianWarWinnerRevealTimeout = null;
+let revealedEgyptianWarWinnerAnimationId = null;
 let egyptianWarTimerDurationMs = 15000;
 let egyptianWarTimerRemainingMs = null;
 let egyptianWarTimerDeadline = null;
@@ -261,8 +263,10 @@ function showEgyptianWarGame(game) {
   visibleEgyptianWarCards = [];
   activeEgyptianWarAnimation = null;
   lastEgyptianWarAnimationId = 0;
+  revealedEgyptianWarWinnerAnimationId = null;
   clearTimeout(egyptianWarAnimationTimeout);
   clearTimeout(egyptianWarTransferTimeout);
+  clearTimeout(egyptianWarWinnerRevealTimeout);
   egyptianWarAnimationLayer.replaceChildren();
   egyptianWarVictory.hidden = true;
   setEgyptianWarTimerHidden(true);
@@ -506,8 +510,10 @@ function resetRoomState() {
   visibleEgyptianWarCards = [];
   activeEgyptianWarAnimation = null;
   lastEgyptianWarAnimationId = 0;
+  revealedEgyptianWarWinnerAnimationId = null;
   clearTimeout(egyptianWarAnimationTimeout);
   clearTimeout(egyptianWarTransferTimeout);
+  clearTimeout(egyptianWarWinnerRevealTimeout);
   egyptianWarAnimationLayer.replaceChildren();
   gameplayView.classList.add("d-none");
 
@@ -562,123 +568,26 @@ function createGamePreview(game) {
 
   if (game.id === "egyptian-war") {
     preview.classList.add("is-egyptian-war");
-
-    const createElement = (className, text = "") => {
-      const element = document.createElement("span");
-      element.className = className;
-      element.textContent = text;
-      return element;
-    };
-
-    const createScene = (className, status, pileCount, card) => {
-      const scene = createElement(`game-picker-scene ${className}`);
-      const table = createElement("game-picker-preview-table");
-      const information = createElement("game-picker-preview-info");
-      const turn = createElement("game-picker-preview-turn", status);
-      const count = createElement(
-        "game-picker-preview-pile-count",
-        `Central pile: ${pileCount}`
-      );
-      const pileCard = createElement(
-        "game-picker-preview-playing-card",
-        card
-      );
-      information.append(turn, count, pileCard);
-      table.appendChild(information);
-
-      for (const [position, avatar, cards] of [
-        ["top", "🐱", "18 cards"],
-        ["left", "🦊", "16 cards"],
-        ["bottom", "🐸", "20 cards"]
-      ]) {
-        const player = createElement(
-          `game-picker-preview-player is-${position}`
-        );
-        player.append(
-          createElement("game-picker-preview-avatar", avatar),
-          createElement("game-picker-preview-card-count", cards)
-        );
-        table.appendChild(player);
-      }
-
-      scene.appendChild(table);
-      return scene;
-    };
-
-    const playScene = createScene(
-      "is-card-play",
-      "Frog's turn",
-      "5 cards",
-      "Q♥"
-    );
-    playScene.querySelector(".game-picker-preview-table").append(
-      createElement("game-picker-preview-moving-card", "7♣"),
-      createElement("game-picker-preview-play-hand", "🖐️")
-    );
-
-    const slapScene = createScene(
-      "is-slap",
-      "Valid slap!",
-      "8 cards",
-      "7♠"
-    );
-    const slapTable = slapScene.querySelector(
-      ".game-picker-preview-table"
-    );
-    for (const position of ["left", "top", "bottom"]) {
-      slapTable.appendChild(
-        createElement(
-          `game-picker-preview-slap-hand is-${position}`,
-          "🖐️"
-        )
-      );
-    }
-
-    const victoryScene = createScene(
-      "is-victory",
-      "",
-      "0 cards",
-      ""
-    );
-    victoryScene.querySelector(".game-picker-preview-info").remove();
-    for (const player of victoryScene.querySelectorAll(
-      ".game-picker-preview-player"
-    )) {
-      const isWinner = player.classList.contains("is-bottom");
-      player.querySelector(".game-picker-preview-card-count")
-        .textContent = isWinner ? "54 cards" : "0 cards";
-      player.classList.toggle("is-winner", isWinner);
-    }
-
-    const victory = createElement("game-picker-preview-victory");
-    const winnerCollection = createElement(
-      "game-picker-preview-winner-collection"
-    );
-    const winnerDeck = createElement("game-picker-preview-winner-deck");
-    for (let index = 0; index < 4; index += 1) {
-      winnerDeck.appendChild(
-        createElement("game-picker-preview-card-back")
-      );
-    }
-    winnerCollection.append(
-      createElement("game-picker-preview-winner-avatar", "🐸"),
-      winnerDeck,
-      createElement("game-picker-preview-winner-total", "54")
-    );
-    victory.append(
-      winnerCollection,
-      createElement(
-        "game-picker-preview-victory-heading",
-        "All cards collected"
-      ),
-      createElement(
-        "game-picker-preview-victory-winner",
-        "Frog wins!"
-      )
-    );
-    victoryScene.appendChild(victory);
-
-    preview.append(playScene, slapScene, victoryScene);
+    const previewVideo = document.createElement("video");
+    const prefersReducedPreviewMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)"
+    ).matches;
+    previewVideo.className = "game-picker-preview-video";
+    previewVideo.src =
+      "/assets/game-previews/egyptian-war.mp4";
+    previewVideo.poster =
+      "/assets/game-previews/egyptian-war-poster.webp";
+    previewVideo.muted = true;
+    previewVideo.defaultMuted = true;
+    previewVideo.loop = !prefersReducedPreviewMotion;
+    previewVideo.autoplay = !prefersReducedPreviewMotion;
+    previewVideo.playsInline = true;
+    previewVideo.preload = prefersReducedPreviewMotion
+      ? "none"
+      : "metadata";
+    previewVideo.disablePictureInPicture = true;
+    previewVideo.tabIndex = -1;
+    preview.appendChild(previewVideo);
   } else {
     preview.textContent = "Preview coming soon";
   }
@@ -1397,8 +1306,33 @@ function animateEgyptianWarOutcome(animation) {
     showTransfer();
   }
 
-  if (winnerSeat) {
-    winnerSeat.classList.add("is-pile-winner");
+  clearTimeout(egyptianWarWinnerRevealTimeout);
+
+  const revealPileWinner = () => {
+    revealedEgyptianWarWinnerAnimationId = animation.id;
+    const currentWinnerSeat = animation.winnerId
+      ? egyptianWarPlayers.querySelector(
+        `[data-player-id="${CSS.escape(animation.winnerId)}"]`
+      )
+      : null;
+    currentWinnerSeat?.classList.add("is-pile-winner");
+
+    if (
+      animation.action === "slap" &&
+      !animation.isFinalWin &&
+      typeof animation.activityMessage === "string"
+    ) {
+      egyptianWarMessage.textContent = animation.activityMessage;
+    }
+  };
+
+  if (winnerSeat && animation.action === "slap") {
+    egyptianWarWinnerRevealTimeout = setTimeout(
+      revealPileWinner,
+      lastHandLandingDelay
+    );
+  } else if (winnerSeat) {
+    revealPileWinner();
   }
 
   if (animation.isFinalWin) {
@@ -1453,6 +1387,7 @@ function animateEgyptianWarOutcome(animation) {
   egyptianWarAnimationTimeout = setTimeout(() => {
     egyptianWarAnimationLayer.replaceChildren();
     clearTimeout(egyptianWarTransferTimeout);
+    clearTimeout(egyptianWarWinnerRevealTimeout);
     egyptianWarPlayers
       .querySelectorAll(".is-pile-winner")
       .forEach((seat) => seat.classList.remove("is-pile-winner"));
@@ -1478,6 +1413,10 @@ function renderEgyptianWarState(state) {
   const isShowingCollectedPile =
     state.isAnimating &&
     animation?.transferCardCount > 0;
+  const isWaitingForSlapWinnerReveal =
+    animation?.action === "slap" &&
+    animation.winnerId !== null &&
+    revealedEgyptianWarWinnerAnimationId !== animation.id;
 
   if (previousState === null) {
     visibleEgyptianWarCards = state.recentCards.map((card) => ({
@@ -1580,7 +1519,8 @@ function renderEgyptianWarState(state) {
     seat.classList.toggle("is-disconnected", !player.isConnected);
     seat.classList.toggle(
       "is-pile-winner",
-      animation?.winnerId === player.id
+      animation?.winnerId === player.id &&
+      !isWaitingForSlapWinnerReveal
     );
     seat.style.left = `${50 + Math.cos(angle) * 40}%`;
     seat.style.top = `${50 + Math.sin(angle) * 37}%`;
@@ -1681,8 +1621,11 @@ function renderEgyptianWarState(state) {
   });
 
   egyptianWarTopCard.hidden = visibleEgyptianWarCards.length > 0;
-  egyptianWarMessage.textContent =
-    state.status === "finished" ? "" : state.activityMessage;
+  egyptianWarMessage.textContent = state.status === "finished"
+    ? ""
+    : isWaitingForSlapWinnerReveal
+      ? previousState?.activityMessage ?? ""
+      : state.activityMessage;
   egyptianWarPlayCardButton.disabled =
     isCurrentUserSpectator ||
     state.status !== "playing" ||
@@ -1711,6 +1654,7 @@ function renderEgyptianWarState(state) {
     lastEgyptianWarAnimationId = animation.id;
     animateEgyptianWarOutcome({
       ...animation,
+      activityMessage: state.activityMessage,
       players: state.players
     });
   }
@@ -2082,7 +2026,9 @@ socket.on("egyptian-war-state", (state) => {
 socket.on("game-ended", ({ message }) => {
   clearTimeout(egyptianWarAnimationTimeout);
   clearTimeout(egyptianWarTransferTimeout);
+  clearTimeout(egyptianWarWinnerRevealTimeout);
   activeEgyptianWarAnimation = null;
+  revealedEgyptianWarWinnerAnimationId = null;
   egyptianWarAnimationLayer.replaceChildren();
   egyptianWarVictory.hidden = true;
   setEgyptianWarTimerHidden(true);

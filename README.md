@@ -24,7 +24,8 @@ The server runs locally in Docker and can optionally use a temporary Cloudflare 
 - Host-controlled lobby locking and unlocking
 - Host-controlled player removal
 - Synchronized game selection and settings
-- Egyptian War rules and configurable slap settings
+- Bootstrap game picker with responsive cards and an optimized Egyptian War gameplay preview
+- Egyptian War rules with configurable deck count, slap settings, and turn timer
 - Playable, server-authoritative Egyptian War with challenges, slap arbitration, turn timers, pausing, and reconnect recovery
 - Late-game joining as a read-only spectator, with live public state, spectator reconnect support, in-game chat, and promotion into the lobby after a game ends
 - Display-only network ping indicator that does not influence gameplay arbitration

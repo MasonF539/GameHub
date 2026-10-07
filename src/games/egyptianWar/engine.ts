@@ -2,6 +2,7 @@ import { randomInt } from "node:crypto";
 import type { Card, CardRank, CardSuit } from "./definition.js";
 
 export type EgyptianWarSettings = {
+  deckCount: number;
   includeJokers: boolean;
   allowDoubles: boolean;
   allowSandwiches: boolean;
@@ -104,20 +105,41 @@ const standardRanks: Exclude<CardRank, "joker">[] = [
   "ace"
 ];
 
-export function createDeck(includeJokers: boolean): Card[] {
-  const deck: Card[] = suits.flatMap((suit) =>
-    standardRanks.map((rank) => ({
-      id: `${suit}-${rank}`,
-      suit,
-      rank
-    }))
-  );
+export function createDeck(
+  includeJokers: boolean,
+  deckCount = 1
+): Card[] {
+  if (!Number.isInteger(deckCount) || deckCount < 1 || deckCount > 3) {
+    throw new RangeError("Egyptian War requires between 1 and 3 decks.");
+  }
 
-  if (includeJokers) {
+  const deck: Card[] = [];
+
+  for (let deckIndex = 1; deckIndex <= deckCount; deckIndex += 1) {
     deck.push(
-      { id: "joker-1", suit: null, rank: "joker" },
-      { id: "joker-2", suit: null, rank: "joker" }
+      ...suits.flatMap((suit) =>
+        standardRanks.map((rank) => ({
+          id: `deck-${deckIndex}-${suit}-${rank}`,
+          suit,
+          rank
+        }))
+      )
     );
+
+    if (includeJokers) {
+      deck.push(
+        {
+          id: `deck-${deckIndex}-joker-1`,
+          suit: null,
+          rank: "joker"
+        },
+        {
+          id: `deck-${deckIndex}-joker-2`,
+          suit: null,
+          rank: "joker"
+        }
+      );
+    }
   }
 
   return deck;
@@ -173,7 +195,7 @@ export function createEgyptianWarState(
   }));
 
   const deck = shuffleDeck(
-    createDeck(settings.includeJokers),
+    createDeck(settings.includeJokers, settings.deckCount),
     randomInteger
   );
 

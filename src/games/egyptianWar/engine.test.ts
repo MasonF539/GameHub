@@ -20,6 +20,7 @@ import {
 } from "./slapArbitration.js";
 
 const settings: EgyptianWarSettings = {
+  deckCount: 1,
   includeJokers: true,
   allowDoubles: true,
   allowSandwiches: true,
@@ -81,17 +82,29 @@ function card(rank: Card["rank"], id: string = rank): Card {
 test("creates a unique standard deck with optional Jokers", () => {
   const standardDeck = createDeck(false);
   const deckWithJokers = createDeck(true);
+  const threeDecksWithJokers = createDeck(true, 3);
 
   assert.equal(standardDeck.length, 52);
   assert.equal(deckWithJokers.length, 54);
+  assert.equal(threeDecksWithJokers.length, 162);
   assert.equal(
     new Set(deckWithJokers.map((card) => card.id)).size,
     deckWithJokers.length
   );
   assert.equal(
+    new Set(threeDecksWithJokers.map((card) => card.id)).size,
+    threeDecksWithJokers.length
+  );
+  assert.equal(
     deckWithJokers.filter((card) => card.rank === "joker").length,
     2
   );
+  assert.equal(
+    threeDecksWithJokers.filter((card) => card.rank === "joker").length,
+    6
+  );
+  assert.throws(() => createDeck(false, 0), RangeError);
+  assert.throws(() => createDeck(false, 4), RangeError);
 });
 
 test("shuffles a copy without changing the source deck", () => {
@@ -224,6 +237,19 @@ test("deals every card and randomly chooses the first player", () => {
   assert.ok(Math.max(...cardCounts) - Math.min(...cardCounts) <= 1);
   assert.equal(state.currentPlayerIndex, players.length - 1);
   assert.equal(state.pile.length, 0);
+});
+
+test("deals every card from the configured number of decks", () => {
+  const state = createEgyptianWarState(
+    players,
+    { ...settings, deckCount: 3 },
+    () => 0
+  );
+  const dealtCards = state.players.flatMap((player) => player.cards);
+
+  assert.equal(state.totalCardCount, 162);
+  assert.equal(dealtCards.length, 162);
+  assert.equal(new Set(dealtCards.map((card) => card.id)).size, 162);
 });
 
 test("public state exposes card counts but not hidden decks", () => {

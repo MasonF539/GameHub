@@ -89,6 +89,13 @@ body {
   box-shadow: 0 1.5rem 4rem rgba(0, 0, 0, 0.55);
 }
 
+#game-picker-modal .modal-dialog {
+  width: min(96vw, 90rem);
+  max-width: none;
+  margin-right: auto;
+  margin-left: auto;
+}
+
 .game-picker-modal-content .modal-header {
   border-color: rgba(255, 255, 255, 0.12);
 }
@@ -103,7 +110,7 @@ body {
 
 .game-picker-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 24rem), 1fr));
   gap: 1.25rem;
 }
 
@@ -204,444 +211,26 @@ body {
 .game-picker-preview {
   position: relative;
   display: block;
-  width: min(calc(100% - 1.5rem), 20rem);
+  width: 100%;
   aspect-ratio: 16 / 9;
-  margin: 0.75rem auto 0;
   overflow: hidden;
   color: #adb5bd;
   background: linear-gradient(145deg, #242936, #151820);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 0.7rem;
-  box-shadow: 0 0.55rem 1.1rem rgba(0, 0, 0, 0.3);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
 }
 
 .game-picker-preview.is-egyptian-war {
-  background: #1d222d;
+  background:
+    #1d222d url("/assets/game-previews/egyptian-war-poster.webp")
+    center / cover no-repeat;
 }
 
-.game-picker-scene {
-  position: absolute;
-  inset: 0;
-  display: block;
-  overflow: hidden;
-  opacity: 0;
-}
-
-.game-picker-scene.is-card-play {
-  animation: game-picker-play-scene 9s linear infinite;
-}
-
-.game-picker-scene.is-slap {
-  animation: game-picker-slap-scene 9s linear infinite;
-}
-
-.game-picker-scene.is-victory {
-  animation: game-picker-victory-scene 9s linear infinite;
-}
-
-.game-picker-preview-table {
-  position: absolute;
-  inset: 0;
+.game-picker-preview-video {
   display: block;
   width: 100%;
   height: 100%;
-  background:
-    radial-gradient(ellipse 67% 72% at 50% 51%,
-      #24794e 0 78%,
-      #8d6039 79% 83%,
-      #38251a 84% 87%,
-      transparent 88%),
-    radial-gradient(circle at 50% 50%, #343944, #181c25 72%);
-}
-
-.game-picker-preview-info {
-  position: absolute;
-  z-index: 2;
-  top: 43%;
-  left: 50%;
-  display: flex;
-  align-items: center;
-  flex-direction: column;
-  color: #fff;
-  font-size: clamp(0.42rem, 1.5vw, 0.62rem);
-  font-weight: 800;
-  line-height: 1.15;
-  text-align: center;
-  text-shadow: 0 1px 2px #000;
-  transform: translate(-50%, -50%);
-}
-
-.game-picker-preview-turn {
-  white-space: nowrap;
-}
-
-.game-picker-preview-pile-count {
-  margin-top: 0.08rem;
-  white-space: nowrap;
-}
-
-.game-picker-preview-playing-card,
-.game-picker-preview-moving-card {
-  display: grid;
-  width: clamp(1.35rem, 4.5vw, 1.85rem);
-  height: clamp(1.9rem, 6vw, 2.6rem);
-  padding: 0.12rem;
-  place-items: start;
-  color: #17191e;
-  font-family: Georgia, "Times New Roman", serif;
-  font-size: clamp(0.48rem, 1.6vw, 0.68rem);
-  font-weight: 900;
-  background: #fffdf5;
-  border: 1px solid #d6d0c3;
-  border-radius: 0.2rem;
-  box-shadow: 0 0.35rem 0.7rem rgba(0, 0, 0, 0.35);
-}
-
-.game-picker-preview-playing-card {
-  margin-top: 0.3rem;
-}
-
-.game-picker-preview-player {
-  position: absolute;
-  z-index: 3;
-  display: flex;
-  min-width: 3rem;
-  padding: 0.18rem 0.3rem;
-  align-items: center;
-  gap: 0.2rem;
-  color: #fff;
-  font-size: clamp(0.36rem, 1.25vw, 0.52rem);
-  font-weight: 700;
-  background: rgba(22, 27, 35, 0.94);
-  border: 1px solid rgba(255, 255, 255, 0.22);
-  border-radius: 0.4rem;
-  box-shadow: 0 0.25rem 0.45rem rgba(0, 0, 0, 0.35);
-}
-
-.game-picker-preview-player.is-top {
-  top: 4%;
-  left: 50%;
-  transform: translateX(-50%);
-}
-
-.game-picker-preview-player.is-left {
-  top: 48%;
-  left: 2%;
-  transform: translateY(-50%);
-}
-
-.game-picker-preview-player.is-bottom {
-  bottom: 3%;
-  left: 50%;
-  transform: translateX(-50%);
-}
-
-.game-picker-preview-avatar {
-  font-size: clamp(0.75rem, 2.4vw, 1.05rem);
-}
-
-.game-picker-preview-card-count {
-  white-space: nowrap;
-}
-
-.game-picker-preview-moving-card {
-  position: absolute;
-  z-index: 4;
-  top: 72%;
-  left: 50%;
-  animation: game-picker-card-play 9s cubic-bezier(0.2, 0.8, 0.3, 1) infinite;
-}
-
-.game-picker-preview-play-hand,
-.game-picker-preview-slap-hand {
-  position: absolute;
-  z-index: 6;
-  font-size: clamp(1.6rem, 6vw, 2.8rem);
-  filter: drop-shadow(0 0.25rem 0.2rem rgba(0, 0, 0, 0.5));
-}
-
-.game-picker-preview-play-hand {
-  bottom: -5%;
-  left: 52%;
-  animation: game-picker-card-hand 9s ease-in-out infinite;
-}
-
-.game-picker-preview-slap-hand.is-left {
-  top: 50%;
-  left: 14%;
-  animation: game-picker-left-slap 9s ease-out infinite;
-}
-
-.game-picker-preview-slap-hand.is-top {
-  top: 15%;
-  left: 50%;
-  animation: game-picker-top-slap 9s ease-out infinite;
-}
-
-.game-picker-preview-slap-hand.is-bottom {
-  top: 85%;
-  left: 50%;
-  animation: game-picker-bottom-slap 9s ease-out infinite;
-}
-
-.game-picker-preview-victory {
-  position: absolute;
-  z-index: 8;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-direction: column;
-  color: #fff;
-  text-align: center;
-  background: rgba(8, 18, 13, 0.77);
-  text-shadow: 0 2px 4px #000;
-  animation: game-picker-victory-text 9s ease-out infinite;
-}
-
-.game-picker-preview-victory-heading {
-  color: #d9e2ec;
-  font-size: clamp(0.58rem, 2vw, 0.82rem);
-  font-weight: 800;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.game-picker-preview-victory-winner {
-  color: #ffd86b;
-  font-size: clamp(1rem, 3.5vw, 1.5rem);
-  font-weight: 900;
-}
-
-.game-picker-preview-winner-collection {
-  position: relative;
-  display: flex;
-  height: 2.75rem;
-  margin-bottom: 0.15rem;
-  align-items: center;
-  justify-content: center;
-  gap: 0.15rem;
-}
-
-.game-picker-preview-winner-avatar {
-  z-index: 3;
-  font-size: clamp(1.35rem, 4.2vw, 1.85rem);
-}
-
-.game-picker-preview-winner-deck {
-  position: relative;
-  width: 2.65rem;
-  height: 2.5rem;
-}
-
-.game-picker-preview-card-back {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 1.45rem;
-  height: 2rem;
-  background:
-    repeating-linear-gradient(45deg,
-      #583b8a 0 0.16rem,
-      #7651b0 0.16rem 0.32rem);
-  border: 0.12rem solid #f5efe0;
-  border-radius: 0.18rem;
-  box-shadow: 0 0.15rem 0.25rem rgba(0, 0, 0, 0.35);
-  transform: translateX(var(--deck-x, 0)) rotate(var(--deck-rotation, 0deg));
-}
-
-.game-picker-preview-card-back:nth-child(1) {
-  --deck-x: 0;
-  --deck-rotation: -6deg;
-}
-
-.game-picker-preview-card-back:nth-child(2) {
-  --deck-x: 0.35rem;
-  --deck-rotation: -2deg;
-}
-
-.game-picker-preview-card-back:nth-child(3) {
-  --deck-x: 0.7rem;
-  --deck-rotation: 2deg;
-}
-
-.game-picker-preview-card-back:nth-child(4) {
-  --deck-x: 1.05rem;
-  --deck-rotation: 6deg;
-}
-
-.game-picker-preview-winner-total {
-  display: grid;
-  z-index: 4;
-  width: 1.45rem;
-  height: 1.45rem;
-  margin-left: -0.75rem;
-  place-items: center;
-  color: #1c1f26;
-  font-size: 0.62rem;
-  font-weight: 900;
-  background: #ffd86b;
-  border: 2px solid #fff2bd;
-  border-radius: 50%;
-  box-shadow: 0 0.2rem 0.35rem rgba(0, 0, 0, 0.4);
-}
-
-@keyframes game-picker-play-scene {
-  0%, 30% {
-    opacity: 1;
-  }
-
-  33%, 100% {
-    opacity: 0;
-  }
-}
-
-@keyframes game-picker-slap-scene {
-  0%, 31% {
-    opacity: 0;
-  }
-
-  34%, 64% {
-    opacity: 1;
-  }
-
-  67%, 100% {
-    opacity: 0;
-  }
-}
-
-@keyframes game-picker-victory-scene {
-  0%, 65% {
-    opacity: 0;
-  }
-
-  68%, 97% {
-    opacity: 1;
-  }
-
-  100% {
-    opacity: 0;
-  }
-}
-
-@keyframes game-picker-card-play {
-  0%, 3% {
-    opacity: 0;
-    transform: translate(-50%, 1.6rem) rotate(-14deg) scale(0.75);
-  }
-
-  8%, 26% {
-    opacity: 1;
-    transform: translate(-50%, -2.6rem) rotate(5deg) scale(1);
-  }
-
-  31%, 100% {
-    opacity: 0;
-    transform: translate(-50%, -2.6rem) rotate(5deg) scale(1);
-  }
-}
-
-@keyframes game-picker-card-hand {
-  0%, 3% {
-    opacity: 0;
-    transform: translate(-50%, 1.5rem) rotate(-8deg);
-  }
-
-  7%, 15% {
-    opacity: 1;
-    transform: translate(-50%, -1rem) rotate(-8deg);
-  }
-
-  21%, 100% {
-    opacity: 0;
-    transform: translate(-50%, 0) rotate(-8deg);
-  }
-}
-
-@keyframes game-picker-left-slap {
-  0%, 36% {
-    top: 50%;
-    left: 14%;
-    opacity: 0;
-    transform: translate(-50%, -50%) rotate(90deg);
-  }
-
-  43%, 59% {
-    top: 50%;
-    left: 50%;
-    opacity: 1;
-    transform: translate(-50%, -50%) rotate(90deg);
-  }
-
-  65%, 100% {
-    top: 50%;
-    left: 50%;
-    opacity: 0;
-    transform: translate(-50%, -50%) rotate(90deg);
-  }
-}
-
-@keyframes game-picker-top-slap {
-  0%, 38% {
-    top: 15%;
-    left: 50%;
-    opacity: 0;
-    transform: translate(-50%, -50%) rotate(180deg);
-  }
-
-  46%, 59% {
-    top: 50%;
-    left: 50%;
-    opacity: 1;
-    transform: translate(-50%, -50%) rotate(180deg);
-  }
-
-  65%, 100% {
-    top: 50%;
-    left: 50%;
-    opacity: 0;
-    transform: translate(-50%, -50%) rotate(180deg);
-  }
-}
-
-@keyframes game-picker-bottom-slap {
-  0%, 40% {
-    top: 85%;
-    left: 50%;
-    opacity: 0;
-    transform: translate(-50%, -50%) rotate(0deg);
-  }
-
-  49%, 59% {
-    top: 50%;
-    left: 50%;
-    opacity: 1;
-    transform: translate(-50%, -50%) rotate(0deg);
-  }
-
-  65%, 100% {
-    top: 50%;
-    left: 50%;
-    opacity: 0;
-    transform: translate(-50%, -50%) rotate(0deg);
-  }
-}
-
-@keyframes game-picker-victory-text {
-  0%, 67% {
-    opacity: 0;
-    transform: scale(0.82);
-  }
-
-  72%, 96% {
-    opacity: 1;
-    transform: scale(1);
-  }
-
-  100% {
-    opacity: 0;
-    transform: scale(1);
-  }
+  object-fit: cover;
+  pointer-events: none;
 }
 
 #gameplay-view {
@@ -2174,31 +1763,8 @@ body:has(#gameplay-view:not(.d-none)) #gameplay-view {
     animation-duration: 1ms;
   }
 
-  .game-picker-scene,
-  .game-picker-preview-moving-card,
-  .game-picker-preview-play-hand,
-  .game-picker-preview-slap-hand,
-  .game-picker-preview-victory {
-    animation: none;
-  }
-
-  .game-picker-scene.is-card-play {
-    opacity: 1;
-  }
-
-  .game-picker-scene.is-slap,
-  .game-picker-scene.is-victory {
+  .game-picker-preview-video {
     display: none;
-  }
-
-  .game-picker-preview-moving-card {
-    opacity: 1;
-    transform: translate(-50%, -2.6rem) rotate(5deg) scale(1);
-  }
-
-  .game-picker-preview-play-hand {
-    opacity: 1;
-    transform: translate(-50%, -1rem) rotate(-8deg);
   }
 
   .egyptian-war-flying-hand,

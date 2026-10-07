@@ -69,6 +69,7 @@ function createClient(reducedMotion = false) {
 
 function animation(overrides = {}) {
   return {
+    id: 1,
     action: "slap",
     actorId: "winner",
     winnerId: "winner",
@@ -77,14 +78,17 @@ function animation(overrides = {}) {
     penaltyCardCount: 0,
     playedCard: null,
     isFinalWin: false,
+    activityMessage: "Winner slapped first and won the pile.",
     ...overrides
   };
 }
 
 test("orders slap hands and delays pile transfer until every hand lands", async () => {
   const { client, close, addSeat } = createClient();
-  addSeat("winner", 20, 170);
+  const winnerSeat = addSeat("winner", 20, 170);
   addSeat("later", 520, 170);
+  const message = document.querySelector("#egyptian-war-message");
+  message.textContent = "Waiting for slaps.";
 
   client.animateEgyptianWarOutcome(animation({
     slapAttempts: [
@@ -99,8 +103,22 @@ test("orders slap hands and delays pile transfer until every hand lands", async 
   assert.deepEqual(hands.map((hand) => hand.style.zIndex), ["5", "6"]);
   assert.deepEqual(hands.map((hand) => hand.style.animationDelay), ["0ms", "80ms"]);
   assert.equal(document.querySelectorAll(".is-transferring").length, 0);
+  assert.equal(winnerSeat.classList.contains("is-pile-winner"), false);
+  assert.equal(message.textContent, "Waiting for slaps.");
 
-  await new Promise((resolve) => setTimeout(resolve, 870));
+  await new Promise((resolve) => setTimeout(resolve, 550));
+  assert.equal(winnerSeat.classList.contains("is-pile-winner"), false);
+  assert.equal(message.textContent, "Waiting for slaps.");
+
+  await new Promise((resolve) => setTimeout(resolve, 80));
+  assert.equal(winnerSeat.classList.contains("is-pile-winner"), true);
+  assert.equal(
+    message.textContent,
+    "Winner slapped first and won the pile."
+  );
+  assert.equal(document.querySelectorAll(".is-transferring").length, 0);
+
+  await new Promise((resolve) => setTimeout(resolve, 240));
   assert.equal(document.querySelectorAll(".is-transferring").length, 3);
   close();
 });

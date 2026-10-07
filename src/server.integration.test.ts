@@ -134,6 +134,7 @@ test("accepted slaps survive disconnect pause", { timeout: 45_000 }, async () =>
     assert.equal((await emitAck(host, "update-game-settings", {
       roomCode,
       settings: {
+        deckCount: 1,
         includeJokers: true,
         allowDoubles: true,
         allowSandwiches: true,

@@ -4,7 +4,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { JSDOM } = require("jsdom");
 
-function createClient() {
+function createClient({ prefersReducedMotion = false } = {}) {
   const html = fs.readFileSync(
     path.join(__dirname, "..", "public", "index.html"),
     "utf8"
@@ -21,7 +21,7 @@ function createClient() {
   if (!global.CSS.escape) {
     global.CSS.escape = (value) => String(value);
   }
-  window.matchMedia = () => ({ matches: false });
+  window.matchMedia = () => ({ matches: prefersReducedMotion });
   global.bootstrap = {
     Toast: { getOrCreateInstance: () => ({ show() {} }) },
     Modal: {
@@ -94,30 +94,31 @@ test("renders available games as preview cards for every player", () => {
   assert.equal(pickerButton.disabled, false);
   assert.match(card.textContent, /Egyptian War/);
   assert.match(card.textContent, /2–6 players/);
-  assert.equal(card.querySelectorAll(".game-picker-scene").length, 3);
-  assert.ok(card.querySelector(".game-picker-preview-moving-card"));
-  assert.deepEqual(
-    [...card.querySelectorAll(".game-picker-preview-slap-hand")]
-      .map((hand) => [...hand.classList].find((name) => name.startsWith("is-"))),
-    ["is-left", "is-top", "is-bottom"]
+  const preview = card.querySelector(".game-picker-preview-video");
+  assert.ok(preview);
+  assert.match(preview.src, /\/assets\/game-previews\/egyptian-war\.mp4$/);
+  assert.match(
+    preview.poster,
+    /\/assets\/game-previews\/egyptian-war-poster\.webp$/
   );
-  assert.equal(
-    card.querySelector(".game-picker-preview-victory-winner").textContent,
-    "Frog wins!"
-  );
-  assert.equal(
-    card.querySelectorAll(".game-picker-preview-card-back").length,
-    4
-  );
-  assert.equal(
-    card.querySelector(".game-picker-preview-winner-total").textContent,
-    "54"
-  );
-  assert.equal(
-    card.querySelector(".game-picker-scene.is-victory .game-picker-preview-info"),
-    null
-  );
+  assert.equal(preview.autoplay, true);
+  assert.equal(preview.loop, true);
+  assert.equal(preview.muted, true);
+  assert.equal(preview.playsInline, true);
   assert.equal(card.getAttribute("aria-disabled"), "true");
+  close();
+});
+
+test("uses the static picker poster when reduced motion is preferred", () => {
+  const { close, handlers } = createClient({ prefersReducedMotion: true });
+
+  handlers.get("available-games")([game()]);
+
+  const preview = document.querySelector(".game-picker-preview-video");
+  assert.ok(preview);
+  assert.equal(preview.autoplay, false);
+  assert.equal(preview.loop, false);
+  assert.equal(preview.preload, "none");
   close();
 });
 

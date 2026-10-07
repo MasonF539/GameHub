@@ -1864,6 +1864,10 @@ io.on("connection", (socket) => {
     }
 
     const settings: EgyptianWarSettings = {
+      deckCount:
+        typeof room.gameSettings.deckCount === "number"
+          ? room.gameSettings.deckCount
+          : 1,
       includeJokers: room.gameSettings.includeJokers === true,
       allowDoubles: room.gameSettings.allowDoubles === true,
       allowSandwiches: room.gameSettings.allowSandwiches === true,
