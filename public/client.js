@@ -67,6 +67,8 @@ const egyptianWarChatMessages =
   document.querySelector("#egyptian-war-chat-messages");
 const egyptianWarSpectators =
   document.querySelector("#egyptian-war-spectators");
+const egyptianWarSpectatorList =
+  document.querySelector("#egyptian-war-spectator-list");
 const showGameChatButton =
   document.querySelector("#show-game-chat");
 const showGameSpectatorsButton =
@@ -143,6 +145,7 @@ let roomCodeHidden = false;
 let isRoomLocked = false;
 let gameDefinitions = [];
 let isCurrentUserHost = false;
+let isCurrentUserSpectator = false;
 let selectedGameId = null;
 let currentGameSettings = {};
 let currentPlayers = [];
@@ -496,6 +499,7 @@ function resetRoomState() {
   selectedGameId = null;
   currentGameSettings = {};
   currentPlayers = [];
+  isCurrentUserSpectator = false;
   isRoomRequestPending = false;
   isGameSelectionPending = false;
   previousEgyptianWarState = null;
@@ -532,6 +536,7 @@ function resetRoomState() {
   egyptianWarVictory.textContent = "";
   egyptianWarChat.hidden = true;
   egyptianWarChatMessages.replaceChildren();
+  egyptianWarSpectatorList.replaceChildren();
 
   createRoomButton.disabled = false;
   startGameButton.disabled = true;
@@ -1679,12 +1684,14 @@ function renderEgyptianWarState(state) {
   egyptianWarMessage.textContent =
     state.status === "finished" ? "" : state.activityMessage;
   egyptianWarPlayCardButton.disabled =
+    isCurrentUserSpectator ||
     state.status !== "playing" ||
     state.isPaused ||
     state.isAnimating ||
     state.isSlapWindow ||
     state.currentPlayerId !== socket.id;
   egyptianWarSlapButton.disabled =
+    isCurrentUserSpectator ||
     state.status !== "playing" ||
     state.isPaused ||
     state.isAnimating ||
@@ -1840,6 +1847,7 @@ socket.on("room-resumed", (room) => {
   selectedGameId = room.selectedGameId;
   currentGameSettings = room.gameSettings ?? {};
   isRoomLocked = room.isLocked;
+  isCurrentUserSpectator = room.role === "spectator";
   showLobby(room.roomCode, room.isHost);
   updateRoomLockDisplay();
   if (room.activeGameId === "egyptian-war") {
@@ -1960,6 +1968,47 @@ socket.on("player-list", (players) => {
   updateStartGameAvailability();
 });
 
+socket.on("spectator-list", (spectators) => {
+  egyptianWarSpectatorList.replaceChildren();
+
+  for (const spectator of spectators) {
+    const listItem = document.createElement("li");
+    listItem.className =
+      "list-group-item d-flex align-items-center gap-3";
+
+    const avatar = document.createElement("span");
+    avatar.className = "player-avatar";
+    avatar.textContent = spectator.avatar;
+    avatar.setAttribute(
+      "aria-label",
+      `${spectator.name}'s avatar: ${spectator.avatar}`
+    );
+
+    const spectatorName = document.createElement("span");
+    spectatorName.className = "player-name";
+    spectatorName.textContent = spectator.name;
+    listItem.append(avatar, spectatorName);
+
+    if (!spectator.isConnected) {
+      const disconnectedLabel = document.createElement("span");
+      disconnectedLabel.className = "badge text-bg-warning";
+      disconnectedLabel.textContent = "Disconnected";
+      listItem.appendChild(disconnectedLabel);
+    }
+
+    if (isCurrentUserHost) {
+      listItem.appendChild(
+        createKickPlayerButton(
+          spectator,
+          "btn btn-outline-danger btn-sm ms-auto"
+        )
+      );
+    }
+
+    egyptianWarSpectatorList.appendChild(listItem);
+  }
+});
+
 socket.on("room-lock-changed", ({ isLocked }) => {
   isRoomLocked = isLocked;
   updateRoomLockDisplay();
@@ -2043,6 +2092,7 @@ socket.on("game-ended", ({ message }) => {
   egyptianWarChat.hidden = true;
   egyptianWarHostControls.classList.add("d-none");
   lobbyView.classList.remove("d-none");
+  isCurrentUserSpectator = false;
   updateStartGameAvailability();
   gameStatus.textContent = message;
 });
@@ -2362,8 +2412,21 @@ joinRoomButton.addEventListener("click", () => {
       }
 
       isRoomRequestPending = false;
+      isCurrentUserSpectator = response.role === "spectator";
       showLobby(response.roomCode, false);
       saveResumeSession(response.roomCode, response.resumeToken);
+
+      if (isCurrentUserSpectator) {
+        if (response.activeGameId === "egyptian-war") {
+          showEgyptianWarGame({
+            gameId: response.activeGameId,
+            chatEnabled: response.chatEnabled,
+            settings: response.gameSettings,
+            isPaused: response.isPaused
+          });
+        }
+        showToast("You joined the game as a spectator.");
+      }
 
       joinRoomButton.disabled = true;
       roomCodeInput.disabled = true;

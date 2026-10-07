@@ -71,7 +71,7 @@ Checked implementation items do not imply that every multiplayer interaction has
 - [x] Render physical-looking cards and animate played cards into the central pile.
 - [x] Place play-card and slap controls immediately below the arena.
 - [x] Display action and challenge messages on the table rather than below it.
-- [x] Show a spectators area separate from the table and state that spectator mode is not yet available.
+- [x] Show late joiners in a dedicated in-game spectator list, including connection status and host removal controls.
 - [x] Lay out each player avatar beside their name and card count, with an underline beneath the player details.
 - [x] Highlight the entire current player's seat.
 - [x] Animate cards moving from the pile into the pile winner's area and outline the winner in gold.
@@ -92,7 +92,7 @@ Checked implementation items do not imply that every multiplayer interaction has
 - [x] Style "Play a Card" and "Slap" buttons as prominent game-action controls, with a secondary "Bring the pain" label and fire accents on Slap.
 - [x] Keep slaps available during active play even when no pattern matches; disable them only when no face-up cards are present, the game is paused or finished, or an action animation is in progress.
 - [x] Restore active players from a complete reconnect snapshot.
-- [ ] Define and support the appropriately limited snapshot required for future spectators.
+- [x] Reuse the limited public game-state projection for spectators so they receive the visible pile, public player state, timers, and live animations without hidden decks.
 
 ### Table presentation
 

@@ -26,6 +26,7 @@ The server runs locally in Docker and can optionally use a temporary Cloudflare 
 - Synchronized game selection and settings
 - Egyptian War rules and configurable slap settings
 - Playable, server-authoritative Egyptian War with challenges, slap arbitration, turn timers, pausing, and reconnect recovery
+- Late-game joining as a read-only spectator, with live public state, spectator reconnect support, in-game chat, and promotion into the lobby after a game ends
 - Display-only network ping indicator that does not influence gameplay arbitration
 - Viewport-fitted Egyptian War interface with a casino-style table, responsive player seats and controls, and a tabbed chat/spectator overlay
 

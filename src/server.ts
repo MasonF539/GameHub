@@ -47,6 +47,7 @@ type SlapAnimationAttempt = {
 type Room = {
   hostId: string;
   players: Map<string, Player>;
+  spectators: Map<string, Player>;
   selectedGameId: string | null;
   gameSettings: Record<string, GameSettingValue>;
   isLocked: boolean;
@@ -149,13 +150,42 @@ function generateRoomCode(): string {
   return code;
 }
 
-function sendPlayerList(roomCode: string, room: Room): void {
+function sendRoomMemberLists(roomCode: string, room: Room): void {
   const players = Array.from(room.players.values()).map((player) => ({
     ...player,
     isHost: player.id === room.hostId
   }));
+  const spectators = Array.from(room.spectators.values());
 
   io.to(roomCode).emit("player-list", players);
+  io.to(roomCode).emit("spectator-list", spectators);
+}
+
+function getRoomMember(
+  room: Room,
+  memberId: string
+): { member: Player; role: "player" | "spectator" } | null {
+  const player = room.players.get(memberId);
+  if (player) {
+    return { member: player, role: "player" };
+  }
+
+  const spectator = room.spectators.get(memberId);
+  return spectator
+    ? { member: spectator, role: "spectator" }
+    : null;
+}
+
+function promoteSpectatorsToPlayers(
+  roomCode: string,
+  room: Room
+): void {
+  for (const [spectatorId, spectator] of room.spectators) {
+    room.spectators.delete(spectatorId);
+    room.players.set(spectatorId, spectator);
+  }
+
+  sendRoomMemberLists(roomCode, room);
 }
 
 function monitorSocketLatency(socket: Socket): void {
@@ -284,6 +314,7 @@ function sendRoomResumed(
   socket.emit("room-resumed", {
     roomCode,
     isHost: room.hostId === socket.id,
+    role: room.spectators.has(socket.id) ? "spectator" : "player",
     isLocked: room.isLocked,
     selectedGameId: room.selectedGameId,
     gameSettings: room.gameSettings,
@@ -295,7 +326,7 @@ function sendRoomResumed(
   });
 
   if (room.activeGameId === egyptianWar.id) {
-    sendEgyptianWarState(roomCode, room);
+    sendEgyptianWarState(roomCode, room, socket);
   }
 }
 
@@ -558,31 +589,38 @@ function resolveCollectedSlaps(
   );
 }
 
-function sendEgyptianWarState(roomCode: string, room: Room): void {
+function sendEgyptianWarState(
+  roomCode: string,
+  room: Room,
+  targetSocket?: Socket
+): void {
   if (room.gameState === null) {
     return;
   }
 
-  io.to(roomCode).emit(
-    "egyptian-war-state",
-    createPublicEgyptianWarState(
-      room.gameState,
-      room.isPaused,
-      room.isAnimating,
-      getTurnTimerSeconds(room),
-      getTurnTimeRemainingMs(room),
-      room.disconnectPausedPlayerId !== null
-        ? "A player disconnected; the host may resume the game."
-        : room.isPaused
-          ? "Game paused by the host."
-          : null,
-      new Set(
-        Array.from(room.players.values())
-          .filter((player) => player.isConnected)
-          .map((player) => player.id)
-      )
+  const publicState = createPublicEgyptianWarState(
+    room.gameState,
+    room.isPaused,
+    room.isAnimating,
+    getTurnTimerSeconds(room),
+    getTurnTimeRemainingMs(room),
+    room.disconnectPausedPlayerId !== null
+      ? "A player disconnected; the host may resume the game."
+      : room.isPaused
+        ? "Game paused by the host."
+        : null,
+    new Set(
+      Array.from(room.players.values())
+        .filter((player) => player.isConnected)
+        .map((player) => player.id)
     )
   );
+
+  if (targetSocket) {
+    targetSocket.emit("egyptian-war-state", publicState);
+  } else {
+    io.to(roomCode).emit("egyptian-war-state", publicState);
+  }
 }
 
 function completeEgyptianWar(roomCode: string, room: Room): void {
@@ -598,6 +636,7 @@ function completeEgyptianWar(roomCode: string, room: Room): void {
   room.gameState = null;
   room.isPaused = false;
   room.isAnimating = false;
+  promoteSpectatorsToPlayers(roomCode, room);
   io.to(roomCode).emit("game-ended", {
     winnerId: state.winnerId,
     message: state.activityMessage
@@ -840,10 +879,19 @@ io.on("connection", (socket) => {
   if (socket.recovered) {
     const roomCode = socketRoomCodes.get(socket.id);
     const room = roomCode ? rooms.get(roomCode) : undefined;
-    const player = room?.players.get(socket.id);
+    const roomMember = room ? getRoomMember(room, socket.id) : null;
 
-    if (roomCode && room && player) {
-      markPlayerReconnected(roomCode, socket.id, room);
+    if (roomCode && room && roomMember) {
+      if (roomMember.role === "player") {
+        markPlayerReconnected(roomCode, socket.id, room);
+      } else {
+        const reconnectTimer = disconnectedPlayerTimers.get(socket.id);
+        if (reconnectTimer !== undefined) {
+          clearTimeout(reconnectTimer);
+          disconnectedPlayerTimers.delete(socket.id);
+        }
+        roomMember.member.isConnected = true;
+      }
       socket.join(roomCode);
       sendRoomResumed(socket, roomCode, room);
       socket.emit("room-lock-changed", {
@@ -857,8 +905,11 @@ io.on("connection", (socket) => {
         });
       }
 
-      sendPlayerList(roomCode, room);
-      if (room.disconnectPausedPlayerId === null) {
+      sendRoomMemberLists(roomCode, room);
+      if (
+        roomMember.role === "player" &&
+        room.disconnectPausedPlayerId === null
+      ) {
         io.to(roomCode).emit("egyptian-war-pause-changed", {
           isPaused: room.isPaused
         });
@@ -908,9 +959,11 @@ io.on("connection", (socket) => {
     }
 
     const room = rooms.get(session.roomCode);
-    const player = room?.players.get(session.playerId);
+    const roomMember = room
+      ? getRoomMember(room, session.playerId)
+      : null;
 
-    if (!room || !player) {
+    if (!room || !roomMember) {
       respond({
         success: false,
         message: "That saved room session is no longer available."
@@ -918,11 +971,12 @@ io.on("connection", (socket) => {
       return;
     }
 
+    const { member, role } = roomMember;
     const oldPlayerId = session.playerId;
     if (
       oldPlayerId === socket.id &&
       connectedRoomCode === session.roomCode &&
-      player.isConnected
+      member.isConnected
     ) {
       socket.join(session.roomCode);
       sendRoomResumed(socket, session.roomCode, room);
@@ -935,35 +989,42 @@ io.on("connection", (socket) => {
           settings: room.gameSettings
         });
       }
-      sendPlayerList(session.roomCode, room);
-      io.to(session.roomCode).emit("egyptian-war-pause-changed", {
-        isPaused: room.isPaused
-      });
-      respond({ success: true });
+      sendRoomMemberLists(session.roomCode, room);
+      if (role === "player") {
+        io.to(session.roomCode).emit("egyptian-war-pause-changed", {
+          isPaused: room.isPaused
+        });
+      }
+      respond({ success: true, role });
       return;
     }
 
     const previousSocket = io.sockets.sockets.get(oldPlayerId);
-    room.players.delete(oldPlayerId);
-    player.id = socket.id;
-    player.isConnected = true;
-    room.players.set(socket.id, player);
+    const memberMap = role === "player"
+      ? room.players
+      : room.spectators;
+    memberMap.delete(oldPlayerId);
+    member.id = socket.id;
+    member.isConnected = true;
+    memberMap.set(socket.id, member);
     socketRoomCodes.delete(oldPlayerId);
     socketRoomCodes.set(socket.id, session.roomCode);
 
-    if (room.hostId === oldPlayerId) {
+    if (role === "player" && room.hostId === oldPlayerId) {
       room.hostId = socket.id;
     }
 
-    const gamePlayer = room.gameState?.players.find(
+    const gamePlayer = role === "player"
+      ? room.gameState?.players.find(
       (candidate) => candidate.id === oldPlayerId
-    );
+      )
+      : undefined;
 
     if (gamePlayer) {
       gamePlayer.id = socket.id;
     }
 
-    if (room.gameState?.challenge) {
+    if (role === "player" && room.gameState?.challenge) {
       if (room.gameState.challenge.challengerId === oldPlayerId) {
         room.gameState.challenge.challengerId = socket.id;
       }
@@ -973,16 +1034,20 @@ io.on("connection", (socket) => {
       }
     }
 
-    if (room.gameState?.pendingPileWinnerId === oldPlayerId) {
+    if (
+      role === "player" &&
+      room.gameState?.pendingPileWinnerId === oldPlayerId
+    ) {
       room.gameState.pendingPileWinnerId = socket.id;
     }
 
-    if (room.reconnectGracePlayerId === oldPlayerId) {
+    if (role === "player" && room.reconnectGracePlayerId === oldPlayerId) {
       room.reconnectGracePlayerId = socket.id;
     }
 
-    const pendingSlapCandidate =
-      room.pendingSlapResolution?.candidates.get(oldPlayerId);
+    const pendingSlapCandidate = role === "player"
+      ? room.pendingSlapResolution?.candidates.get(oldPlayerId)
+      : undefined;
     if (pendingSlapCandidate) {
       room.pendingSlapResolution?.candidates.delete(oldPlayerId);
       pendingSlapCandidate.playerId = socket.id;
@@ -1004,7 +1069,7 @@ io.on("connection", (socket) => {
       disconnectedPlayerTimers.delete(oldPlayerId);
     }
 
-    if (room.disconnectPausedPlayerId === oldPlayerId) {
+    if (role === "player" && room.disconnectPausedPlayerId === oldPlayerId) {
       room.disconnectPausedPlayerId = socket.id;
     }
 
@@ -1015,7 +1080,9 @@ io.on("connection", (socket) => {
     );
     playerResumeTokens.delete(token);
     socket.join(session.roomCode);
-    markPlayerReconnected(session.roomCode, socket.id, room);
+    if (role === "player") {
+      markPlayerReconnected(session.roomCode, socket.id, room);
+    }
     sendRoomResumed(socket, session.roomCode, room);
     socket.emit("room-resume-token", rotatedResumeToken);
     socket.emit("room-lock-changed", {
@@ -1029,11 +1096,13 @@ io.on("connection", (socket) => {
       });
     }
 
-    sendPlayerList(session.roomCode, room);
-    io.to(session.roomCode).emit("egyptian-war-pause-changed", {
-      isPaused: room.isPaused
-    });
-    respond({ success: true });
+    sendRoomMemberLists(session.roomCode, room);
+    if (role === "player") {
+      io.to(session.roomCode).emit("egyptian-war-pause-changed", {
+        isPaused: room.isPaused
+      });
+    }
+    respond({ success: true, role });
   });
 
   socket.on("create-room", (data, respond) => {
@@ -1069,6 +1138,7 @@ io.on("connection", (socket) => {
     const room: Room = {
       hostId: socket.id,
       players: new Map(),
+      spectators: new Map(),
       selectedGameId: null,
       gameSettings: {},
       isLocked: false,
@@ -1098,7 +1168,7 @@ io.on("connection", (socket) => {
     socketRoomCodes.set(socket.id, roomCode);
     socket.join(roomCode);
 
-    sendPlayerList(roomCode, room);
+    sendRoomMemberLists(roomCode, room);
     const resumeToken = createPlayerResumeToken(
       roomCode,
       socket.id
@@ -1161,15 +1231,6 @@ io.on("connection", (socket) => {
       return;
     }
 
-    if (room.activeGameId !== null) {
-      respond({
-        success: false,
-        message:
-          "This game is already in progress. Spectator mode is not available yet."
-      });
-      return;
-    }
-
     if (room.isLocked) {
       respond({
         success: false,
@@ -1178,26 +1239,35 @@ io.on("connection", (socket) => {
       return;
     }
 
-    if (room.players.size >= maxLobbyPlayers) {
+    if (room.players.size + room.spectators.size >= maxLobbyPlayers) {
       respond({
         success: false,
         message:
-          `This lobby is full. It only allows up to ` +
-          `${maxLobbyPlayers} players.`
+          `This room is full. It only allows up to ` +
+          `${maxLobbyPlayers} people.`
       });
       return;
     }
 
-    room.players.set(socket.id, {
+    const role = room.activeGameId === null
+      ? "player"
+      : "spectator";
+    const roomMember = {
       id: socket.id,
       name: playerName,
       avatar,
       isConnected: true
-    });
+    };
+
+    if (role === "player") {
+      room.players.set(socket.id, roomMember);
+    } else {
+      room.spectators.set(socket.id, roomMember);
+    }
 
     socketRoomCodes.set(socket.id, roomCode);
     socket.join(roomCode);
-    sendPlayerList(roomCode, room);
+    sendRoomMemberLists(roomCode, room);
 
     socket.emit("room-lock-changed", {
       isLocked: room.isLocked
@@ -1210,7 +1280,9 @@ io.on("connection", (socket) => {
       });
     }
 
-    console.log(`${playerName} joined room ${roomCode}`);
+    console.log(
+      `${playerName} joined room ${roomCode} as a ${role}`
+    );
     const resumeToken = createPlayerResumeToken(
       roomCode,
       socket.id
@@ -1220,8 +1292,19 @@ io.on("connection", (socket) => {
       success: true,
       roomCode,
       playerName,
-      resumeToken
+      resumeToken,
+      role,
+      activeGameId: room.activeGameId,
+      gameSettings: room.gameSettings,
+      isPaused: room.isPaused,
+      chatEnabled: availableGames.find(
+        (game) => game.id === room.activeGameId
+      )?.chatEnabled ?? false
     });
+
+    if (role === "spectator" && room.activeGameId === egyptianWar.id) {
+      sendEgyptianWarState(roomCode, room, socket);
+    }
   });
 
   socket.on("select-game", (data, respond) => {
@@ -1455,6 +1538,41 @@ io.on("connection", (socket) => {
       return;
     }
 
+    const spectator = room.spectators.get(playerId);
+    if (spectator) {
+      room.spectators.delete(playerId);
+      socketRoomCodes.delete(playerId);
+      const kickedMessage = "You were removed from the spectators.";
+      removePlayerResumeTokens(playerId, kickedMessage);
+      revokedSocketMessages.set(playerId, kickedMessage);
+      setTimeout(() => {
+        revokedSocketMessages.delete(playerId);
+      }, reconnectGracePeriodMs);
+      const reconnectTimer = disconnectedPlayerTimers.get(playerId);
+      if (reconnectTimer !== undefined) {
+        clearTimeout(reconnectTimer);
+        disconnectedPlayerTimers.delete(playerId);
+      }
+
+      const spectatorSocket = io.sockets.sockets.get(playerId);
+      if (spectatorSocket) {
+        spectatorSocket.emit("kicked-from-room", {
+          message: kickedMessage
+        });
+        spectatorSocket.leave(roomCode);
+      }
+
+      sendRoomMemberLists(roomCode, room);
+      console.log(
+        `${spectator.name} was removed from room ${roomCode}`
+      );
+      respond({
+        success: true,
+        message: "Spectator removed from the game."
+      });
+      return;
+    }
+
     const isActiveEgyptianWar =
       room.activeGameId === egyptianWar.id &&
       room.gameState?.status === "playing";
@@ -1598,7 +1716,7 @@ io.on("connection", (socket) => {
       room.reconnectGraceUsedThisTurn = false;
     }
 
-    sendPlayerList(roomCode, room);
+    sendRoomMemberLists(roomCode, room);
     if (isActiveEgyptianWar && room.gameState) {
       if (room.gameState.status === "finished") {
         room.animationId += 1;
@@ -1898,14 +2016,18 @@ io.on("connection", (socket) => {
 
     clearTurnTimer(room);
     cancelPendingSlapResolution(room);
-    for (const playerId of room.players.keys()) {
-      socketRoomCodes.delete(playerId);
-      removePlayerResumeTokens(playerId);
-      const reconnectTimer = disconnectedPlayerTimers.get(playerId);
+    const memberIds = new Set([
+      ...room.players.keys(),
+      ...room.spectators.keys()
+    ]);
+    for (const memberId of memberIds) {
+      socketRoomCodes.delete(memberId);
+      removePlayerResumeTokens(memberId);
+      const reconnectTimer = disconnectedPlayerTimers.get(memberId);
 
       if (reconnectTimer !== undefined) {
         clearTimeout(reconnectTimer);
-        disconnectedPlayerTimers.delete(playerId);
+        disconnectedPlayerTimers.delete(memberId);
       }
     }
 
@@ -1949,6 +2071,7 @@ io.on("connection", (socket) => {
     room.gameState = null;
     room.isPaused = false;
     room.isAnimating = false;
+    promoteSpectatorsToPlayers(roomCode, room);
     io.to(roomCode).emit("game-ended", {
       winnerId: null,
       message: "The host ended the game and returned everyone to the lobby."
@@ -1961,11 +2084,13 @@ io.on("connection", (socket) => {
       .trim()
       .toUpperCase();
     const room = rooms.get(roomCode);
-    const player = room?.players.get(socket.id);
+    const roomMember = room
+      ? getRoomMember(room, socket.id)
+      : null;
 
     if (
       !room ||
-      !player ||
+      !roomMember ||
       room.activeGameId === null
     ) {
       respond({
@@ -2016,8 +2141,8 @@ io.on("connection", (socket) => {
 
     socket.data.lastGameChatAt = now;
     io.to(roomCode).emit("game-chat-message", {
-      senderId: player.id,
-      senderName: player.name,
+      senderId: roomMember.member.id,
+      senderName: roomMember.member.name,
       message,
       sentAt: now
     });
@@ -2061,6 +2186,51 @@ io.on("connection", (socket) => {
       return;
     }
 
+    const spectator = room.spectators.get(socket.id);
+    if (spectator) {
+      spectator.isConnected = false;
+      sendRoomMemberLists(roomCode, room);
+
+      const previousTimer = disconnectedPlayerTimers.get(socket.id);
+      if (previousTimer !== undefined) {
+        clearTimeout(previousTimer);
+      }
+
+      const reconnectTimer = setTimeout(() => {
+        disconnectedPlayerTimers.delete(socket.id);
+        const currentRoom = rooms.get(roomCode);
+        if (currentRoom !== room) {
+          return;
+        }
+
+        const disconnectedMember = getRoomMember(room, socket.id);
+        if (
+          !disconnectedMember ||
+          disconnectedMember.member.isConnected
+        ) {
+          return;
+        }
+
+        if (disconnectedMember.role === "spectator") {
+          room.spectators.delete(socket.id);
+        } else if (room.hostId !== socket.id && room.gameState === null) {
+          room.players.delete(socket.id);
+        } else {
+          return;
+        }
+
+        socketRoomCodes.delete(socket.id);
+        removePlayerResumeTokens(socket.id);
+        sendRoomMemberLists(roomCode, room);
+        console.log(
+          `Removed disconnected spectator ${spectator.name} from room ${roomCode}`
+        );
+      }, reconnectGracePeriodMs);
+
+      disconnectedPlayerTimers.set(socket.id, reconnectTimer);
+      return;
+    }
+
     const player = room.players.get(socket.id);
 
     if (!player) {
@@ -2088,7 +2258,7 @@ io.on("connection", (socket) => {
       sendEgyptianWarState(roomCode, room);
     }
 
-    sendPlayerList(roomCode, room);
+    sendRoomMemberLists(roomCode, room);
 
     if (room.gameState !== null) {
       return;
@@ -2115,14 +2285,18 @@ io.on("connection", (socket) => {
         cancelPendingSlapResolution(room);
         io.to(roomCode).emit("room-closed");
 
-        for (const playerId of room.players.keys()) {
-          socketRoomCodes.delete(playerId);
-          removePlayerResumeTokens(playerId);
-          const timer = disconnectedPlayerTimers.get(playerId);
+        const memberIds = new Set([
+          ...room.players.keys(),
+          ...room.spectators.keys()
+        ]);
+        for (const memberId of memberIds) {
+          socketRoomCodes.delete(memberId);
+          removePlayerResumeTokens(memberId);
+          const timer = disconnectedPlayerTimers.get(memberId);
 
           if (timer !== undefined) {
             clearTimeout(timer);
-            disconnectedPlayerTimers.delete(playerId);
+            disconnectedPlayerTimers.delete(memberId);
           }
         }
 
@@ -2142,6 +2316,7 @@ io.on("connection", (socket) => {
         room.isAnimating = false;
         room.disconnectPausedPlayerId = null;
         room.wasPausedBeforeDisconnect = false;
+        promoteSpectatorsToPlayers(roomCode, room);
         io.to(roomCode).emit("game-ended", {
           winnerId: null,
           message:
@@ -2166,7 +2341,7 @@ io.on("connection", (socket) => {
       room.players.delete(socket.id);
       socketRoomCodes.delete(socket.id);
       removePlayerResumeTokens(socket.id);
-      sendPlayerList(roomCode, room);
+      sendRoomMemberLists(roomCode, room);
       console.log(
         `Removed disconnected player ${player.name} from room ${roomCode}`
       );

@@ -5,7 +5,13 @@ import test from "node:test";
 import { io as createClient, type Socket } from "socket.io-client";
 import type { PublicEgyptianWarState } from "./games/egyptianWar/engine.js";
 
-type Ack = { success: boolean; message?: string; roomCode?: string };
+type Ack = {
+  success: boolean;
+  message?: string;
+  roomCode?: string;
+  resumeToken?: string;
+  role?: "player" | "spectator";
+};
 
 function emitAck(socket: Socket, event: string, data: unknown): Promise<Ack> {
   return new Promise((resolve, reject) => {
@@ -199,6 +205,140 @@ test("accepted slaps survive disconnect pause", { timeout: 45_000 }, async () =>
   } finally {
     host.disconnect();
     guest?.disconnect();
+    await stopServer(server);
+  }
+});
+
+test("late joiners spectate without pausing gameplay and return to the lobby as players", { timeout: 30_000 }, async () => {
+  const { server, url } = await startServer();
+  const host = await connect(url);
+  let guest: Socket | null = null;
+  let spectator: Socket | null = null;
+  let resumedSpectator: Socket | null = null;
+
+  try {
+    const created = await emitAck(host, "create-room", {
+      playerName: "Host",
+      avatar: "🐱"
+    });
+    assert.equal(created.success, true);
+    const roomCode = created.roomCode;
+    assert.ok(roomCode);
+
+    guest = await connect(url);
+    assert.equal((await emitAck(guest, "join-room", {
+      roomCode,
+      playerName: "Guest",
+      avatar: "🐶"
+    })).success, true);
+    assert.equal((await emitAck(host, "select-game", {
+      roomCode,
+      gameId: "egyptian-war"
+    })).success, true);
+
+    const initialStatePromise = waitForEvent<PublicEgyptianWarState>(
+      host,
+      "egyptian-war-state"
+    );
+    assert.equal((await emitAck(host, "start-game", { roomCode })).success, true);
+    const initialState = await initialStatePromise;
+
+    spectator = await connect(url);
+    const spectatorStatePromise = waitForEvent<PublicEgyptianWarState>(
+      spectator,
+      "egyptian-war-state"
+    );
+    const spectatorListPromise = waitForEvent<Array<{
+      id: string;
+      name: string;
+      isConnected: boolean;
+    }>>(
+      host,
+      "spectator-list",
+      (spectators) => spectators.some((member) => member.name === "Viewer")
+    );
+    const joined = await emitAck(spectator, "join-room", {
+      roomCode,
+      playerName: "Viewer",
+      avatar: "🦊"
+    });
+    assert.equal(joined.success, true);
+    assert.equal(joined.role, "spectator");
+
+    const spectatorState = await spectatorStatePromise;
+    assert.equal(spectatorState.players.length, 2);
+    assert.equal((await spectatorListPromise)[0]?.name, "Viewer");
+
+    const playAttempt = await emitAck(spectator, "play-card", { roomCode });
+    assert.equal(playAttempt.success, false);
+    assert.match(playAttempt.message ?? "", /not a player/i);
+    const slapAttempt = await emitAck(spectator, "slap", { roomCode });
+    assert.equal(slapAttempt.success, false);
+    assert.match(slapAttempt.message ?? "", /not a player/i);
+
+    const disconnectedListPromise = waitForEvent<Array<{
+      name: string;
+      isConnected: boolean;
+    }>>(
+      host,
+      "spectator-list",
+      (spectators) => spectators.some(
+        (member) => member.name === "Viewer" && !member.isConnected
+      )
+    );
+    spectator.disconnect();
+    await disconnectedListPromise;
+
+    const sockets = new Map([[host.id!, host], [guest.id!, guest]]);
+    const currentSocket = initialState.currentPlayerId
+      ? sockets.get(initialState.currentPlayerId)
+      : undefined;
+    assert.ok(currentSocket);
+    assert.equal((await emitAck(currentSocket, "play-card", { roomCode })).success, true);
+
+    resumedSpectator = await connect(url);
+    const resumedStatePromise = waitForEvent<PublicEgyptianWarState>(
+      resumedSpectator,
+      "egyptian-war-state"
+    );
+    const reconnectedListPromise = waitForEvent<Array<{
+      name: string;
+      isConnected: boolean;
+    }>>(
+      host,
+      "spectator-list",
+      (spectators) => spectators.some(
+        (member) => member.name === "Viewer" && member.isConnected
+      )
+    );
+    assert.ok(joined.resumeToken);
+    const resumed = await emitAck(resumedSpectator, "resume-room", {
+      resumeToken: joined.resumeToken
+    });
+    assert.equal(resumed.success, true);
+    assert.equal(resumed.role, "spectator");
+    assert.equal((await resumedStatePromise).players.length, 2);
+    await reconnectedListPromise;
+
+    const promotedPlayersPromise = waitForEvent<Array<{
+      name: string;
+      isConnected: boolean;
+    }>>(
+      host,
+      "player-list",
+      (players) => players.some((player) => player.name === "Viewer")
+    );
+    assert.equal((await emitAck(host, "close-game-to-lobby", { roomCode })).success, true);
+    const promotedPlayers = await promotedPlayersPromise;
+    assert.equal(
+      promotedPlayers.find((player) => player.name === "Viewer")?.isConnected,
+      true
+    );
+  } finally {
+    host.disconnect();
+    guest?.disconnect();
+    spectator?.disconnect();
+    resumedSpectator?.disconnect();
     await stopServer(server);
   }
 });
