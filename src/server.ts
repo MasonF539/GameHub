@@ -21,6 +21,7 @@ import {
 } from "./games/egyptianWar/engine.js";
 import type { GameSetting } from "./games/gameDefinition.js";
 import { GamePluginRegistry } from "./game-sdk/registry.js";
+import type { GameEvent } from "./game-sdk/plugin.js";
 import {
   defaultSlapJitterMs,
   selectWeightedSlapWinner,
@@ -627,10 +628,42 @@ function sendEgyptianWarState(
   );
 
   if (targetSocket) {
+    targetSocket.emit("game-state", {
+      gameId: egyptianWar.id,
+      state: publicState
+    });
     targetSocket.emit("egyptian-war-state", publicState);
   } else {
+    io.to(roomCode).emit("game-state", {
+      gameId: egyptianWar.id,
+      state: publicState
+    });
     io.to(roomCode).emit("egyptian-war-state", publicState);
   }
+}
+
+function emitGameEvent(
+  roomCode: string,
+  gameId: string,
+  event: GameEvent
+): void {
+  io.to(roomCode).emit("game-event", {
+    gameId,
+    event
+  });
+}
+
+function emitEgyptianWarPauseChanged(
+  roomCode: string,
+  isPaused: boolean
+): void {
+  emitGameEvent(roomCode, egyptianWar.id, {
+    type: "pause-changed",
+    payload: { isPaused }
+  });
+  io.to(roomCode).emit("egyptian-war-pause-changed", {
+    isPaused
+  });
 }
 
 function completeEgyptianWar(roomCode: string, room: Room): void {
@@ -846,6 +879,10 @@ function handleEgyptianWarAction(
   };
 
   room.isAnimating = true;
+  emitGameEvent(roomCode, egyptianWar.id, {
+    type: "animation",
+    payload: animation
+  });
   io.to(roomCode).emit("egyptian-war-animation", animation);
   sendEgyptianWarState(roomCode, room);
   respond({ success: true });
@@ -920,9 +957,7 @@ io.on("connection", (socket) => {
         roomMember.role === "player" &&
         room.disconnectPausedPlayerId === null
       ) {
-        io.to(roomCode).emit("egyptian-war-pause-changed", {
-          isPaused: room.isPaused
-        });
+        emitEgyptianWarPauseChanged(roomCode, room.isPaused);
       }
     } else {
       const revokedMessage = revokedSocketMessages.get(socket.id);
@@ -1001,9 +1036,10 @@ io.on("connection", (socket) => {
       }
       sendRoomMemberLists(session.roomCode, room);
       if (role === "player") {
-        io.to(session.roomCode).emit("egyptian-war-pause-changed", {
-          isPaused: room.isPaused
-        });
+        emitEgyptianWarPauseChanged(
+          session.roomCode,
+          room.isPaused
+        );
       }
       respond({ success: true, role });
       return;
@@ -1108,9 +1144,10 @@ io.on("connection", (socket) => {
 
     sendRoomMemberLists(session.roomCode, room);
     if (role === "player") {
-      io.to(session.roomCode).emit("egyptian-war-pause-changed", {
-        isPaused: room.isPaused
-      });
+      emitEgyptianWarPauseChanged(
+        session.roomCode,
+        room.isPaused
+      );
     }
     respond({ success: true, role });
   });
@@ -1732,7 +1769,7 @@ io.on("connection", (socket) => {
           (gamePlayer) => gamePlayer.id === room.gameState?.winnerId
         );
         room.isAnimating = true;
-        io.to(roomCode).emit("egyptian-war-animation", {
+        const animation = {
           id: finalAnimationId,
           action: "kick",
           actorId: playerId,
@@ -1743,7 +1780,12 @@ io.on("connection", (socket) => {
           pileCardCountBeforeTransfer: room.gameState.totalCardCount,
           penaltyCardCount: 0,
           isFinalWin: winner !== undefined
+        };
+        emitGameEvent(roomCode, egyptianWar.id, {
+          type: "animation",
+          payload: animation
         });
+        io.to(roomCode).emit("egyptian-war-animation", animation);
         sendEgyptianWarState(roomCode, room);
         setTimeout(() => {
           if (
@@ -1986,9 +2028,7 @@ io.on("connection", (socket) => {
       startTurnTimer(roomCode, room);
     }
 
-    io.to(roomCode).emit("egyptian-war-pause-changed", {
-      isPaused: room.isPaused
-    });
+    emitEgyptianWarPauseChanged(roomCode, room.isPaused);
     sendEgyptianWarState(roomCode, room);
     respond({ success: true });
   });
@@ -2156,6 +2196,38 @@ io.on("connection", (socket) => {
     respond({ success: true });
   });
 
+  socket.on("game-action", (data, respond) => {
+    const roomCode = String(data?.roomCode ?? "")
+      .trim()
+      .toUpperCase();
+    const gameId = String(data?.gameId ?? "");
+    const actionType = String(data?.action?.type ?? "");
+
+    if (gameId !== egyptianWar.id) {
+      respond({
+        success: false,
+        message: "That game is not installed or active."
+      });
+      return;
+    }
+
+    if (actionType !== "play-card" && actionType !== "slap") {
+      respond({
+        success: false,
+        message: "That game action is not supported."
+      });
+      return;
+    }
+
+    handleEgyptianWarAction(
+      roomCode,
+      socket.id,
+      actionType,
+      respond
+    );
+  });
+
+  // Temporary compatibility events for clients predating game API version 1.
   socket.on("play-card", (data, respond) => {
     const roomCode = String(data?.roomCode ?? "")
       .trim()
@@ -2259,9 +2331,7 @@ io.on("connection", (socket) => {
       room.animationId += 1;
       room.gameState.activityMessage =
         `${player.name} disconnected. The game is paused until they return.`;
-      io.to(roomCode).emit("egyptian-war-pause-changed", {
-        isPaused: true
-      });
+      emitEgyptianWarPauseChanged(roomCode, true);
       sendEgyptianWarState(roomCode, room);
     }
 

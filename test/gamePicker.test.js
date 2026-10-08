@@ -169,6 +169,50 @@ test("sounds only subsequent player joins, not spectators", () => {
   close();
 });
 
+test("routes browser game state, events, and actions through generic envelopes", () => {
+  const { close, emitted, handlers } = createClient();
+
+  assert.equal(handlers.has("game-state"), true);
+  assert.equal(handlers.has("game-event"), true);
+  assert.equal(handlers.has("egyptian-war-state"), false);
+  assert.equal(handlers.has("egyptian-war-animation"), false);
+
+  handlers.get("room-resumed")({
+    roomCode: "ABC123",
+    isHost: true,
+    isLocked: false,
+    selectedGameId: "egyptian-war",
+    gameSettings: {},
+    activeGameId: "egyptian-war",
+    isPaused: false,
+    chatEnabled: true
+  });
+
+  handlers.get("game-event")({
+    gameId: "egyptian-war",
+    event: {
+      type: "pause-changed",
+      payload: { isPaused: true }
+    }
+  });
+  assert.equal(
+    document.querySelector("#egyptian-war-pause").textContent,
+    "Resume"
+  );
+
+  const playCard = document.querySelector("#egyptian-war-play-card");
+  playCard.disabled = false;
+  playCard.click();
+  const action = emitted.find((item) => item.event === "game-action");
+  assert.deepEqual(action.data, {
+    roomCode: "ABC123",
+    gameId: "egyptian-war",
+    action: { type: "play-card" }
+  });
+
+  close();
+});
+
 test("only the host can request a game from the picker", () => {
   const { close, emitted, handlers } = createClient();
   const games = [

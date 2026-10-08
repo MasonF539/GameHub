@@ -2097,12 +2097,30 @@ socket.on("game-started", (game) => {
   showEgyptianWarGame(game);
 });
 
-socket.on("egyptian-war-animation", (animation) => {
-  activeEgyptianWarAnimation = animation;
+socket.on("game-state", ({ gameId, state }) => {
+  if (gameId === "egyptian-war") {
+    renderEgyptianWarState(state);
+  }
 });
 
-socket.on("egyptian-war-state", (state) => {
-  renderEgyptianWarState(state);
+socket.on("game-event", ({ gameId, event }) => {
+  if (gameId !== "egyptian-war" || !event) {
+    return;
+  }
+
+  if (event.type === "animation") {
+    activeEgyptianWarAnimation = event.payload;
+    return;
+  }
+
+  if (event.type === "pause-changed") {
+    const isPaused = Boolean(event.payload?.isPaused);
+    egyptianWarPauseButton.textContent = isPaused ? "Resume" : "Pause";
+    egyptianWarPauseButton.setAttribute(
+      "aria-pressed",
+      String(isPaused)
+    );
+  }
 });
 
 socket.on("game-ended", ({ message }) => {
@@ -2125,14 +2143,6 @@ socket.on("game-ended", ({ message }) => {
   isCurrentUserSpectator = false;
   updateStartGameAvailability();
   gameStatus.textContent = message;
-});
-
-socket.on("egyptian-war-pause-changed", ({ isPaused }) => {
-  egyptianWarPauseButton.textContent = isPaused ? "Resume" : "Pause";
-  egyptianWarPauseButton.setAttribute(
-    "aria-pressed",
-    String(isPaused)
-  );
 });
 
 if (typeof module !== "undefined" && module.exports) {
@@ -2177,8 +2187,12 @@ egyptianWarPlayCardButton.addEventListener("click", () => {
   }
 
   socket.emit(
-    "play-card",
-    { roomCode: currentRoomCode },
+    "game-action",
+    {
+      roomCode: currentRoomCode,
+      gameId: "egyptian-war",
+      action: { type: "play-card" }
+    },
     (response) => {
       if (!response.success) {
         showToast(response.message);
@@ -2193,8 +2207,12 @@ egyptianWarSlapButton.addEventListener("click", () => {
   }
 
   socket.emit(
-    "slap",
-    { roomCode: currentRoomCode },
+    "game-action",
+    {
+      roomCode: currentRoomCode,
+      gameId: "egyptian-war",
+      action: { type: "slap" }
+    },
     (response) => {
       if (!response.success) {
         showToast(response.message);

@@ -23,11 +23,13 @@ export type {
   GameClientModule,
   GameCompletion,
   GameEvent,
+  GameEventEnvelope,
   GameMember,
   GameMemberRole,
   GameServerPlugin,
   GameSession,
   GameSessionContext,
+  GameStateEnvelope,
   GameViewer
 } from "./plugin.js";
 export {

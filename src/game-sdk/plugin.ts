@@ -31,6 +31,16 @@ export type GameEvent = {
   payload?: unknown;
 };
 
+export type GameStateEnvelope = {
+  gameId: string;
+  state: unknown;
+};
+
+export type GameEventEnvelope = {
+  gameId: string;
+  event: GameEvent;
+};
+
 export type GameCompletion = {
   winnerId: string | null;
   reason: string;

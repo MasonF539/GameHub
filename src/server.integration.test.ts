@@ -23,6 +23,18 @@ function emitAck(socket: Socket, event: string, data: unknown): Promise<Ack> {
   });
 }
 
+function emitEgyptianWarAction(
+  socket: Socket,
+  roomCode: string,
+  type: "play-card" | "slap"
+): Promise<Ack> {
+  return emitAck(socket, "game-action", {
+    roomCode,
+    gameId: "egyptian-war",
+    action: { type }
+  });
+}
+
 function waitForEvent<T>(
   socket: Socket,
   event: string,
@@ -176,7 +188,11 @@ test("accepted slaps survive disconnect pause", { timeout: 45_000 }, async () =>
         : undefined;
       assert.ok(currentSocket);
       latestState = null;
-      assert.equal((await emitAck(currentSocket, "play-card", { roomCode })).success, true);
+      assert.equal(
+        (await emitEgyptianWarAction(currentSocket, roomCode, "play-card"))
+          .success,
+        true
+      );
     }
 
     assert.ok(latestState?.isSlappable, "expected the shuffled game to reach a valid slap");
@@ -185,11 +201,17 @@ test("accepted slaps survive disconnect pause", { timeout: 45_000 }, async () =>
       slapAttempts: Array<{ playerId: string; delayMs: number; isWinner: boolean }>;
     }>(host, "egyptian-war-animation", (value) => value.action === "slap", 5_000);
 
-    assert.equal((await emitAck(host, "slap", { roomCode })).success, true);
+    assert.equal(
+      (await emitEgyptianWarAction(host, roomCode, "slap")).success,
+      true
+    );
     const pauseResponse = await emitAck(host, "toggle-game-pause", { roomCode, isPaused: true });
     assert.equal(pauseResponse.success, false);
     assert.match(pauseResponse.message ?? "", /slap decision/i);
-    assert.equal((await emitAck(guest, "slap", { roomCode })).success, true);
+    assert.equal(
+      (await emitEgyptianWarAction(guest, roomCode, "slap")).success,
+      true
+    );
     guest.disconnect();
 
     const animation = await animationPromise;
@@ -270,10 +292,18 @@ test("late joiners spectate without pausing gameplay and return to the lobby as 
     assert.equal(spectatorState.players.length, 2);
     assert.equal((await spectatorListPromise)[0]?.name, "Viewer");
 
-    const playAttempt = await emitAck(spectator, "play-card", { roomCode });
+    const playAttempt = await emitEgyptianWarAction(
+      spectator,
+      roomCode,
+      "play-card"
+    );
     assert.equal(playAttempt.success, false);
     assert.match(playAttempt.message ?? "", /not a player/i);
-    const slapAttempt = await emitAck(spectator, "slap", { roomCode });
+    const slapAttempt = await emitEgyptianWarAction(
+      spectator,
+      roomCode,
+      "slap"
+    );
     assert.equal(slapAttempt.success, false);
     assert.match(slapAttempt.message ?? "", /not a player/i);
 
@@ -295,7 +325,11 @@ test("late joiners spectate without pausing gameplay and return to the lobby as 
       ? sockets.get(initialState.currentPlayerId)
       : undefined;
     assert.ok(currentSocket);
-    assert.equal((await emitAck(currentSocket, "play-card", { roomCode })).success, true);
+    assert.equal(
+      (await emitEgyptianWarAction(currentSocket, roomCode, "play-card"))
+        .success,
+      true
+    );
 
     resumedSpectator = await connect(url);
     const resumedStatePromise = waitForEvent<PublicEgyptianWarState>(

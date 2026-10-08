@@ -27,12 +27,13 @@ Egyptian War is registered with a valid versioned manifest, but its delivery mod
 The intended migration order is:
 
 1. Route the existing game catalog through the validated registry.
-2. Replace Egyptian-War-specific room state and Socket.IO routing with `GameSession` and generic game events.
-3. Give GameHub a generic browser game root and move Egyptian War into a `GameClientModule`.
-4. Move Egyptian War styles, templates, previews, music, and effects into its game package.
-5. Add package discovery from an explicit administrator-controlled configuration.
-6. Extract the complete package into the Egyptian War repository and install it back into GameHub as a versioned dependency.
-7. Verify the boundary with a minimal test game before treating the API as stable.
+2. Route the built-in client through generic game action, state, and event envelopes while temporarily retaining legacy server events for compatibility.
+3. Replace Egyptian-War-specific room state with `GameSession`, then remove those temporary compatibility events.
+4. Give GameHub a generic browser game root and move Egyptian War into a `GameClientModule`.
+5. Move Egyptian War styles, templates, previews, music, and effects into its game package.
+6. Add package discovery from an explicit administrator-controlled configuration.
+7. Extract the complete package into the Egyptian War repository and install it back into GameHub as a versioned dependency.
+8. Verify the boundary with a minimal test game before treating the API as stable.
 
 ## Ownership boundary
 
