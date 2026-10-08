@@ -22,6 +22,18 @@ function requireNonEmpty(value: string, field: string): void {
   }
 }
 
+function validatePublicPath(value: string, field: string): void {
+  requireNonEmpty(value, field);
+  if (
+    !/^[A-Za-z0-9][A-Za-z0-9._/-]*$/.test(value) ||
+    value.startsWith("/") ||
+    value.includes("\\") ||
+    value.split("/").includes("..")
+  ) {
+    throw new GamePluginValidationError(`${field} must be package-relative.`);
+  }
+}
+
 function validateSetting(setting: GameSetting, gameId: string): void {
   const settingKey = setting.key;
   const defaultValue: unknown = setting.defaultValue;
@@ -126,10 +138,20 @@ export function validateGamePluginManifest(manifest: GamePluginManifest): void {
   }
 
   if (manifest.client.delivery === "module") {
-    requireNonEmpty(manifest.client.entryPath, `${game.id} client entry path`);
-    for (const stylePath of manifest.client.stylePaths ?? []) {
-      requireNonEmpty(stylePath, `${game.id} client style path`);
-    }
+    validatePublicPath(
+      manifest.client.entryPath,
+      `${game.id} module entry path`
+    );
+  }
+
+  if (manifest.client.markupPath) {
+    validatePublicPath(manifest.client.markupPath, `${game.id} client markup path`);
+  }
+  for (const entryPath of manifest.client.entryPaths ?? []) {
+    validatePublicPath(entryPath, `${game.id} client entry path`);
+  }
+  for (const stylePath of manifest.client.stylePaths ?? []) {
+    validatePublicPath(stylePath, `${game.id} client style path`);
   }
 }
 

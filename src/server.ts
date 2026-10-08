@@ -6,7 +6,6 @@ import path from "path";
 import { Server, type Socket } from "socket.io";
 import {
   egyptianWar,
-  egyptianWarManifest,
   applyEgyptianWarAction,
   createEgyptianWarState,
   createPublicEgyptianWarState,
@@ -21,7 +20,11 @@ import {
   selectWeightedSlapWinner,
   slapCollectionWindowMs
 } from "@gamehub/egyptian-war";
-import { GamePluginRegistry, type GameSetting } from "@gamehub/game-sdk";
+import {
+  GamePluginRegistry,
+  type GamePluginPackage,
+  type GameSetting
+} from "@gamehub/game-sdk";
 import type {
   GameActionEnvelope,
   GameEvent,
@@ -94,9 +97,30 @@ const availableAvatars = [
   "🧙"
 ];
 
-const gamePluginRegistry = new GamePluginRegistry([
-  egyptianWarManifest
-]);
+const defaultGamePackages = ["@gamehub/egyptian-war"];
+const configuredGamePackages = process.env.GAMEHUB_GAME_PACKAGES === undefined
+  ? defaultGamePackages
+  : process.env.GAMEHUB_GAME_PACKAGES
+    .split(",")
+    .map((packageName) => packageName.trim())
+    .filter(Boolean);
+
+function loadGamePackage(packageName: string): GamePluginPackage {
+  const packageExports = require(packageName) as {
+    gameHubPlugin?: GamePluginPackage;
+  };
+  if (!packageExports.gameHubPlugin) {
+    throw new Error(
+      `Installed game package ${packageName} does not export gameHubPlugin.`
+    );
+  }
+  return packageExports.gameHubPlugin;
+}
+
+const installedGamePackages = configuredGamePackages.map(loadGamePackage);
+const gamePluginRegistry = new GamePluginRegistry(
+  installedGamePackages.map((gamePackage) => gamePackage.manifest)
+);
 const availableGames = gamePluginRegistry.listDefinitions();
 
 function getGameDefinition(gameId: string | null) {
@@ -111,24 +135,52 @@ const indexShell = readFileSync(
   path.join(process.cwd(), "public", "index.html"),
   "utf8"
 );
-const egyptianWarMarkup = readFileSync(
-  path.join(
-    process.cwd(),
-    "games",
-    "egyptian-war",
-    "public",
-    "template.html"
-  ),
-  "utf8"
-);
 const gameMarkupMarker = "<!-- game-plugin-markup -->";
-if (!indexShell.includes(gameMarkupMarker)) {
-  throw new Error("GameHub index is missing the game plugin markup marker.");
+const gameStyleMarker = "<!-- game-plugin-styles -->";
+const gameScriptMarker = "<!-- game-plugin-scripts -->";
+
+function replaceRequiredMarker(
+  html: string,
+  marker: string,
+  replacement: string
+): string {
+  if (!html.includes(marker)) {
+    throw new Error(`GameHub index is missing required marker: ${marker}`);
+  }
+  return html.replace(marker, replacement);
 }
-const renderedIndex = indexShell.replace(
+
+function gamePublicUrl(gameId: string, resourcePath: string): string {
+  return `/games/${gameId}/${resourcePath}`;
+}
+
+const gameMarkup = installedGamePackages.flatMap((gamePackage) => {
+  const markupPath = gamePackage.manifest.client.markupPath;
+  return markupPath
+    ? [readFileSync(path.join(gamePackage.publicDirectory, markupPath), "utf8")]
+    : [];
+}).join("\n");
+const gameStyles = installedGamePackages.flatMap((gamePackage) => {
+  const gameId = gamePackage.manifest.definition.id;
+  return (gamePackage.manifest.client.stylePaths ?? []).map(
+    (stylePath) =>
+      `<link rel="stylesheet" href="${gamePublicUrl(gameId, stylePath)}">`
+  );
+}).join("\n  ");
+const gameScripts = installedGamePackages.flatMap((gamePackage) => {
+  const gameId = gamePackage.manifest.definition.id;
+  return (gamePackage.manifest.client.entryPaths ?? []).map(
+    (entryPath) => `<script src="${gamePublicUrl(gameId, entryPath)}"></script>`
+  );
+}).join("\n  ");
+
+let renderedIndex = replaceRequiredMarker(
+  indexShell,
   gameMarkupMarker,
-  egyptianWarMarkup
+  gameMarkup
 );
+renderedIndex = replaceRequiredMarker(renderedIndex, gameStyleMarker, gameStyles);
+renderedIndex = replaceRequiredMarker(renderedIndex, gameScriptMarker, gameScripts);
 const reconnectGracePeriodMs = 120_000;
 const reconnectTurnGraceMs = 5_000;
 const gameEndAnimationMs = 3_600;
@@ -172,12 +224,12 @@ app.get(["/", "/index.html"], (_request, response) => {
   response.type("html").send(renderedIndex);
 });
 
-app.use(
-  "/games/egyptian-war",
-  express.static(
-    path.join(process.cwd(), "games", "egyptian-war", "public")
-  )
-);
+for (const gamePackage of installedGamePackages) {
+  app.use(
+    `/games/${gamePackage.manifest.definition.id}`,
+    express.static(gamePackage.publicDirectory)
+  );
+}
 
 app.use(express.static(path.join(process.cwd(), "public")));
 

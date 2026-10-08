@@ -13,6 +13,7 @@ export {
   type EmbeddedGameClient,
   type GameClientDelivery,
   type GamePluginManifest,
+  type GamePluginPackage,
   type ModuleGameClient
 } from "./manifest.js";
 export type {

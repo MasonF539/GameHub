@@ -18,13 +18,14 @@ to an independently versioned GameHub plugin.
 - Added startup validation and integration coverage for package markup
   injection.
 - Made the root `check` command type-check every workspace.
+- Added `GAMEHUB_GAME_PACKAGES` configuration and manifest-driven loading for
+  package markup, styles, scripts, definitions, and static public routes.
 
 ## In progress
 
 - Remove remaining Egyptian War assumptions from GameHub's browser client.
 - Move authoritative timers, arbitration orchestration, and member lifecycle
   handling behind the package `GameSession`.
-- Load installed packages and browser resources from explicit configuration.
 
 ## Final repository split
 

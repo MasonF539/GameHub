@@ -40,7 +40,7 @@
 - [x] Establish independently buildable GameHub SDK and Egyptian War workspaces with package-name imports.
 - [x] Move Egyptian War preview media and game-specific audio into its package-owned public directory.
 - [x] Move Egyptian War markup, styles, previews, and game audio into its package boundary.
-- [ ] Load installed game packages from explicit administrator-controlled configuration.
+- [x] Load installed game packages and their browser resources from explicit administrator-controlled configuration.
 - [ ] Extract Egyptian War into its own repository and reinstall it as a pinned package dependency.
 - [ ] Add a minimal second plugin to prove that GameHub contains no Egyptian War assumptions.
 

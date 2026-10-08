@@ -161,6 +161,9 @@ export const egyptianWarManifest: GamePluginManifest = {
   packageVersion: "1.0.0",
   definition: egyptianWar,
   client: {
-    delivery: "embedded"
+    delivery: "embedded",
+    markupPath: "template.html",
+    entryPaths: ["register.js"],
+    stylePaths: ["style.css"]
   }
 };

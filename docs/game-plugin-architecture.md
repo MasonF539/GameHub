@@ -4,7 +4,10 @@ GameHub is being separated into a reusable platform and independently versioned 
 
 ## Target installation model
 
-Games will be installed as trusted npm dependencies and enabled in GameHub configuration. A future installation should require only installing the package and adding its package name to the configured game list. The package lock and Docker build will then select an exact, reproducible version.
+Games are installed as trusted npm dependencies and enabled through the
+comma-separated `GAMEHUB_GAME_PACKAGES` configuration. Installation requires
+adding the dependency and its package name to that configured list. The package
+lock and Docker build then select an exact, reproducible version.
 
 Game packages execute trusted server code. They are not a sandbox for packages supplied by room hosts or browser clients.
 

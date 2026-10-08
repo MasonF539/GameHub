@@ -10,7 +10,7 @@
   "scripts": {
     "build:workspaces": "npm run build --workspaces --if-present",
     "build": "npm run build:workspaces && tsc",
-    "check": "npm run check --workspaces --if-present && tsc --noEmit",
+    "check": "npm run build -w @gamehub/game-sdk && npm run check --workspaces --if-present && tsc --noEmit",
     "test": "npm run build && npm run test --workspaces --if-present && node --test dist/*.test.js test/*.test.js",
     "start": "node dist/server.js"
   },

@@ -13,8 +13,8 @@ function createManifest(): GamePluginManifest {
     packageVersion: "1.2.3",
     client: {
       delivery: "module",
-      entryPath: "/games/example/client.js",
-      stylePaths: ["/games/example/style.css"]
+      entryPath: "client.js",
+      stylePaths: ["style.css"]
     },
     definition: {
       id: "example-game",
