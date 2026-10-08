@@ -173,6 +173,14 @@ test("accepted slaps survive disconnect pause", { timeout: 45_000 }, async () =>
 
   try {
     await waitForEvent(host, "connect", () => true, 8_000);
+    const pageResponse = await fetch(url);
+    const pageHtml = await pageResponse.text();
+    assert.equal(pageResponse.status, 200);
+    assert.match(pageHtml, /id="game-root"/);
+    assert.match(pageHtml, /id="gameplay-view"/);
+    assert.doesNotMatch(pageHtml, /game-plugin-markup/);
+    assert.match(pageHtml, /\/games\/egyptian-war\/style\.css/);
+
     const created = await emitAck(host, "create-room", { playerName: "Host", avatar: "🐱" });
     assert.equal(created.success, true);
     const roomCode = created.roomCode;

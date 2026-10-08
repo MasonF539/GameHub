@@ -121,8 +121,12 @@ const egyptianWarMarkup = readFileSync(
   ),
   "utf8"
 );
+const gameMarkupMarker = "<!-- game-plugin-markup -->";
+if (!indexShell.includes(gameMarkupMarker)) {
+  throw new Error("GameHub index is missing the game plugin markup marker.");
+}
 const renderedIndex = indexShell.replace(
-  "<!-- game-plugin-markup -->",
+  gameMarkupMarker,
   egyptianWarMarkup
 );
 const reconnectGracePeriodMs = 120_000;

@@ -11,12 +11,13 @@ const gameHubToastMessage =
 const entryView = document.querySelector("#entry-view");
 const lobbyView = document.querySelector("#lobby-view");
 const gameplayView = document.querySelector("#gameplay-view");
+const gameRoot = document.querySelector("#game-root");
 const gameHubAudio = window.GameHubAudio ?? {
   playEffect() {},
   setScene() {}
 };
 const gameClientHost = new window.GameHubGameClientHost({
-  root: gameplayView,
+  root: gameRoot,
   createContext: (gameId) => ({
     memberId: socket.id ?? "",
     role: isCurrentUserSpectator ? "spectator" : "player",
