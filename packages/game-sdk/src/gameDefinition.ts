@@ -34,6 +34,11 @@ export type NumberGameSetting = SelectNumberGameSetting | RangeNumberGameSetting
 export type GameSetting = BooleanGameSetting | NumberGameSetting;
 export type GameSettingValue = boolean | number;
 
+export type GamePreview = {
+  videoPath: string;
+  posterPath: string;
+};
+
 export type GameDefinition = {
   id: string;
   name: string;
@@ -44,4 +49,5 @@ export type GameDefinition = {
   minPlayers: number;
   maxPlayers: number;
   settings: GameSetting[];
+  preview?: GamePreview;
 };

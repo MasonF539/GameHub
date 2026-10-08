@@ -43,6 +43,11 @@ export const egyptianWar: GameDefinition = {
   minPlayers: 2,
   maxPlayers: 6,
 
+  preview: {
+    videoPath: "/games/egyptian-war/assets/game-previews/preview.mp4",
+    posterPath: "/games/egyptian-war/assets/game-previews/poster.webp"
+  },
+
   rules: [
     "The server shuffles the deck, deals every card face down, and randomly selects the first player.",
     "Players cannot view or shuffle their decks.",

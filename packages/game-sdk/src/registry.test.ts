@@ -117,4 +117,14 @@ test("rejects malformed player limits and settings", () => {
     () => validateGamePluginManifest(invalidOptions),
     /invalid select options/
   );
+
+  const invalidPreview = createManifest();
+  invalidPreview.definition.preview = {
+    videoPath: "",
+    posterPath: "/preview.webp"
+  };
+  assert.throws(
+    () => validateGamePluginManifest(invalidPreview),
+    /preview video path cannot be empty/
+  );
 });

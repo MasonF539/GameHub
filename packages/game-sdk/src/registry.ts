@@ -109,6 +109,11 @@ export function validateGamePluginManifest(manifest: GamePluginManifest): void {
     throw new GamePluginValidationError(`${game.id} has invalid player limits.`);
   }
 
+  if (game.preview) {
+    requireNonEmpty(game.preview.videoPath, `${game.id} preview video path`);
+    requireNonEmpty(game.preview.posterPath, `${game.id} preview poster path`);
+  }
+
   const settingKeys = new Set<string>();
   for (const setting of game.settings) {
     if (settingKeys.has(setting.key)) {

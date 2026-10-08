@@ -642,17 +642,16 @@ function createGamePreview(game) {
   preview.className = "game-picker-preview";
   preview.setAttribute("aria-hidden", "true");
 
-  if (game.id === "egyptian-war") {
-    preview.classList.add("is-egyptian-war");
+  if (game.preview?.videoPath && game.preview?.posterPath) {
+    preview.classList.add("has-media");
+    preview.style.backgroundImage = `url("${game.preview.posterPath}")`;
     const previewVideo = document.createElement("video");
     const prefersReducedPreviewMotion = window.matchMedia(
       "(prefers-reduced-motion: reduce)"
     ).matches;
     previewVideo.className = "game-picker-preview-video";
-    previewVideo.src =
-      "/games/egyptian-war/assets/game-previews/preview.mp4";
-    previewVideo.poster =
-      "/games/egyptian-war/assets/game-previews/poster.webp";
+    previewVideo.src = game.preview.videoPath;
+    previewVideo.poster = game.preview.posterPath;
     previewVideo.muted = true;
     previewVideo.defaultMuted = true;
     previewVideo.loop = !prefersReducedPreviewMotion;

@@ -94,6 +94,10 @@ function game(overrides = {}) {
     minPlayers: 2,
     maxPlayers: 6,
     settings: [],
+    preview: {
+      videoPath: "/games/egyptian-war/assets/game-previews/preview.mp4",
+      posterPath: "/games/egyptian-war/assets/game-previews/poster.webp"
+    },
     ...overrides
   };
 }

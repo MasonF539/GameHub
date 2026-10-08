@@ -1,6 +1,7 @@
 export type {
   BooleanGameSetting,
   GameDefinition,
+  GamePreview,
   GameSetting,
   GameSettingValue,
   NumberGameSetting,

@@ -391,10 +391,10 @@ body {
   border-bottom: 1px solid rgba(255, 255, 255, 0.12);
 }
 
-.game-picker-preview.is-egyptian-war {
-  background:
-    #1d222d url("/games/egyptian-war/assets/game-previews/poster.webp")
-    center / cover no-repeat;
+.game-picker-preview.has-media {
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
 }
 
 .game-picker-preview-video {
