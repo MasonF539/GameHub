@@ -33,11 +33,15 @@ to an independently versioned GameHub plugin.
   GameHub's server.
 - Moved the installed-game list into `gamehub.config.json`, leaving GameHub's
   server free of Egyptian War package names and implementation imports.
+- Split production and test compilation so published `dist` directories do
+  not contain test JavaScript or empty test declaration modules.
 
 ## In progress
 
-- Prepare the completed in-repository package boundary for its independent
-  repository and add a minimal second plugin before stabilizing the API.
+- Add a minimal second plugin to verify that GameHub has no remaining
+  Egyptian War assumptions before stabilizing the SDK API.
+- Move `games/egyptian-war` into its independent repository, publish or pin
+  its package, and reinstall it in GameHub as an external dependency.
 
 ## Verification
 
@@ -54,3 +58,8 @@ Once the in-repository boundary is complete, `games/egyptian-war` can become
 its own repository and return to GameHub as a pinned package dependency. The
 GameHub repository keeps the SDK, platform, room system, transport, picker,
 chat, spectators, settings, and generic game host.
+
+Egyptian War is intentionally a GameHub plugin rather than a standalone web
+application. Its independent repository will contain the game implementation
+and assets, while GameHub will continue to supply the page shell, lobby,
+rooms, networking, shared settings, and browser host.

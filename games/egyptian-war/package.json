@@ -10,9 +10,12 @@
     "public"
   ],
   "scripts": {
-    "build": "tsc",
-    "check": "tsc --noEmit",
-    "test": "node --test dist/*.test.js"
+    "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
+    "clean:test": "node -e \"require('node:fs').rmSync('dist-test',{recursive:true,force:true})\"",
+    "build": "npm run clean && tsc",
+    "build:test": "npm run clean:test && tsc -p tsconfig.test.json",
+    "check": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json",
+    "test": "npm run build:test && node --test dist-test/*.test.js"
   },
   "license": "ISC",
   "type": "commonjs",

@@ -128,14 +128,16 @@ GameHub/
 ├── .vscode/
 │   └── tasks.json
 ├── docs/
-│   └── game-plugin-architecture.md
+│   ├── game-plugin-architecture.md
+│   └── plugin-extraction-progress.md
 ├── games/
 │   └── egyptian-war/
 │       ├── docs/
 │       ├── public/
 │       ├── src/
 │       ├── package.json
-│       └── tsconfig.json
+│       ├── tsconfig.json
+│       └── tsconfig.test.json
 ├── public/
 │   ├── assets/
 │   │   ├── audio/
@@ -149,7 +151,8 @@ GameHub/
 │   └── game-sdk/
 │       ├── src/
 │       ├── package.json
-│       └── tsconfig.json
+│       ├── tsconfig.json
+│       └── tsconfig.test.json
 ├── src/
 │   ├── server.integration.test.ts
 │   └── server.ts
@@ -168,7 +171,8 @@ GameHub/
 ├── package-lock.json
 ├── README.md
 ├── TODO.md
-└── tsconfig.json
+├── tsconfig.json
+└── tsconfig.test.json
 ```
 
 ## Technologies

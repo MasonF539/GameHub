@@ -3,6 +3,11 @@
 The server-authoritative Egyptian War game plugin. This workspace is the
 staging boundary for the independent Egyptian War repository.
 
+Egyptian War is designed to be installed and run by GameHub through the
+`@gamehub/game-sdk` contracts. It is independently versioned, but it is not a
+standalone web application and depends on GameHub for rooms, networking, the
+lobby, shared settings, and browser hosting.
+
 The package owns its rules, state engine, slap arbitration, tests, browser
 presentation, game-specific audio, preview media, and design documentation.
 GameHub supplies rooms, members, spectators, transport, and shared services.

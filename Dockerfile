@@ -7,7 +7,7 @@ COPY packages/game-sdk/package.json ./packages/game-sdk/package.json
 COPY games/egyptian-war/package.json ./games/egyptian-war/package.json
 RUN npm ci
 
-COPY tsconfig.json ./
+COPY tsconfig.json tsconfig.test.json ./
 COPY gamehub.config.json ./
 COPY packages ./packages
 COPY games ./games

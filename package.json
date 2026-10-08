@@ -8,10 +8,13 @@
     "games/egyptian-war"
   ],
   "scripts": {
+    "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
+    "clean:test": "node -e \"require('node:fs').rmSync('dist-test',{recursive:true,force:true})\"",
     "build:workspaces": "npm run build --workspaces --if-present",
-    "build": "npm run build:workspaces && tsc",
-    "check": "npm run build -w @gamehub/game-sdk && npm run check --workspaces --if-present && tsc --noEmit",
-    "test": "npm run build && npm run test --workspaces --if-present && node --test dist/*.test.js test/*.test.js",
+    "build": "npm run clean && npm run build:workspaces && tsc",
+    "build:test": "npm run clean:test && tsc -p tsconfig.test.json",
+    "check": "npm run build:workspaces && npm run check --workspaces --if-present && tsc --noEmit && tsc --noEmit -p tsconfig.test.json",
+    "test": "npm run build && npm run test --workspaces --if-present && npm run build:test && node --test dist-test/*.test.js test/*.test.js",
     "start": "node dist/server.js"
   },
   "keywords": [

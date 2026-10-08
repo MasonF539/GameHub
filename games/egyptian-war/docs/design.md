@@ -1,5 +1,9 @@
 # Egyptian War Design
 
+Egyptian War is a versioned game plugin made for GameHub. The package owns the
+game-specific server and browser behavior, while GameHub provides the room,
+transport, lobby, spectator, and hosting services required to run it.
+
 ## Implementation status
 
 This document distinguishes implemented behavior from planned gameplay. A checked item means the behavior exists in the application, not merely that its design has been selected.
