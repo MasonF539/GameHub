@@ -56,6 +56,44 @@ function waitForEvent<T>(
   });
 }
 
+function waitForEgyptianWarState(
+  socket: Socket,
+  predicate: (state: PublicEgyptianWarState) => boolean = () => true,
+  timeoutMs = 5_000
+): Promise<PublicEgyptianWarState> {
+  return waitForEvent<{
+    gameId: string;
+    state: PublicEgyptianWarState;
+  }>(
+    socket,
+    "game-state",
+    (envelope) =>
+      envelope.gameId === "egyptian-war" &&
+      predicate(envelope.state),
+    timeoutMs
+  ).then((envelope) => envelope.state);
+}
+
+function waitForEgyptianWarEvent<T>(
+  socket: Socket,
+  eventType: string,
+  predicate: (payload: T) => boolean = () => true,
+  timeoutMs = 5_000
+): Promise<T> {
+  return waitForEvent<{
+    gameId: string;
+    event: { type: string; payload: T };
+  }>(
+    socket,
+    "game-event",
+    (envelope) =>
+      envelope.gameId === "egyptian-war" &&
+      envelope.event.type === eventType &&
+      predicate(envelope.event.payload),
+    timeoutMs
+  ).then((envelope) => envelope.event.payload);
+}
+
 async function connect(url: string): Promise<Socket> {
   const socket = createClient(url, { transports: ["websocket"], reconnection: false });
   if (socket.connected) return socket;
@@ -160,8 +198,13 @@ test("accepted slaps survive disconnect pause", { timeout: 45_000 }, async () =>
     })).success, true);
 
     let latestState: PublicEgyptianWarState | null = null;
-    host.on("egyptian-war-state", (state: PublicEgyptianWarState) => {
-      latestState = state;
+    host.on("game-state", (envelope: {
+      gameId: string;
+      state: PublicEgyptianWarState;
+    }) => {
+      if (envelope.gameId === "egyptian-war") {
+        latestState = envelope.state;
+      }
     });
     assert.equal((await emitAck(host, "start-game", { roomCode })).success, true);
 
@@ -174,9 +217,8 @@ test("accepted slaps survive disconnect pause", { timeout: 45_000 }, async () =>
         !currentLatestState.isAnimating &&
         !currentLatestState.isPaused
           ? currentLatestState
-          : await waitForEvent<PublicEgyptianWarState>(
+          : await waitForEgyptianWarState(
             host,
-            "egyptian-war-state",
             (state) => !state.isAnimating && !state.isPaused,
             5_000
           );
@@ -196,10 +238,10 @@ test("accepted slaps survive disconnect pause", { timeout: 45_000 }, async () =>
     }
 
     assert.ok(latestState?.isSlappable, "expected the shuffled game to reach a valid slap");
-    const animationPromise = waitForEvent<{
+    const animationPromise = waitForEgyptianWarEvent<{
       action: string;
       slapAttempts: Array<{ playerId: string; delayMs: number; isWinner: boolean }>;
-    }>(host, "egyptian-war-animation", (value) => value.action === "slap", 5_000);
+    }>(host, "animation", (value) => value.action === "slap", 5_000);
 
     assert.equal(
       (await emitEgyptianWarAction(host, roomCode, "slap")).success,
@@ -218,9 +260,8 @@ test("accepted slaps survive disconnect pause", { timeout: 45_000 }, async () =>
     assert.equal(animation.slapAttempts.length, 2);
     assert.equal(animation.slapAttempts.filter((attempt) => attempt.isWinner).length, 1);
     assert.ok(animation.slapAttempts.every((attempt) => Number.isFinite(attempt.delayMs)));
-    const pausedState = await waitForEvent<PublicEgyptianWarState>(
+    const pausedState = await waitForEgyptianWarState(
       host,
-      "egyptian-war-state",
       (state) => state.isPaused,
       5_000
     );
@@ -259,18 +300,12 @@ test("late joiners spectate without pausing gameplay and return to the lobby as 
       gameId: "egyptian-war"
     })).success, true);
 
-    const initialStatePromise = waitForEvent<PublicEgyptianWarState>(
-      host,
-      "egyptian-war-state"
-    );
+    const initialStatePromise = waitForEgyptianWarState(host);
     assert.equal((await emitAck(host, "start-game", { roomCode })).success, true);
     const initialState = await initialStatePromise;
 
     spectator = await connect(url);
-    const spectatorStatePromise = waitForEvent<PublicEgyptianWarState>(
-      spectator,
-      "egyptian-war-state"
-    );
+    const spectatorStatePromise = waitForEgyptianWarState(spectator);
     const spectatorListPromise = waitForEvent<Array<{
       id: string;
       name: string;
@@ -332,10 +367,7 @@ test("late joiners spectate without pausing gameplay and return to the lobby as 
     );
 
     resumedSpectator = await connect(url);
-    const resumedStatePromise = waitForEvent<PublicEgyptianWarState>(
-      resumedSpectator,
-      "egyptian-war-state"
-    );
+    const resumedStatePromise = waitForEgyptianWarState(resumedSpectator);
     const reconnectedListPromise = waitForEvent<Array<{
       name: string;
       isConnected: boolean;
