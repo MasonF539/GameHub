@@ -1,4 +1,10 @@
 (function initializeGameClientHost(globalScope) {
+  const pendingModules = new Map();
+
+  globalScope.GameHubRegisterGameClientModule = (gameId, gameModule) => {
+    pendingModules.set(gameId, gameModule);
+  };
+
   class GameClientHost {
     constructor({ root, createContext }) {
       if (!root) {
@@ -11,6 +17,9 @@
       this.root = root;
       this.createContext = createContext;
       this.modules = new Map();
+      for (const [gameId, gameModule] of pendingModules) {
+        this.register(gameId, gameModule);
+      }
       this.activeGameId = null;
       this.activeInstance = null;
     }
@@ -73,6 +82,10 @@
       if (gameId === this.activeGameId && event) {
         this.activeInstance?.receiveEvent(event);
       }
+    }
+
+    receivePlatformEvent(event) {
+      this.activeInstance?.receivePlatformEvent?.(event);
     }
 
     unmount() {

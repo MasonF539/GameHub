@@ -46,6 +46,8 @@ function createClient({ prefersReducedMotion = false } = {}) {
     }
   };
   window.GameHubGameClientHost = GameClientHost;
+  window.GameHubRegisterGameClientModule =
+    global.GameHubRegisterGameClientModule;
   global.bootstrap = {
     Toast: { getOrCreateInstance: () => ({ show() {} }) },
     Modal: {
@@ -75,12 +77,18 @@ function createClient({ prefersReducedMotion = false } = {}) {
     return interval;
   };
 
+  const gameModulePath = require.resolve(
+    "../games/egyptian-war/public/client.js"
+  );
   const modulePath = require.resolve("../public/client.js");
+  delete require.cache[gameModulePath];
   delete require.cache[modulePath];
+  require(gameModulePath);
   require(modulePath);
   global.setInterval = originalSetInterval;
 
   const close = () => {
+    handlers.get("game-ended")?.({ message: "Test cleanup" });
     intervals.forEach((interval) => clearInterval(interval));
     dom.window.close();
   };

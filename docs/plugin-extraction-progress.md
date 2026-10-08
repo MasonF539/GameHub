@@ -20,10 +20,15 @@ to an independently versioned GameHub plugin.
 - Made the root `check` command type-check every workspace.
 - Added `GAMEHUB_GAME_PACKAGES` configuration and manifest-driven loading for
   package markup, styles, scripts, definitions, and static public routes.
+- Moved the complete Egyptian War browser controller into the game package,
+  including rendering, animations, controls, chat, spectators, and audio.
+- Extended the SDK browser context with generic platform services for pause,
+  chat, member removal, notifications, and host state.
+- Added package-side browser module registration and generic platform-event
+  routing without game-specific code in `public/client.js`.
 
 ## In progress
 
-- Remove remaining Egyptian War assumptions from GameHub's browser client.
 - Move authoritative timers, arbitration orchestration, and member lifecycle
   handling behind the package `GameSession`.
 

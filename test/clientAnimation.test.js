@@ -65,7 +65,9 @@ function createClient(reducedMotion = false) {
     intervals.push(interval);
     return interval;
   };
-  const modulePath = require.resolve("../public/client.js");
+  const modulePath = require.resolve(
+    "../games/egyptian-war/public/client.js"
+  );
   delete require.cache[modulePath];
   const client = require(modulePath);
   global.setInterval = originalSetInterval;

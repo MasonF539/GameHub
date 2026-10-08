@@ -154,8 +154,6 @@ export const egyptianWar: GameDefinition = {
   ]
 };
 
-// Egyptian War still uses GameHub's embedded client while its browser UI and
-// server lifecycle are moved behind the plugin contracts.
 export const egyptianWarManifest: GamePluginManifest = {
   apiVersion: gameHubGameApiVersion,
   packageVersion: "1.0.0",
@@ -163,7 +161,7 @@ export const egyptianWarManifest: GamePluginManifest = {
   client: {
     delivery: "embedded",
     markupPath: "template.html",
-    entryPaths: ["register.js"],
+    entryPaths: ["register.js", "client.js"],
     stylePaths: ["style.css"]
   }
 };

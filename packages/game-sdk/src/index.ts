@@ -28,6 +28,7 @@ export type {
   GameEventEnvelope,
   GameMember,
   GameMemberRole,
+  GamePlatformEvent,
   GameServerPlugin,
   GameSession,
   GameSessionContext,

@@ -93,15 +93,26 @@ export type GameClientContext = {
   gameId: string;
   memberId: string;
   role: GameMemberRole;
+  isHost: boolean;
   launchData: unknown;
   audio: GameAudioApi;
   submitAction(action: GameActionEnvelope): Promise<GameActionResult>;
+  requestPause(isPaused: boolean): Promise<GameActionResult>;
+  sendChat(message: string): Promise<GameActionResult>;
+  removeMember(memberId: string): Promise<GameActionResult>;
+  notify(message: string): void;
   requestExit(): void;
+};
+
+export type GamePlatformEvent = {
+  type: "spectators" | "chat-message";
+  payload: unknown;
 };
 
 export interface GameClientInstance {
   receiveState(state: unknown): void;
   receiveEvent(event: GameEvent): void;
+  receivePlatformEvent?(event: GamePlatformEvent): void;
   setPaused?(isPaused: boolean): void;
   destroy(): void;
 }

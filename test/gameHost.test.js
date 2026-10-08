@@ -5,6 +5,7 @@ const { GameClientHost } = require("../public/gameHost.js");
 test("mounts one registered game client and routes only its envelopes", () => {
   const receivedStates = [];
   const receivedEvents = [];
+  const platformEvents = [];
   let destroyCount = 0;
   const root = {};
   const host = new GameClientHost({
@@ -20,6 +21,7 @@ test("mounts one registered game client and routes only its envelopes", () => {
       return {
         receiveState: (state) => receivedStates.push(state),
         receiveEvent: (event) => receivedEvents.push(event),
+        receivePlatformEvent: (event) => platformEvents.push(event),
         destroy: () => {
           destroyCount += 1;
         }
@@ -31,9 +33,11 @@ test("mounts one registered game client and routes only its envelopes", () => {
   host.receiveState({ gameId: "other", state: "ignored" });
   host.receiveState({ gameId: "first", state: "visible" });
   host.receiveEvent({ gameId: "first", event: { type: "animation" } });
+  host.receivePlatformEvent({ type: "spectators", payload: [] });
 
   assert.deepEqual(receivedStates, ["visible"]);
   assert.deepEqual(receivedEvents, [{ type: "animation" }]);
+  assert.deepEqual(platformEvents, [{ type: "spectators", payload: [] }]);
   host.unmount();
   assert.equal(destroyCount, 1);
 });
