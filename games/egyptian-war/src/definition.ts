@@ -1,8 +1,8 @@
-import type { GameDefinition } from "../gameDefinition.js";
 import {
   gameHubGameApiVersion,
+  type GameDefinition,
   type GamePluginManifest
-} from "../../game-sdk/manifest.js";
+} from "@gamehub/game-sdk";
 
 export type CardSuit =
   | "clubs"

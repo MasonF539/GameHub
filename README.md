@@ -114,13 +114,24 @@ docker compose --profile public down
 
 ## Project structure
 
+GameHub uses npm workspaces so the plugin boundary is exercised before the
+packages are moved into separate repositories. `packages/game-sdk` contains
+the shared contracts, while `games/egyptian-war` owns the independently
+buildable game engine, tests, documentation, and package metadata. Browser
+presentation and media are the next part of the migration.
+
 ```text
 GameHub/
 ├── .vscode/
 │   └── tasks.json
 ├── docs/
-│   ├── egyptian-war-design.md
 │   └── game-plugin-architecture.md
+├── games/
+│   └── egyptian-war/
+│       ├── docs/
+│       ├── src/
+│       ├── package.json
+│       └── tsconfig.json
 ├── public/
 │   ├── assets/
 │   │   ├── audio/
@@ -131,26 +142,18 @@ GameHub/
 │   ├── client.js
 │   ├── index.html
 │   └── style.css
+├── packages/
+│   └── game-sdk/
+│       ├── src/
+│       ├── package.json
+│       └── tsconfig.json
 ├── src/
-│   ├── game-sdk/
-│   │   ├── gameDefinition.ts
-│   │   ├── index.ts
-│   │   ├── manifest.ts
-│   │   ├── plugin.ts
-│   │   ├── registry.ts
-│   │   └── registry.test.ts
-│   ├── games/
-│   │   ├── egyptianWar/
-│   │   │   ├── definition.ts
-│   │   │   ├── engine.ts
-│   │   │   ├── engine.test.ts
-│   │   │   └── slapArbitration.ts
-│   │   └── gameDefinition.ts
 │   ├── server.integration.test.ts
 │   └── server.ts
 ├── test/
 │   ├── audio.test.js
 │   ├── clientAnimation.test.js
+│   ├── gameHost.test.js
 │   └── gamePicker.test.js
 ├── .dockerignore
 ├── .gitignore

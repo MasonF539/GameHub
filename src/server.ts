@@ -5,9 +5,7 @@ import path from "path";
 import { Server, type Socket } from "socket.io";
 import {
   egyptianWar,
-  egyptianWarManifest
-} from "./games/egyptianWar/definition.js";
-import {
+  egyptianWarManifest,
   applyEgyptianWarAction,
   createEgyptianWarState,
   createPublicEgyptianWarState,
@@ -17,21 +15,18 @@ import {
   type EgyptianWarAction,
   EgyptianWarRuleError,
   type EgyptianWarSettings,
-  type EgyptianWarState
-} from "./games/egyptianWar/engine.js";
-import type { GameSetting } from "./games/gameDefinition.js";
-import { GamePluginRegistry } from "./game-sdk/registry.js";
+  type EgyptianWarState,
+  defaultSlapJitterMs,
+  selectWeightedSlapWinner,
+  slapCollectionWindowMs
+} from "@gamehub/egyptian-war";
+import { GamePluginRegistry, type GameSetting } from "@gamehub/game-sdk";
 import type {
   GameActionEnvelope,
   GameEvent,
   GameSession,
   GameViewer
-} from "./game-sdk/plugin.js";
-import {
-  defaultSlapJitterMs,
-  selectWeightedSlapWinner,
-  slapCollectionWindowMs
-} from "./games/egyptianWar/slapArbitration.js";
+} from "@gamehub/game-sdk";
 
 type GameSettingValue = boolean | number;
 

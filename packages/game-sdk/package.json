@@ -1,0 +1,20 @@
+{
+  "name": "@gamehub/game-sdk",
+  "version": "1.0.0",
+  "description": "Versioned contracts for GameHub game plugins.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "test": "node --test dist/*.test.js"
+  },
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "@types/node": "^26.6.4",
+    "typescript": "^7.0.2"
+  }
+}

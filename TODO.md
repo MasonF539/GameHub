@@ -37,6 +37,7 @@
 - [ ] Move active room state and game actions behind the generic `GameSession` lifecycle.
 - [x] Remove the temporary Egyptian-War-specific Socket.IO compatibility events after introducing the session adapter.
 - [x] Add a generic browser game host and route active `GameClientModule` state and events through it.
+- [x] Establish independently buildable GameHub SDK and Egyptian War workspaces with package-name imports.
 - [ ] Move Egyptian War markup, styles, previews, and game audio into its package boundary.
 - [ ] Load installed game packages from explicit administrator-controlled configuration.
 - [ ] Extract Egyptian War into its own repository and reinstall it as a pinned package dependency.

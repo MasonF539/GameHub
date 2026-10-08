@@ -1,0 +1,25 @@
+{
+  "name": "@gamehub/egyptian-war",
+  "version": "1.0.0",
+  "description": "Egyptian War game plugin for GameHub.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "docs",
+    "public"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "test": "node --test dist/*.test.js"
+  },
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@gamehub/game-sdk": "1.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.4",
+    "typescript": "^7.0.2"
+  }
+}

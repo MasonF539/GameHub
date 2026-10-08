@@ -10,7 +10,8 @@ Game packages execute trusted server code. They are not a sandbox for packages s
 
 ## Versioned contracts
 
-The contracts under `src/game-sdk` are the initial GameHub game API:
+The independently buildable `@gamehub/game-sdk` workspace under
+`packages/game-sdk` contains the initial GameHub game API:
 
 - `GamePluginManifest` identifies the API version, package version, public game definition, and client delivery method.
 - `GameServerPlugin` creates an authoritative `GameSession` for a room.
@@ -22,7 +23,14 @@ The manifest API and package version are separate. `apiVersion` describes compat
 
 ## Transitional state
 
-Egyptian War is registered with a valid versioned manifest, but its delivery mode is currently `embedded`. Active rooms now expose it through a transitional `GameSession` adapter, and the browser mounts its embedded `GameClientModule` through the generic game host. State, event, and action traffic uses generic envelopes. Timer and animation orchestration is still handled directly by `server.ts`, while markup, styles, and most browser logic remain in GameHub's shared public files. This preserves the working game while those responsibilities are moved behind the contracts.
+Egyptian War is now an independently buildable `@gamehub/egyptian-war`
+workspace under `games/egyptian-war`, and GameHub imports its public server API
+by package name. Its delivery mode is still `embedded`. Active rooms expose it
+through a transitional `GameSession` adapter, and the browser mounts its
+embedded `GameClientModule` through the generic game host. State, event, and
+action traffic uses generic envelopes. Timer and animation orchestration is
+still handled directly by `server.ts`, while markup, styles, and most browser
+logic remain in GameHub's shared public files.
 
 The intended migration order is:
 
