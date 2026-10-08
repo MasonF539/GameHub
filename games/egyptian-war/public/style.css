@@ -1,0 +1,1351 @@
+#gameplay-view {
+  width: 100%;
+  max-width: 76rem;
+  background:
+    radial-gradient(ellipse 65% 75% at 50% 44%, #727275 0%, #262629 56%, #17171a 100%);
+}
+
+body:has(#gameplay-view:not(.d-none)) {
+  overflow: hidden;
+}
+
+body:has(#gameplay-view:not(.d-none))>main {
+  width: 100%;
+  max-width: none;
+  height: 100dvh;
+  padding: 0.5rem !important;
+}
+
+body:has(#gameplay-view:not(.d-none))>main>header {
+  display: none;
+}
+
+body:has(#gameplay-view:not(.d-none)) #gameplay-view {
+  height: 100%;
+  max-width: 100rem;
+}
+
+.egyptian-war-controls {
+  max-width: 38rem;
+  flex: 0 0 auto;
+  margin: 0 auto;
+}
+
+.egyptian-war-turn-timer {
+  display: flex;
+  width: min(100%, 28rem);
+  margin-inline: auto;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.egyptian-war-turn-timer.is-hidden {
+  visibility: hidden;
+}
+
+.egyptian-war-turn-timer .progress {
+  position: relative;
+  height: 1.65rem;
+  overflow: hidden;
+  background:
+    linear-gradient(90deg,
+      rgba(24, 112, 181, 0.92) 0%,
+      rgba(29, 88, 139, 0.82) 38%,
+      rgba(45, 68, 91, 0.72) 68%,
+      rgba(255, 255, 255, 0.15) 100%);
+}
+
+.egyptian-war-turn-timer .progress-bar {
+  position: relative;
+  z-index: 2;
+}
+
+.egyptian-war-timer-sleep-pattern {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0 0.35rem 0 0.6rem;
+  color: rgba(236, 241, 247, 0.82);
+  font-size: clamp(0.56rem, 1vw, 0.72rem);
+  font-style: italic;
+  font-weight: 900;
+  letter-spacing: -0.04em;
+  text-align: center;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.75);
+  white-space: nowrap;
+}
+
+.egyptian-war-sleeping-bear {
+  font-size: 1rem;
+  font-style: normal;
+  letter-spacing: 0;
+}
+
+.egyptian-war-final-sleeper {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.16rem;
+}
+
+.egyptian-war-sleep-zs {
+  display: inline-flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 0.03rem;
+  min-height: 1.1rem;
+}
+
+.egyptian-war-sleep-zs>span:nth-child(1) {
+  font-size: 0.58rem;
+}
+
+.egyptian-war-sleep-zs>span:nth-child(2) {
+  font-size: 0.68rem;
+  transform: translateY(-0.16rem);
+}
+
+.egyptian-war-sleep-zs>span:nth-child(3) {
+  font-size: 0.78rem;
+  transform: translateY(-0.34rem);
+}
+
+.egyptian-war-sleep-zs>span:nth-child(4) {
+  font-size: 0.88rem;
+  transform: translateY(-0.52rem);
+}
+
+.egyptian-war-turn-timer-value {
+  width: 3.25rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  text-align: right;
+}
+
+.egyptian-war-game-panel {
+  --egyptian-war-card-width: clamp(5.25rem, 12vw, 7.5rem);
+  --egyptian-war-card-height: clamp(7.5rem, 16.5vw, 10.5rem);
+  position: relative;
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+  padding: clamp(0.65rem, 1.6vh, 1.25rem) !important;
+  overflow: hidden;
+}
+
+.egyptian-war-game-panel>.card-title {
+  flex: 0 0 auto;
+  margin-bottom: clamp(0.2rem, 0.8vh, 0.75rem);
+  font-size: clamp(1.2rem, 2.5vh, 2rem);
+}
+
+.server-connection-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0;
+  margin: 0;
+  color: #f8f9fa !important;
+  background: transparent !important;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.egyptian-war-connection-status {
+  align-self: flex-end;
+}
+
+.server-connection-status::before {
+  width: 0.55rem;
+  height: 0.55rem;
+  flex: 0 0 auto;
+  content: "";
+  background: #ffc107;
+  border-radius: 50%;
+  box-shadow: 0 0 0.4rem rgba(255, 193, 7, 0.7);
+}
+
+.server-connection-status.text-bg-success::before {
+  background: #20c973;
+  box-shadow: 0 0 0.4rem rgba(32, 201, 115, 0.7);
+}
+
+.server-connection-status.text-bg-danger::before {
+  background: #dc3545;
+  box-shadow: 0 0 0.4rem rgba(220, 53, 69, 0.7);
+}
+
+.egyptian-war-play-layout {
+  position: relative;
+  display: block;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+.egyptian-war-board-column {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.egyptian-war-top-right {
+  position: absolute;
+  top: 1.5rem;
+  right: 1.5rem;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.45rem;
+}
+
+.network-ping {
+  padding: 0.2rem 0.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+  background: rgba(14, 24, 19, 0.82);
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.egyptian-war-host-controls {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.egyptian-war-host-controls.d-none {
+  display: none;
+}
+
+.egyptian-war-host-controls .btn {
+  white-space: nowrap;
+}
+
+.egyptian-war-slap-rules {
+  position: absolute;
+  top: 1.5rem;
+  left: 1.5rem;
+  z-index: 3;
+  width: min(15rem, 30%);
+  padding: 0.65rem 0.8rem;
+  color: #f8f9fa;
+  background: rgba(14, 24, 19, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 0.65rem;
+  font-size: 0.75rem;
+  line-height: 1.3;
+}
+
+.egyptian-war-slap-rules-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.35rem;
+}
+
+.egyptian-war-slap-rules h3 {
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+.egyptian-war-slap-rules-heading .btn {
+  padding: 0.1rem 0.4rem;
+  font-size: 0.65rem;
+}
+
+.egyptian-war-slap-rules ul {
+  padding-left: 1rem;
+  margin: 0;
+}
+
+.egyptian-war-slap-rules li+li {
+  margin-top: 0.2rem;
+}
+
+.egyptian-war-arena {
+  position: relative;
+  width: 100%;
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  isolation: isolate;
+  border-radius: 1.25rem;
+}
+
+.egyptian-war-turn-inline {
+  min-height: 1.35em;
+  margin: 0 0 0.15rem;
+  font-size: clamp(0.9rem, 2.1vh, 1.35rem);
+  font-weight: 700;
+  text-align: center;
+}
+
+.egyptian-war-felt {
+  position: absolute;
+  inset: 5% 16% 12%;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background:
+    radial-gradient(ellipse 58% 68% at 50% 43%, rgba(126, 236, 160, 0.4) 0%, rgba(87, 194, 128, 0.24) 48%, transparent 100%),
+    repeating-linear-gradient(22deg, rgba(255, 255, 255, 0.012) 0 2px, rgba(0, 0, 0, 0.012) 2px 4px),
+    linear-gradient(155deg, rgba(255, 255, 255, 0.06) 0%, transparent 55%, rgba(0, 0, 0, 0.05) 100%),
+    linear-gradient(155deg, #2a8559 0%, #1b6a46 60%, #105136 100%);
+  border: 0.8rem solid #58351f;
+  border-radius: 50%;
+  box-shadow:
+    inset 0 0 0 0.28rem #c39150,
+    inset 0 0 0 0.52rem #2a1a11,
+    inset 0 0.65rem 1rem rgba(255, 255, 255, 0.07),
+    inset 0 -1.2rem 2rem rgba(0, 0, 0, 0.32),
+    0 0.35rem 0 #745033,
+    0 0.7rem 0 #4d2d1b,
+    0 1.05rem 0 #321b10,
+    0 1.35rem 0 #21130d,
+    0 2.5rem 2rem -0.2rem rgba(0, 0, 0, 0.82),
+    0 0 0 0.18rem #23140d;
+}
+
+.egyptian-war-felt::before {
+  position: absolute;
+  z-index: 0;
+  inset: 0.58rem;
+  content: "";
+  border: 1px solid rgba(246, 211, 145, 0.32);
+  border-radius: 50%;
+  box-shadow:
+    inset 0 0.2rem 0.45rem rgba(255, 255, 255, 0.08),
+    inset 0 -0.75rem 1.3rem rgba(0, 0, 0, 0.2);
+  pointer-events: none;
+}
+
+.egyptian-war-felt::after {
+  position: absolute;
+  z-index: 0;
+  inset: 1.15rem;
+  content: "";
+  background:
+    radial-gradient(circle at 30% 28%, rgba(255, 255, 255, 0.035) 0 1px, transparent 1.5px),
+    radial-gradient(circle at 68% 72%, rgba(0, 0, 0, 0.055) 0 1px, transparent 1.5px);
+  background-size: 9px 9px, 11px 11px;
+  border-radius: 50%;
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.egyptian-war-table-info {
+  position: relative;
+  z-index: 1;
+  width: min(66%, 25rem);
+  padding: 0.75rem;
+  text-align: center;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+}
+
+.egyptian-war-pile-label {
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.egyptian-war-pile-stack {
+  position: relative;
+  width: 100%;
+  height: 13rem;
+  margin: 0 auto 0.35rem;
+}
+
+.egyptian-war-empty-pile {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 0.9rem;
+  font-style: italic;
+}
+
+.egyptian-war-empty-pile[hidden] {
+  display: none;
+}
+
+.playing-card {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: grid;
+  width: var(--egyptian-war-card-width);
+  height: var(--egyptian-war-card-height);
+  place-items: center;
+  color: #17191d;
+  background:
+    radial-gradient(circle at 28% 20%, rgba(255, 255, 255, 0.96), transparent 38%),
+    linear-gradient(145deg, #fffef8 0%, #f5f1e7 70%, #ddd6c6 100%);
+  border: 2px solid rgba(36, 31, 25, 0.7);
+  border-radius: 0.65rem;
+  box-shadow:
+    inset 0 0 0 0.18rem rgba(255, 255, 255, 0.72),
+    inset 0 -0.35rem 0.75rem rgba(83, 65, 43, 0.12),
+    0 0.18rem 0 rgba(66, 49, 29, 0.72),
+    0 0.75rem 1rem rgba(0, 0, 0, 0.48);
+  font-family: Georgia, "Times New Roman", serif;
+  font-weight: 700;
+  transform:
+    translate(calc(-50% + var(--stack-x, 0px)), calc(-50% + var(--stack-y, 0px))) rotate(var(--stack-rotation, 0deg));
+}
+
+.playing-card::before {
+  position: absolute;
+  inset: 0.38rem;
+  content: "";
+  border: 1px solid rgba(80, 62, 39, 0.14);
+  border-radius: 0.4rem;
+  pointer-events: none;
+}
+
+.playing-card.is-red {
+  color: #c62828;
+}
+
+.playing-card-corner {
+  position: absolute;
+  top: 0.25rem;
+  left: 0.3rem;
+  display: grid;
+  font-size: 1.05rem;
+  line-height: 0.95;
+  text-align: center;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+.playing-card-corner.is-opposite {
+  top: auto;
+  right: 0.3rem;
+  bottom: 0.25rem;
+  left: auto;
+  transform: rotate(180deg);
+}
+
+.playing-card-center {
+  font-size: clamp(2.55rem, 6vw, 3.75rem);
+  line-height: 1;
+  filter: drop-shadow(0 0.12rem 0 rgba(0, 0, 0, 0.16));
+}
+
+.playing-card.is-face-card .playing-card-center {
+  padding: 0.38em;
+  background: rgba(210, 177, 95, 0.12);
+  border: 1px solid rgba(139, 103, 34, 0.28);
+  border-radius: 50%;
+}
+
+.playing-card.is-joker {
+  color: #6e2f78;
+  background:
+    radial-gradient(circle at 50% 42%, rgba(255, 235, 122, 0.48), transparent 35%),
+    linear-gradient(145deg, #fffdf2 0%, #f7e9ff 52%, #dcecff 100%);
+  border-color: #a3762d;
+}
+
+.playing-card.is-joker::before {
+  border-color: rgba(141, 76, 153, 0.32);
+  box-shadow: inset 0 0 1rem rgba(255, 202, 67, 0.15);
+}
+
+.playing-card.is-joker .playing-card-corner {
+  top: 0.58rem;
+  bottom: auto;
+  left: 0.32rem;
+  color: #8e3d99;
+  font-family: "Trebuchet MS", fantasy;
+  font-size: 0.68rem;
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  text-orientation: upright;
+  transform: none;
+  writing-mode: vertical-rl;
+}
+
+.playing-card.is-joker .playing-card-corner.is-opposite {
+  top: auto;
+  right: 0.32rem;
+  bottom: 0.58rem;
+  left: auto;
+  transform: none;
+}
+
+.playing-card.is-joker .playing-card-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  color: #71357c;
+  font-family: Georgia, "Times New Roman", serif;
+  filter: drop-shadow(0 0.2rem 0.14rem rgba(80, 34, 84, 0.24));
+}
+
+.playing-card-joker-monogram {
+  font-size: clamp(3.25rem, 7.2vw, 4.75rem);
+  font-style: italic;
+  font-weight: 900;
+  line-height: 0.82;
+  text-shadow:
+    0.06em 0.05em 0 #e0af3e,
+    -0.035em -0.025em 0 #375e9e;
+}
+
+.playing-card-joker-ornament {
+  margin-top: 0.22rem;
+  color: #ad7621;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(0.65rem, 1.7vw, 0.95rem);
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+
+.playing-card.is-dealing {
+  animation: egyptian-war-card-flight 480ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
+}
+
+@keyframes egyptian-war-card-flight {
+  from {
+    translate: var(--fly-x, 0px) var(--fly-y, 0px);
+    scale: 0.72;
+    opacity: 0.45;
+  }
+
+  to {
+    translate: 0 0;
+    scale: 1;
+    opacity: 1;
+  }
+}
+
+.egyptian-war-card-play-hand {
+  position: absolute;
+  z-index: 7;
+  font-size: calc(var(--egyptian-war-card-width) * 0.78);
+  filter: drop-shadow(0 0.35rem 0.3rem rgba(0, 0, 0, 0.55));
+  pointer-events: none;
+  animation: egyptian-war-card-play-hand-travel 620ms cubic-bezier(0.2, 0.78, 0.28, 1) both;
+}
+
+.egyptian-war-card-play-hand-glyph {
+  display: block;
+  transform-origin: center;
+  animation: egyptian-war-card-play-hand-turn 620ms cubic-bezier(0.2, 0.78, 0.28, 1) both;
+}
+
+@keyframes egyptian-war-card-play-hand-travel {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%);
+  }
+
+  12% {
+    opacity: 1;
+  }
+
+  68%,
+  78% {
+    opacity: 1;
+    transform:
+      translate(calc(-50% + var(--play-hand-x)),
+        calc(-50% + var(--play-hand-y)));
+  }
+
+  100% {
+    opacity: 0;
+    transform:
+      translate(calc(-50% + var(--play-hand-retreat-x)),
+        calc(-50% + var(--play-hand-retreat-y)));
+  }
+}
+
+@keyframes egyptian-war-card-play-hand-turn {
+  0% {
+    transform: rotate(calc(var(--play-hand-rotation) - 12deg)) scale(0.72);
+  }
+
+  68% {
+    transform: rotate(var(--play-hand-rotation)) scale(1);
+  }
+
+  78% {
+    transform: rotate(calc(var(--play-hand-rotation) + 3deg)) scale(0.96);
+  }
+
+  100% {
+    transform: rotate(var(--play-hand-rotation)) scale(0.78);
+  }
+}
+
+.egyptian-war-challenge {
+  min-height: 1.4rem;
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.egyptian-war-message {
+  min-height: 2rem;
+  color: #fff4d6;
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+
+.egyptian-war-seats {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  pointer-events: none;
+}
+
+.egyptian-war-seat {
+  position: absolute;
+  display: flex;
+  width: clamp(8rem, 18vw, 10.5rem);
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.55rem 0.65rem;
+  color: #f8f9fa;
+  background: rgba(24, 28, 36, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 0.9rem;
+  box-shadow: 0 0.45rem 1rem rgba(0, 0, 0, 0.42);
+  transform: translate(-50%, -50%);
+  transition:
+    border-color 150ms ease,
+    box-shadow 150ms ease,
+    opacity 150ms ease;
+}
+
+.egyptian-war-seat.is-current {
+  color: #fff;
+  background:
+    linear-gradient(135deg, rgba(42, 111, 76, 0.98), rgba(26, 79, 57, 0.98));
+  border-color: #b3ffbf;
+  box-shadow:
+    0 0 0 2px rgba(159, 255, 174, 0.9),
+    0 0 1.5rem rgba(126, 231, 135, 0.8),
+    inset 0 0 1.2rem rgba(169, 255, 181, 0.25);
+}
+
+.egyptian-war-seat.is-pile-winner {
+  border-color: #ffe08a;
+  box-shadow:
+    0 0 0 2px rgba(255, 205, 74, 0.95),
+    0 0 1.4rem rgba(255, 193, 7, 0.9),
+    inset 0 0 1rem rgba(255, 217, 110, 0.32);
+  animation: egyptian-war-winner-glow 650ms ease-in-out 4 alternate;
+}
+
+@keyframes egyptian-war-winner-glow {
+  from {
+    filter: brightness(1);
+  }
+
+  to {
+    filter: brightness(1.55);
+  }
+}
+
+.egyptian-war-seat.is-eliminated {
+  opacity: 0.58;
+  filter: grayscale(0.75);
+}
+
+.egyptian-war-seat.is-disconnected {
+  color: #d2d2d2;
+  background: rgba(91, 94, 99, 0.96);
+  border-color: #858585;
+  box-shadow: 0 0.35rem 0.8rem rgba(0, 0, 0, 0.5);
+}
+
+.egyptian-war-seat.is-disconnected .player-avatar,
+.egyptian-war-seat.is-disconnected .egyptian-war-seat-details {
+  opacity: 0.58;
+  filter: grayscale(1);
+}
+
+.egyptian-war-disconnected-actions {
+  position: absolute;
+  top: calc(100% + 0.2rem);
+  left: 50%;
+  z-index: 5;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  white-space: nowrap;
+  pointer-events: auto;
+}
+
+.egyptian-war-seat .player-avatar {
+  width: 3rem;
+  height: 3rem;
+  flex-basis: 3rem;
+  font-size: 2rem;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.egyptian-war-seat-details {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.18rem;
+}
+
+.game-setting-number {
+  width: 6rem;
+  flex: 0 0 6rem;
+}
+
+.egyptian-war-seat .player-name {
+  width: 100%;
+  padding-bottom: 0.18rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.58);
+  text-align: left;
+  font-size: 0.88rem;
+}
+
+.egyptian-war-seat .egyptian-war-card-count {
+  color: #d5deea;
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+
+.egyptian-war-flying-hand {
+  position: absolute;
+  z-index: 5;
+  font-size: var(--egyptian-war-card-width);
+  filter: drop-shadow(0 0.4rem 0.35rem rgba(0, 0, 0, 0.55));
+  pointer-events: none;
+  animation:
+    egyptian-war-hand-travel 520ms cubic-bezier(0.2, 0.8, 0.25, 1) both;
+}
+
+.egyptian-war-flying-hand-glyph {
+  display: block;
+  transform-origin: center;
+  animation:
+    egyptian-war-hand-turn 520ms cubic-bezier(0.2, 0.8, 0.25, 1) both;
+  animation-delay: inherit;
+}
+
+@keyframes egyptian-war-hand-travel {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%);
+  }
+
+  60% {
+    opacity: 1;
+    transform:
+      translate(calc(-50% + var(--hand-x)),
+        calc(-50% + var(--hand-y)));
+  }
+
+  78% {
+    opacity: 1;
+    transform:
+      translate(calc(-50% + var(--hand-x)),
+        calc(-50% + var(--hand-y)));
+  }
+
+  100% {
+    opacity: 1;
+    transform:
+      translate(calc(-50% + var(--hand-x)),
+        calc(-50% + var(--hand-y)));
+  }
+}
+
+@keyframes egyptian-war-hand-turn {
+  0% {
+    transform: rotate(calc(var(--hand-rotation) - 18deg)) scale(0.65);
+  }
+
+  60% {
+    transform: rotate(calc(var(--hand-rotation) + 6deg)) scale(1.12);
+  }
+
+  78% {
+    transform: rotate(calc(var(--hand-rotation) - 3deg)) scale(0.97);
+  }
+
+  100% {
+    transform: rotate(var(--hand-rotation)) scale(1);
+  }
+}
+
+.egyptian-war-animation-layer {
+  position: absolute;
+  z-index: 4;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.egyptian-war-flying-card {
+  position: absolute;
+  z-index: 4;
+  display: grid;
+  width: 2rem;
+  height: 2.8rem;
+  place-items: center;
+  color: #f9ecd5;
+  background:
+    repeating-linear-gradient(45deg, #284b89 0 4px, #5278b4 4px 6px);
+  border: 2px solid #fff;
+  border-radius: 0.25rem;
+  box-shadow: 0 0.3rem 0.55rem rgba(0, 0, 0, 0.4);
+  transform: translate(-50%, -50%);
+  animation: egyptian-war-card-transfer 850ms cubic-bezier(0.22, 0.75, 0.25, 1) both;
+  pointer-events: none;
+}
+
+.egyptian-war-flying-card.is-final-card {
+  color: #8b5b00;
+  background: linear-gradient(135deg, #fff6ce, #f4bf45);
+  animation-duration: 1350ms;
+}
+
+.egyptian-war-flying-card.is-penalty-card {
+  animation-name: egyptian-war-penalty-card;
+  animation-duration: 700ms;
+}
+
+@keyframes egyptian-war-card-transfer {
+  from {
+    transform: translate(-50%, -50%) rotate(-8deg) scale(1);
+    opacity: 1;
+  }
+
+  to {
+    transform:
+      translate(calc(-50% + var(--card-x)),
+        calc(-50% + var(--card-y))) rotate(18deg) scale(0.55);
+    opacity: 0.15;
+  }
+}
+
+@keyframes egyptian-war-penalty-card {
+  from {
+    transform: translate(-50%, -50%) scale(0.8);
+    opacity: 1;
+  }
+
+  to {
+    transform:
+      translate(calc(-50% + var(--card-x)),
+        calc(-50% + var(--card-y))) rotate(-12deg) scale(0.55);
+    opacity: 0.2;
+  }
+}
+
+.egyptian-war-victory:not([hidden]) {
+  position: absolute;
+  z-index: 8;
+  top: 50%;
+  left: 50%;
+  display: grid;
+  width: min(calc(100% - 2rem), 24rem);
+  margin: 0;
+  padding: clamp(0.6rem, 1.5vw, 0.85rem) clamp(0.8rem, 2vw, 1.1rem);
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: clamp(0.65rem, 1.8vw, 1rem);
+  color: #fff0b3;
+  text-align: left;
+  background:
+    radial-gradient(circle at 12% 20%, rgba(255, 216, 107, 0.22), transparent 35%),
+    linear-gradient(145deg, rgba(18, 39, 28, 0.97), rgba(10, 24, 17, 0.96));
+  border: 1px solid rgba(255, 216, 107, 0.72);
+  border-radius: 1rem;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    0 0 1.2rem rgba(245, 189, 53, 0.26),
+    0 0.7rem 1.4rem rgba(0, 0, 0, 0.42);
+  animation: egyptian-war-victory-banner 650ms cubic-bezier(0.2, 0.85, 0.3, 1) both;
+}
+
+.egyptian-war-victory-avatar {
+  position: relative;
+  display: grid;
+  width: clamp(3.25rem, 8vw, 4.25rem);
+  height: clamp(3.25rem, 8vw, 4.25rem);
+  place-items: center;
+  font-size: clamp(2rem, 5vw, 2.8rem);
+  line-height: 1;
+  background: linear-gradient(145deg, #fff5bf, #dcae38);
+  border: 0.16rem solid #fff1a8;
+  border-radius: 50%;
+  box-shadow:
+    inset 0 0.18rem 0.35rem rgba(255, 255, 255, 0.52),
+    0 0.35rem 0.8rem rgba(0, 0, 0, 0.38);
+}
+
+.egyptian-war-victory-avatar::before {
+  position: absolute;
+  top: -0.8rem;
+  left: 50%;
+  content: "♛";
+  color: #ffd86b;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 1.1rem;
+  text-shadow: 0 2px 3px rgba(0, 0, 0, 0.7);
+  transform: translateX(-50%);
+}
+
+.egyptian-war-victory-details {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.egyptian-war-victory-heading {
+  color: #d8e3dc;
+  font-size: clamp(0.55rem, 1.4vw, 0.72rem);
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.egyptian-war-victory-winner {
+  overflow: hidden;
+  color: #ffe07b;
+  font-size: clamp(1.15rem, 3vw, 1.75rem);
+  font-weight: 900;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  text-shadow:
+    0 0 0.55rem rgba(245, 189, 53, 0.7),
+    0 2px 4px rgba(0, 0, 0, 0.85);
+  white-space: nowrap;
+}
+
+.egyptian-war-victory-champion {
+  margin-top: 0.2rem;
+  color: #f3d98d;
+  font-size: clamp(0.62rem, 1.5vw, 0.8rem);
+  font-weight: 750;
+  letter-spacing: 0.03em;
+}
+
+@keyframes egyptian-war-victory-banner {
+  from {
+    opacity: 0;
+    transform: translate(-50%, calc(-50% + 0.5rem)) scale(0.92);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+.egyptian-war-side-panel {
+  position: absolute;
+  bottom: 0;
+  left: 0.5rem;
+  z-index: 6;
+  display: flex;
+  width: clamp(22rem, 39vw, 39rem);
+  height: clamp(10.5rem, 22vh, 13rem);
+  max-width: calc(100% - 2rem);
+  max-height: calc(100% - 2.75rem);
+  flex-direction: column;
+  overflow: hidden;
+  background: rgba(25, 29, 38, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 0.85rem;
+  box-shadow: 0 0.8rem 1.8rem rgba(0, 0, 0, 0.38);
+  transition: height 180ms ease;
+}
+
+.egyptian-war-side-panel.is-expanded {
+  height: min(72vh, calc(100% - 2.75rem));
+}
+
+.egyptian-war-action-area {
+  position: relative;
+  z-index: 5;
+  width: clamp(28rem, 48vw, 44rem);
+  max-width: calc(100% - 2rem);
+  flex: 0 0 auto;
+  align-self: flex-end;
+  margin: 0 0.5rem 1rem 0;
+}
+
+.egyptian-war-action-area .egyptian-war-turn-timer {
+  width: calc(100% - 0.5rem);
+  max-width: none;
+}
+
+.egyptian-war-action-area .egyptian-war-controls {
+  width: 100%;
+  max-width: none;
+  margin-right: auto;
+  margin-left: auto;
+}
+
+.egyptian-war-action-area .egyptian-war-controls .btn {
+  position: relative;
+  display: flex;
+  min-height: 5.25rem;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-width: 2px;
+  border-radius: 0.9rem;
+  box-shadow:
+    inset 0 2px 0 rgba(255, 255, 255, 0.28),
+    inset 0 -0.48rem 0 rgba(0, 0, 0, 0.24),
+    0 0.2rem 0 #34200f,
+    0 0.7rem 1rem rgba(0, 0, 0, 0.42);
+  font-size: clamp(1.05rem, 1.7vw, 1.35rem);
+  font-weight: 900;
+  letter-spacing: 0.055em;
+  text-shadow: 0 2px 2px rgba(0, 0, 0, 0.58);
+}
+
+.egyptian-war-action-label,
+.egyptian-war-action-subtitle {
+  position: relative;
+  z-index: 1;
+}
+
+.egyptian-war-action-subtitle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.38rem;
+  margin-top: 0.35rem;
+  font-family: inherit;
+  font-size: 0.7rem;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  -webkit-text-stroke: 0.2px currentColor;
+}
+
+.egyptian-war-action-fire {
+  opacity: 1;
+  filter: none;
+  font-size: 0.9rem;
+  -webkit-text-stroke: 0;
+}
+
+.egyptian-war-action-area .egyptian-war-controls .btn::before {
+  position: absolute;
+  top: -70%;
+  left: -20%;
+  width: 45%;
+  height: 240%;
+  content: "";
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  transform: rotate(18deg);
+  pointer-events: none;
+}
+
+#egyptian-war-play-card {
+  color: #fff8df;
+  background: linear-gradient(145deg, #2fb27a 0%, #1c895a 55%, #105f3e 100%);
+  border-color: #d8b468;
+}
+
+#egyptian-war-slap {
+  color: #211600;
+  background: linear-gradient(145deg, #ffdb65 0%, #e8a91f 56%, #bd7408 100%);
+  border-color: #ffe2a8;
+  text-shadow: 0 1px 1px rgba(255, 255, 255, 0.42);
+}
+
+#egyptian-war-play-card:not(:disabled):hover {
+  border-color: #ffe09a;
+  box-shadow:
+    inset 0 2px 0 rgba(255, 255, 255, 0.32),
+    inset 0 -0.48rem 0 rgba(0, 0, 0, 0.2),
+    0 0.2rem 0 #34200f,
+    0 0.7rem 1.25rem rgba(47, 178, 122, 0.4);
+}
+
+#egyptian-war-slap:not(:disabled):hover {
+  border-color: #fff0bd;
+  box-shadow:
+    inset 0 2px 0 rgba(255, 255, 255, 0.5),
+    inset 0 -0.48rem 0 rgba(122, 70, 0, 0.2),
+    0 0.2rem 0 #65400a,
+    0 0.7rem 1.25rem rgba(255, 190, 40, 0.42);
+}
+
+#egyptian-war-play-card:disabled,
+#egyptian-war-slap:disabled {
+  filter: saturate(0.45);
+  opacity: 0.58;
+}
+
+.egyptian-war-side-expand {
+  display: flex;
+  width: 2.65rem;
+  min-width: 2.65rem;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: rgba(0, 0, 0, 0.28);
+  border-color: transparent;
+  border-radius: 0.4rem;
+}
+
+.egyptian-war-side-expand span {
+  width: 0.62rem;
+  height: 0.62rem;
+  border: solid currentColor;
+  border-width: 0 2px 2px 0;
+  transform: rotate(-135deg);
+}
+
+.egyptian-war-side-expand span+span {
+  margin-top: -0.3rem;
+}
+
+.egyptian-war-side-expand.is-collapse span {
+  transform: rotate(45deg);
+}
+
+.egyptian-war-side-panel-heading {
+  display: grid;
+  flex: 0 0 auto;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.35rem;
+  padding: 0.5rem;
+  background: rgba(7, 10, 15, 0.7);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: inset 0 -0.35rem 0.7rem rgba(0, 0, 0, 0.22);
+}
+
+.egyptian-war-side-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.35rem;
+  padding: 0.28rem;
+  background: rgba(0, 0, 0, 0.32);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 0.65rem;
+  box-shadow: inset 0 0.2rem 0.45rem rgba(0, 0, 0, 0.4);
+}
+
+.egyptian-war-spectators,
+.egyptian-war-chat {
+  min-height: 0;
+  flex: 1 1 auto;
+  padding: 0.65rem;
+}
+
+.egyptian-war-spectators[hidden],
+.egyptian-war-chat[hidden] {
+  display: none;
+}
+
+.egyptian-war-spectator-list {
+  max-height: 100%;
+  overflow-y: auto;
+  margin: 0;
+}
+
+.egyptian-war-spectator-list:empty::after {
+  display: block;
+  padding: 0.75rem;
+  color: #adb5bd;
+  font-size: 0.9rem;
+  content: "No one is spectating.";
+}
+
+.egyptian-war-spectator-list .list-group-item {
+  color: #f8f9fa;
+  background: rgba(0, 0, 0, 0.2);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.egyptian-war-chat-messages {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 0.35rem;
+  overflow-y: auto;
+  padding: 0.65rem;
+  margin: 0 0 0.65rem;
+  list-style: none;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 0.5rem;
+}
+
+.egyptian-war-chat-message {
+  overflow-wrap: anywhere;
+  font-size: 0.9rem;
+}
+
+.egyptian-war-chat-message strong {
+  color: #b9e6c7;
+}
+
+.egyptian-war-chat-form {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 0.5rem;
+}
+
+.egyptian-war-chat:not([hidden]) {
+  display: flex;
+  flex-direction: column;
+}
+
+@media (max-width: 767.98px) {
+.egyptian-war-play-layout {
+    position: relative;
+    display: block;
+  }
+
+  .egyptian-war-board-column {
+    height: 100%;
+  }
+
+  .egyptian-war-side-panel {
+    bottom: 0;
+    left: 0.5rem;
+    width: min(20rem, 58vw);
+    height: clamp(9rem, 22vh, 12rem);
+    background: rgba(25, 29, 38, 0.97);
+  }
+
+  .egyptian-war-side-panel.is-expanded {
+    height: min(68vh, calc(100% - 2.75rem));
+  }
+
+  .egyptian-war-action-area {
+    width: 39vw;
+    max-width: 39vw;
+    margin-right: 0.5rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .egyptian-war-action-area .egyptian-war-controls .btn {
+    padding-inline: 0.35rem;
+    font-size: clamp(0.75rem, 2.8vw, 1rem);
+  }
+
+  .egyptian-war-arena {
+    min-height: 0;
+  }
+
+  .egyptian-war-felt {
+    inset: 7% 3% 14%;
+    border-width: 0.5rem;
+    border-radius: 50%;
+  }
+
+  .egyptian-war-table-info {
+    width: 76%;
+    padding: 0.35rem;
+  }
+
+  .egyptian-war-pile-stack {
+    height: 10.875rem;
+  }
+
+  .egyptian-war-seat {
+    width: 7rem;
+    gap: 0.35rem;
+    padding: 0.35rem 0.4rem;
+  }
+
+  .egyptian-war-seat .player-avatar {
+    width: 2.2rem;
+    height: 2.2rem;
+    flex-basis: 2.2rem;
+    font-size: 1.5rem;
+  }
+
+  .egyptian-war-seat .player-name {
+    font-size: 0.72rem;
+  }
+
+  .egyptian-war-seat .egyptian-war-card-count {
+    font-size: 0.65rem;
+  }
+
+  .egyptian-war-top-right {
+    top: 0.8rem;
+    right: 0.8rem;
+  }
+
+.egyptian-war-slap-rules {
+    top: 0.8rem;
+    left: 0.8rem;
+    width: min(12rem, 42%);
+    padding: 0.45rem 0.55rem;
+    font-size: 0.65rem;
+  }
+
+  .egyptian-war-slap-rules h3 {
+    font-size: 0.75rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .egyptian-war-seat {
+    transition: none;
+  }
+
+.playing-card.is-dealing {
+    animation-duration: 1ms;
+  }
+
+.egyptian-war-flying-hand,
+  .egyptian-war-flying-hand-glyph,
+  .egyptian-war-flying-card,
+  .egyptian-war-seat.is-pile-winner,
+  .egyptian-war-victory:not([hidden]) {
+    animation-duration: 1ms;
+    animation-iteration-count: 1;
+  }
+}
+
+.egyptian-war-victory-heading,
+.egyptian-war-victory-winner {
+  display: block;
+}
+
+@media (max-height: 650px) {
+  .egyptian-war-game-panel>.card-title {
+    margin: 0;
+    font-size: 1rem;
+  }
+
+  .egyptian-war-side-panel {
+    height: min(10rem, 24vh);
+  }
+
+  .egyptian-war-controls .btn {
+    padding-block: 0.3rem;
+    font-size: 0.95rem;
+  }
+
+  .egyptian-war-pile-stack {
+    height: 8.25rem;
+  }
+}

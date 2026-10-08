@@ -39,7 +39,7 @@
 - [x] Add a generic browser game host and route active `GameClientModule` state and events through it.
 - [x] Establish independently buildable GameHub SDK and Egyptian War workspaces with package-name imports.
 - [x] Move Egyptian War preview media and game-specific audio into its package-owned public directory.
-- [ ] Move Egyptian War markup, styles, previews, and game audio into its package boundary.
+- [x] Move Egyptian War markup, styles, previews, and game audio into its package boundary.
 - [ ] Load installed game packages from explicit administrator-controlled configuration.
 - [ ] Extract Egyptian War into its own repository and reinstall it as a pinned package dependency.
 - [ ] Add a minimal second plugin to prove that GameHub contains no Egyptian War assumptions.

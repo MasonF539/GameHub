@@ -6,10 +6,22 @@ const { JSDOM } = require("jsdom");
 const { GameClientHost } = require("../public/gameHost.js");
 
 function createClient({ prefersReducedMotion = false } = {}) {
-  const html = fs.readFileSync(
+  const indexShell = fs.readFileSync(
     path.join(__dirname, "..", "public", "index.html"),
     "utf8"
   );
+  const gameMarkup = fs.readFileSync(
+    path.join(
+      __dirname,
+      "..",
+      "games",
+      "egyptian-war",
+      "public",
+      "template.html"
+    ),
+    "utf8"
+  );
+  const html = indexShell.replace("<!-- game-plugin-markup -->", gameMarkup);
   const dom = new JSDOM(html, { url: "http://localhost" });
   const handlers = new Map();
   const emitted = [];

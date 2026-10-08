@@ -11,3 +11,5 @@ Game-specific music, effects, and picker previews live under `public/assets`
 and are served by GameHub from `/games/egyptian-war`.
 The package-owned `public/register.js` registers those sounds with GameHub's
 shared audio service.
+The game board lives in `public/template.html`, and its presentation is isolated
+in `public/style.css`. GameHub injects the fragment into its generic game root.

@@ -1,5 +1,6 @@
 import express from "express";
 import { randomBytes } from "node:crypto";
+import { readFileSync } from "node:fs";
 import http from "http";
 import path from "path";
 import { Server, type Socket } from "socket.io";
@@ -106,6 +107,24 @@ function getGameDefinition(gameId: string | null) {
 
 const app = express();
 const server = http.createServer(app);
+const indexShell = readFileSync(
+  path.join(process.cwd(), "public", "index.html"),
+  "utf8"
+);
+const egyptianWarMarkup = readFileSync(
+  path.join(
+    process.cwd(),
+    "games",
+    "egyptian-war",
+    "public",
+    "template.html"
+  ),
+  "utf8"
+);
+const renderedIndex = indexShell.replace(
+  "<!-- game-plugin-markup -->",
+  egyptianWarMarkup
+);
 const reconnectGracePeriodMs = 120_000;
 const reconnectTurnGraceMs = 5_000;
 const gameEndAnimationMs = 3_600;
@@ -144,6 +163,10 @@ app.use(
     path.join(process.cwd(), "node_modules", "bootstrap", "dist")
   )
 );
+
+app.get(["/", "/index.html"], (_request, response) => {
+  response.type("html").send(renderedIndex);
+});
 
 app.use(
   "/games/egyptian-war",

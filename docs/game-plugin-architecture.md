@@ -30,11 +30,12 @@ through a transitional `GameSession` adapter, and the browser mounts its
 embedded `GameClientModule` through the generic game host. State, event, and
 action traffic uses generic envelopes. Timer and animation orchestration is
 still handled directly by `server.ts`, while markup, styles, and most browser
-logic remain in GameHub's shared public files. Preview media and game-specific
-audio now live in the Egyptian War workspace and are served from its own public
-route. The package also registers its music scene and gameplay effects through
-GameHub's shared audio API, so the platform audio service no longer contains an
-Egyptian War asset catalog.
+gameplay logic remains in GameHub's shared client file. Markup and styles now
+live in the Egyptian War workspace; GameHub injects the package fragment into
+its generic game root when serving the page. Preview media and game-specific
+audio are served from the package route. The package also registers its music
+scene and gameplay effects through GameHub's shared audio API, so the platform
+audio service no longer contains an Egyptian War asset catalog.
 
 The intended migration order is:
 
