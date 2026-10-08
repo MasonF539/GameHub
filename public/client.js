@@ -15,6 +15,29 @@ const gameHubAudio = window.GameHubAudio ?? {
   playEffect() {},
   setScene() {}
 };
+const gameClientHost = new window.GameHubGameClientHost({
+  root: gameplayView,
+  createContext: (gameId) => ({
+    memberId: socket.id ?? "",
+    role: isCurrentUserSpectator ? "spectator" : "player",
+    audio: gameHubAudio,
+    submitAction: (action) => new Promise((resolve) => {
+      if (currentRoomCode === null) {
+        resolve({ success: false, message: "You are not in a room." });
+        return;
+      }
+
+      socket.emit(
+        "game-action",
+        { roomCode: currentRoomCode, gameId, action },
+        resolve
+      );
+    }),
+    requestExit: () => {
+      bootstrap.Modal.getOrCreateInstance(exitGameModalElement).show();
+    }
+  })
+});
 gameHubAudio.setScene("menu");
 const networkPing = document.querySelector("#network-ping");
 const egyptianWarTurn = document.querySelector("#egyptian-war-turn");
@@ -321,6 +344,22 @@ function showEgyptianWarGame(game) {
   egyptianWarChatMessages.replaceChildren();
 }
 
+function destroyEgyptianWarGame() {
+  clearTimeout(egyptianWarAnimationTimeout);
+  clearTimeout(egyptianWarTransferTimeout);
+  clearTimeout(egyptianWarWinnerRevealTimeout);
+  clearEgyptianWarSoundTimeouts();
+  activeEgyptianWarAnimation = null;
+  revealedEgyptianWarWinnerAnimationId = null;
+  egyptianWarAnimationLayer.replaceChildren();
+  egyptianWarVictory.hidden = true;
+  setEgyptianWarTimerHidden(true);
+  egyptianWarTimerRemainingMs = null;
+  egyptianWarTimerDeadline = null;
+  egyptianWarChat.hidden = true;
+  egyptianWarHostControls.classList.add("d-none");
+}
+
 function showEgyptianWarSidePanel(panel) {
   const showChat =
     panel === "chat" && !showGameChatButton.disabled;
@@ -530,6 +569,7 @@ function showEntry() {
 }
 
 function resetRoomState() {
+  gameClientHost.unmount();
   currentRoomCode = null;
   roomCodeHidden = false;
   isRoomLocked = false;
@@ -1855,8 +1895,8 @@ socket.on("room-resumed", (room) => {
   isCurrentUserSpectator = room.role === "spectator";
   showLobby(room.roomCode, room.isHost);
   updateRoomLockDisplay();
-  if (room.activeGameId === "egyptian-war") {
-    showEgyptianWarGame({
+  if (room.activeGameId !== null) {
+    mountGameClient({
       gameId: room.activeGameId,
       chatEnabled: room.chatEnabled,
       settings: room.gameSettings,
@@ -2089,55 +2129,59 @@ socket.on(
   }
 );
 
+gameClientHost.register("egyptian-war", {
+  mount(context) {
+    showEgyptianWarGame(context.launchData);
+    return {
+      receiveState(state) {
+        renderEgyptianWarState(state);
+      },
+      receiveEvent(event) {
+        if (event.type === "animation") {
+          activeEgyptianWarAnimation = event.payload;
+          return;
+        }
+
+        if (event.type === "pause-changed") {
+          const isPaused = Boolean(event.payload?.isPaused);
+          egyptianWarPauseButton.textContent = isPaused ? "Resume" : "Pause";
+          egyptianWarPauseButton.setAttribute(
+            "aria-pressed",
+            String(isPaused)
+          );
+        }
+      },
+      destroy() {
+        destroyEgyptianWarGame();
+      }
+    };
+  }
+});
+
+function mountGameClient(game) {
+  if (!gameClientHost.has(game.gameId)) {
+    showToast("This game's browser client is not installed.");
+    return;
+  }
+
+  gameClientHost.mount(game.gameId, game);
+}
+
 socket.on("game-started", (game) => {
-  if (game.gameId !== "egyptian-war") {
-    return;
-  }
-
-  showEgyptianWarGame(game);
+  mountGameClient(game);
 });
 
-socket.on("game-state", ({ gameId, state }) => {
-  if (gameId === "egyptian-war") {
-    renderEgyptianWarState(state);
-  }
+socket.on("game-state", (envelope) => {
+  gameClientHost.receiveState(envelope);
 });
 
-socket.on("game-event", ({ gameId, event }) => {
-  if (gameId !== "egyptian-war" || !event) {
-    return;
-  }
-
-  if (event.type === "animation") {
-    activeEgyptianWarAnimation = event.payload;
-    return;
-  }
-
-  if (event.type === "pause-changed") {
-    const isPaused = Boolean(event.payload?.isPaused);
-    egyptianWarPauseButton.textContent = isPaused ? "Resume" : "Pause";
-    egyptianWarPauseButton.setAttribute(
-      "aria-pressed",
-      String(isPaused)
-    );
-  }
+socket.on("game-event", (envelope) => {
+  gameClientHost.receiveEvent(envelope);
 });
 
 socket.on("game-ended", ({ message }) => {
-  clearTimeout(egyptianWarAnimationTimeout);
-  clearTimeout(egyptianWarTransferTimeout);
-  clearTimeout(egyptianWarWinnerRevealTimeout);
-  clearEgyptianWarSoundTimeouts();
-  activeEgyptianWarAnimation = null;
-  revealedEgyptianWarWinnerAnimationId = null;
-  egyptianWarAnimationLayer.replaceChildren();
-  egyptianWarVictory.hidden = true;
-  setEgyptianWarTimerHidden(true);
-  egyptianWarTimerRemainingMs = null;
-  egyptianWarTimerDeadline = null;
+  gameClientHost.unmount();
   gameplayView.classList.add("d-none");
-  egyptianWarChat.hidden = true;
-  egyptianWarHostControls.classList.add("d-none");
   lobbyView.classList.remove("d-none");
   gameHubAudio.setScene("menu");
   isCurrentUserSpectator = false;
@@ -2182,7 +2226,7 @@ socket.on("room-closed", () => {
 });
 
 egyptianWarPlayCardButton.addEventListener("click", () => {
-  if (currentRoomCode === null) {
+  if (currentRoomCode === null || gameClientHost.activeGameId === null) {
     return;
   }
 
@@ -2190,7 +2234,7 @@ egyptianWarPlayCardButton.addEventListener("click", () => {
     "game-action",
     {
       roomCode: currentRoomCode,
-      gameId: "egyptian-war",
+      gameId: gameClientHost.activeGameId,
       action: { type: "play-card" }
     },
     (response) => {
@@ -2202,7 +2246,7 @@ egyptianWarPlayCardButton.addEventListener("click", () => {
 });
 
 egyptianWarSlapButton.addEventListener("click", () => {
-  if (currentRoomCode === null) {
+  if (currentRoomCode === null || gameClientHost.activeGameId === null) {
     return;
   }
 
@@ -2210,7 +2254,7 @@ egyptianWarSlapButton.addEventListener("click", () => {
     "game-action",
     {
       roomCode: currentRoomCode,
-      gameId: "egyptian-war",
+      gameId: gameClientHost.activeGameId,
       action: { type: "slap" }
     },
     (response) => {
@@ -2467,8 +2511,8 @@ joinRoomButton.addEventListener("click", () => {
       saveResumeSession(response.roomCode, response.resumeToken);
 
       if (isCurrentUserSpectator) {
-        if (response.activeGameId === "egyptian-war") {
-          showEgyptianWarGame({
+        if (response.activeGameId !== null) {
+          mountGameClient({
             gameId: response.activeGameId,
             chatEnabled: response.chatEnabled,
             settings: response.gameSettings,

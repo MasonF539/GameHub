@@ -36,7 +36,7 @@
 - [x] Add generic game state, event, and action envelopes and migrate the built-in browser client to them.
 - [ ] Move active room state and game actions behind the generic `GameSession` lifecycle.
 - [x] Remove the temporary Egyptian-War-specific Socket.IO compatibility events after introducing the session adapter.
-- [ ] Add a generic browser game root and load `GameClientModule` implementations into it.
+- [x] Add a generic browser game host and route active `GameClientModule` state and events through it.
 - [ ] Move Egyptian War markup, styles, previews, and game audio into its package boundary.
 - [ ] Load installed game packages from explicit administrator-controlled configuration.
 - [ ] Extract Egyptian War into its own repository and reinstall it as a pinned package dependency.

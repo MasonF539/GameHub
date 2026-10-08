@@ -3,6 +3,7 @@ const test = require("node:test");
 const fs = require("node:fs");
 const path = require("node:path");
 const { JSDOM } = require("jsdom");
+const { GameClientHost } = require("../public/gameHost.js");
 
 function createClient(reducedMotion = false) {
   const html = fs.readFileSync(
@@ -30,6 +31,7 @@ function createClient(reducedMotion = false) {
       audioScenes.push(sceneName);
     }
   };
+  window.GameHubGameClientHost = GameClientHost;
   global.bootstrap = {
     Toast: { getOrCreateInstance: () => ({ show() {} }) },
     Modal: {

@@ -88,6 +88,7 @@ export type GameClientContext = {
   gameId: string;
   memberId: string;
   role: GameMemberRole;
+  launchData: unknown;
   audio: GameAudioApi;
   submitAction(action: GameActionEnvelope): Promise<GameActionResult>;
   requestExit(): void;

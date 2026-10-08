@@ -22,14 +22,14 @@ The manifest API and package version are separate. `apiVersion` describes compat
 
 ## Transitional state
 
-Egyptian War is registered with a valid versioned manifest, but its delivery mode is currently `embedded`. Active rooms now expose it through a transitional `GameSession` adapter, and the built-in client uses generic action, state, and event envelopes. Timer and animation orchestration is still handled directly by `server.ts`, while markup, styles, and browser logic remain in GameHub's shared public files. This preserves the working game while those responsibilities are moved behind the contracts.
+Egyptian War is registered with a valid versioned manifest, but its delivery mode is currently `embedded`. Active rooms now expose it through a transitional `GameSession` adapter, and the browser mounts its embedded `GameClientModule` through the generic game host. State, event, and action traffic uses generic envelopes. Timer and animation orchestration is still handled directly by `server.ts`, while markup, styles, and most browser logic remain in GameHub's shared public files. This preserves the working game while those responsibilities are moved behind the contracts.
 
 The intended migration order is:
 
 1. Route the existing game catalog through the validated registry.
 2. Route the built-in client through generic game action, state, and event envelopes.
 3. Introduce a transitional `GameSession` adapter, remove the legacy events, and then move the remaining Egyptian War timer and animation orchestration into that session.
-4. Give GameHub a generic browser game root and move Egyptian War into a `GameClientModule`.
+4. Route the embedded Egyptian War client through GameHub's generic browser game host.
 5. Move Egyptian War styles, templates, previews, music, and effects into its game package.
 6. Add package discovery from an explicit administrator-controlled configuration.
 7. Extract the complete package into the Egyptian War repository and install it back into GameHub as a versioned dependency.
