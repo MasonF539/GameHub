@@ -13,6 +13,17 @@ test("switches music scenes and independently adjusts persisted audio categories
     path.join(__dirname, "..", "public", "audio.js"),
     "utf8"
   );
+  const egyptianWarAudioScript = fs.readFileSync(
+    path.join(
+      __dirname,
+      "..",
+      "games",
+      "egyptian-war",
+      "public",
+      "register.js"
+    ),
+    "utf8"
+  );
   const dom = new JSDOM(html, {
     url: "http://localhost",
     runScripts: "outside-only"
@@ -61,6 +72,7 @@ test("switches music scenes and independently adjusts persisted audio categories
     value: false
   });
   dom.window.eval(audioScript);
+  dom.window.eval(egyptianWarAudioScript);
 
   const music = audioInstances[0];
   const audio = dom.window.GameHubAudio;

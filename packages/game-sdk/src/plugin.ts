@@ -80,6 +80,11 @@ export interface GameServerPlugin {
 
 export type GameAudioApi = {
   playEffect(name: string): void;
+  registerEffect(
+    name: string,
+    options: { source: string; category?: "music" | "join" | "game"; volume?: number }
+  ): void;
+  registerMusicScene(name: string, source: string): void;
   setScene(scene: string | null): void;
 };
 

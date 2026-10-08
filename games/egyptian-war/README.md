@@ -9,3 +9,5 @@ GameHub supplies rooms, members, spectators, transport, and shared services.
 
 Game-specific music, effects, and picker previews live under `public/assets`
 and are served by GameHub from `/games/egyptian-war`.
+The package-owned `public/register.js` registers those sounds with GameHub's
+shared audio service.

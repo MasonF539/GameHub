@@ -32,7 +32,9 @@ action traffic uses generic envelopes. Timer and animation orchestration is
 still handled directly by `server.ts`, while markup, styles, and most browser
 logic remain in GameHub's shared public files. Preview media and game-specific
 audio now live in the Egyptian War workspace and are served from its own public
-route.
+route. The package also registers its music scene and gameplay effects through
+GameHub's shared audio API, so the platform audio service no longer contains an
+Egyptian War asset catalog.
 
 The intended migration order is:
 
