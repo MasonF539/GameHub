@@ -118,8 +118,10 @@ GameHub uses npm workspaces so the plugin boundary is exercised before the
 packages are moved into separate repositories. `packages/game-sdk` contains
 the shared contracts, while `games/egyptian-war` owns the independently
 buildable game engine, tests, documentation, package metadata, preview media,
-game-specific audio, HTML fragment, and stylesheet. Its remaining browser
-gameplay logic is the next part of the migration.
+game-specific audio, HTML fragment, stylesheet, browser controller, and
+authoritative server session. GameHub loads enabled packages from
+`gamehub.config.json` (or the `GAMEHUB_GAME_PACKAGES` environment override)
+and communicates through the SDK contracts.
 
 ```text
 GameHub/
@@ -161,6 +163,7 @@ GameHub/
 ├── compose.yaml
 ├── Dockerfile
 ├── GameHub.ps1
+├── gamehub.config.json
 ├── package.json
 ├── package-lock.json
 ├── README.md

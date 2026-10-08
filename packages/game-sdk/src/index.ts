@@ -26,6 +26,7 @@ export type {
   GameCompletion,
   GameEvent,
   GameEventEnvelope,
+  GameLifecycleState,
   GameMember,
   GameMemberRole,
   GamePlatformEvent,

@@ -53,20 +53,27 @@ export type GameSessionContext = {
   emitEvent: (event: GameEvent) => void;
   finish: (completion: GameCompletion) => void;
   now: () => number;
-  random: () => number;
+  randomInteger(maxExclusive: number): number;
+};
+
+export type GameLifecycleState = {
+  isPaused: boolean;
+  isBusy: boolean;
 };
 
 export interface GameSession {
+  start?(): void;
   getPublicState(viewer: GameViewer): unknown;
+  getLifecycleState(): GameLifecycleState;
   handleAction(
     memberId: string,
     action: GameActionEnvelope
   ): GameActionResult | Promise<GameActionResult>;
-  pause?(): void;
-  resume?(): void;
+  pause?(): GameActionResult;
+  resume?(): GameActionResult;
   memberDisconnected?(memberId: string): void;
-  memberReconnected?(memberId: string): void;
-  memberRemoved?(memberId: string): void;
+  memberReconnected?(memberId: string, previousMemberId?: string): void;
+  memberRemoved?(memberId: string): GameActionResult;
   dispose(): void;
 }
 

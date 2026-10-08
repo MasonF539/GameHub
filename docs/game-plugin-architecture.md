@@ -5,9 +5,11 @@ GameHub is being separated into a reusable platform and independently versioned 
 ## Target installation model
 
 Games are installed as trusted npm dependencies and enabled through the
-comma-separated `GAMEHUB_GAME_PACKAGES` configuration. Installation requires
-adding the dependency and its package name to that configured list. The package
-lock and Docker build then select an exact, reproducible version.
+`gamePackages` list in `gamehub.config.json`. Deployments can override that
+list with the comma-separated `GAMEHUB_GAME_PACKAGES` environment variable.
+Installation requires adding the dependency and its package name to the
+configured list. The package lock and Docker build then select an exact,
+reproducible version.
 
 Game packages execute trusted server code. They are not a sandbox for packages supplied by room hosts or browser clients.
 
@@ -24,32 +26,27 @@ The independently buildable `@gamehub/game-sdk` workspace under
 
 The manifest API and package version are separate. `apiVersion` describes compatibility with GameHub, while `packageVersion` describes a release of the game itself.
 
-## Transitional state
+## Current in-repository boundary
 
-Egyptian War is now an independently buildable `@gamehub/egyptian-war`
-workspace under `games/egyptian-war`, and GameHub imports its public server API
-by package name. Its delivery mode is still `embedded`. Active rooms expose it
-through a transitional `GameSession` adapter, and the browser mounts its
-embedded `GameClientModule` through the generic game host. State, event, and
-action traffic uses generic envelopes. Timer and animation orchestration is
-still handled directly by `server.ts`, while markup, styles, and most browser
-gameplay logic remains in GameHub's shared client file. Markup and styles now
-live in the Egyptian War workspace; GameHub injects the package fragment into
-its generic game root when serving the page. Preview media and game-specific
-audio are served from the package route. The package also registers its music
-scene and gameplay effects through GameHub's shared audio API, so the platform
-audio service no longer contains an Egyptian War asset catalog.
+Egyptian War is an independently buildable `@gamehub/egyptian-war` workspace
+under `games/egyptian-war`. Its package export supplies the manifest, public
+directory, and `GameServerPlugin`. The package-owned `GameSession` contains
+authoritative state, timers, slap arbitration, animation sequencing, pause and
+disconnect recovery, member lifecycle handling, and completion. The package's
+browser module owns the board rendering, controls, animations, chat/spectator
+panel, and game audio. GameHub injects declared resources and communicates only
+through generic SDK services and state, event, and action envelopes.
 
 The intended migration order is:
 
 1. Route the existing game catalog through the validated registry.
 2. Route the built-in client through generic game action, state, and event envelopes.
-3. Introduce a transitional `GameSession` adapter, remove the legacy events, and then move the remaining Egyptian War timer and animation orchestration into that session.
+3. Introduce `GameSession`, remove the legacy events, and move Egyptian War timer and animation orchestration into the package session.
 4. Route the embedded Egyptian War client through GameHub's generic browser game host.
 5. Move Egyptian War styles, templates, previews, music, and effects into its game package.
 6. Add package discovery from an explicit administrator-controlled configuration.
 7. Extract the complete package into the Egyptian War repository and install it back into GameHub as a versioned dependency.
-8. Verify the boundary with a minimal test game before treating the API as stable.
+8. Verify the boundary with a minimal second game before treating the API as stable.
 
 ## Ownership boundary
 

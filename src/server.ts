@@ -1,25 +1,9 @@
 import express from "express";
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomInt } from "node:crypto";
 import { readFileSync } from "node:fs";
 import http from "http";
 import path from "path";
 import { Server, type Socket } from "socket.io";
-import {
-  egyptianWar,
-  applyEgyptianWarAction,
-  createEgyptianWarState,
-  createPublicEgyptianWarState,
-  isEgyptianWarPileSlappable,
-  removeEgyptianWarPlayer,
-  resolveEgyptianWarTurnTimeout,
-  type EgyptianWarAction,
-  EgyptianWarRuleError,
-  type EgyptianWarSettings,
-  type EgyptianWarState,
-  defaultSlapJitterMs,
-  selectWeightedSlapWinner,
-  slapCollectionWindowMs
-} from "@gamehub/egyptian-war";
 import {
   GamePluginRegistry,
   type GamePluginPackage,
@@ -41,18 +25,6 @@ type Player = {
   isConnected: boolean;
 };
 
-type PendingSlapCandidate = {
-  playerId: string;
-  adjustedArrivalTime: number;
-  jitterMs: number;
-};
-
-type SlapAnimationAttempt = {
-  playerId: string;
-  delayMs: number;
-  isWinner: boolean;
-};
-
 type Room = {
   hostId: string;
   players: Map<string, Player>;
@@ -62,21 +34,6 @@ type Room = {
   isLocked: boolean;
   activeGameId: string | null;
   gameSession: GameSession | null;
-  gameState: EgyptianWarState | null;
-  isPaused: boolean;
-  isAnimating: boolean;
-  animationId: number;
-  turnTimer: ReturnType<typeof setTimeout> | null;
-  turnDeadlineAt: number | null;
-  turnTimeRemainingMs: number | null;
-  reconnectGracePlayerId: string | null;
-  reconnectGraceUsedThisTurn: boolean;
-  pendingSlapResolution: {
-    timer: ReturnType<typeof setTimeout>;
-    candidates: Map<string, PendingSlapCandidate>;
-  } | null;
-  disconnectPausedPlayerId: string | null;
-  wasPausedBeforeDisconnect: boolean;
 };
 
 const availableAvatars = [
@@ -97,7 +54,15 @@ const availableAvatars = [
   "🧙"
 ];
 
-const defaultGamePackages = ["@gamehub/egyptian-war"];
+const gameHubConfiguration = JSON.parse(
+  readFileSync(path.join(process.cwd(), "gamehub.config.json"), "utf8")
+) as { gamePackages?: unknown };
+const defaultGamePackages = Array.isArray(gameHubConfiguration.gamePackages)
+  ? gameHubConfiguration.gamePackages.filter(
+    (packageName): packageName is string =>
+      typeof packageName === "string" && packageName.trim() !== ""
+  )
+  : [];
 const configuredGamePackages = process.env.GAMEHUB_GAME_PACKAGES === undefined
   ? defaultGamePackages
   : process.env.GAMEHUB_GAME_PACKAGES
@@ -114,10 +79,35 @@ function loadGamePackage(packageName: string): GamePluginPackage {
       `Installed game package ${packageName} does not export gameHubPlugin.`
     );
   }
-  return packageExports.gameHubPlugin;
+  const gamePackage = packageExports.gameHubPlugin;
+  if (
+    typeof gamePackage.publicDirectory !== "string" ||
+    gamePackage.publicDirectory.trim() === "" ||
+    typeof gamePackage.server?.createSession !== "function"
+  ) {
+    throw new Error(
+      `Installed game package ${packageName} has an invalid runtime export.`
+    );
+  }
+  if (
+    gamePackage.server.manifest.apiVersion !== gamePackage.manifest.apiVersion ||
+    gamePackage.server.manifest.definition.id !==
+      gamePackage.manifest.definition.id
+  ) {
+    throw new Error(
+      `Installed game package ${packageName} has mismatched client and server manifests.`
+    );
+  }
+  return gamePackage;
 }
 
 const installedGamePackages = configuredGamePackages.map(loadGamePackage);
+const gamePackagesById = new Map(
+  installedGamePackages.map((gamePackage) => [
+    gamePackage.manifest.definition.id,
+    gamePackage
+  ])
+);
 const gamePluginRegistry = new GamePluginRegistry(
   installedGamePackages.map((gamePackage) => gamePackage.manifest)
 );
@@ -182,8 +172,6 @@ let renderedIndex = replaceRequiredMarker(
 renderedIndex = replaceRequiredMarker(renderedIndex, gameStyleMarker, gameStyles);
 renderedIndex = replaceRequiredMarker(renderedIndex, gameScriptMarker, gameScripts);
 const reconnectGracePeriodMs = 120_000;
-const reconnectTurnGraceMs = 5_000;
-const gameEndAnimationMs = 3_600;
 const io = new Server(server, {
   connectionStateRecovery: {
     maxDisconnectionDuration: reconnectGracePeriodMs,
@@ -202,7 +190,7 @@ const deterministicTestRandomInteger =
   process.env.NODE_ENV === "test" &&
   process.env.GAMEHUB_DETERMINISTIC_DECK === "true"
     ? (maxExclusive: number): number => maxExclusive - 1
-    : undefined;
+    : randomInt;
 const maxLobbyPlayers = 12;
 const rooms = new Map<string, Room>();
 const socketRoomCodes = new Map<string, string>();
@@ -353,56 +341,7 @@ function markPlayerReconnected(
   if (player) {
     player.isConnected = true;
   }
-
-  if (room.disconnectPausedPlayerId === playerId) {
-    const stillDisconnectedPlayer = Array.from(
-      room.players.values()
-    ).find((candidate) => !candidate.isConnected);
-
-    room.disconnectPausedPlayerId =
-      stillDisconnectedPlayer?.id ?? null;
-
-    if (room.disconnectPausedPlayerId === null) {
-      room.isPaused = room.wasPausedBeforeDisconnect;
-      room.wasPausedBeforeDisconnect = false;
-    }
-
-    if (room.gameState && player) {
-      room.gameState.activityMessage =
-        room.disconnectPausedPlayerId !== null
-          ? `${player.name} reconnected. The game remains paused until the other player returns.`
-          : room.isPaused
-            ? `${player.name} reconnected. The host can resume the game.`
-            : `${player.name} reconnected. The game is continuing.`;
-    }
-  }
-
-  const currentPlayer =
-    room.gameState?.players[room.gameState.currentPlayerIndex];
-  if (
-    room.gameState?.status === "playing" &&
-    currentPlayer?.id === playerId
-  ) {
-    const remainingMs =
-      getTurnTimeRemainingMs(room) ??
-      getTurnTimerSeconds(room) * 1000;
-    clearTurnTimer(room, false);
-    room.turnTimeRemainingMs = remainingMs;
-    if (!room.reconnectGraceUsedThisTurn) {
-      room.reconnectGracePlayerId = playerId;
-      room.reconnectGraceUsedThisTurn = true;
-    } else {
-      room.reconnectGracePlayerId = null;
-    }
-  }
-
-  if (
-    !room.isPaused &&
-    room.activeGameId !== null &&
-    room.turnTimer === null
-  ) {
-    startTurnTimer(roomCode, room);
-  }
+  room.gameSession?.memberReconnected?.(playerId);
 }
 
 function sendRoomResumed(
@@ -418,12 +357,12 @@ function sendRoomResumed(
     selectedGameId: room.selectedGameId,
     gameSettings: room.gameSettings,
     activeGameId: room.activeGameId,
-    isPaused: room.isPaused,
+    isPaused: room.gameSession?.getLifecycleState().isPaused ?? false,
     chatEnabled:
       getGameDefinition(room.activeGameId)?.chatEnabled ?? false
   });
 
-  if (room.activeGameId === egyptianWar.id) {
+  if (room.activeGameId !== null) {
     sendActiveGameState(roomCode, room, socket);
   }
 }
@@ -445,298 +384,32 @@ function createDefaultSettings(
   );
 }
 
-function getTurnTimerSeconds(room: Room): number {
-  const configuredSeconds = room.gameSettings.turnTimerSeconds;
-
-  return typeof configuredSeconds === "number"
-    ? configuredSeconds
-    : 15;
-}
-
-function getTurnTimeRemainingMs(room: Room): number | null {
-  if (room.turnDeadlineAt !== null) {
-    return Math.max(0, room.turnDeadlineAt - Date.now());
-  }
-
-  return room.turnTimeRemainingMs;
-}
-
-function clearTurnTimer(room: Room, clearRemaining = true): void {
-  if (room.turnTimer !== null) {
-    clearTimeout(room.turnTimer);
-  }
-
-  room.turnTimer = null;
-  room.turnDeadlineAt = null;
-
-  if (clearRemaining) {
-    room.turnTimeRemainingMs = null;
-  }
-}
-
-function suspendTurnTimer(room: Room): void {
-  room.turnTimeRemainingMs = getTurnTimeRemainingMs(room);
-  clearTurnTimer(room, false);
-}
-
-function cancelPendingSlapResolution(room: Room): void {
-  if (room.pendingSlapResolution === null) {
-    return;
-  }
-
-  clearTimeout(room.pendingSlapResolution.timer);
-  room.pendingSlapResolution = null;
-}
-
-function startTurnTimer(
-  roomCode: string,
-  room: Room,
-  remainingMs = room.turnTimeRemainingMs ?? getTurnTimerSeconds(room) * 1000
-): void {
-  if (
-    room.gameState === null ||
-    room.gameState.status !== "playing" ||
-    room.isPaused ||
-    room.isAnimating ||
-    room.pendingSlapResolution !== null
-  ) {
-    return;
-  }
-
-  clearTurnTimer(room);
-  const timerDurationMs = getTurnTimerSeconds(room) * 1000;
-  const currentPlayerId =
-    room.gameState.players[room.gameState.currentPlayerIndex]?.id ?? null;
-  if (
-    room.reconnectGracePlayerId !== null &&
-    room.reconnectGracePlayerId !== currentPlayerId
-  ) {
-    room.reconnectGracePlayerId = null;
-  }
-  const reconnectGraceMs =
-    room.reconnectGracePlayerId === currentPlayerId
-      ? reconnectTurnGraceMs
-      : 0;
-  if (reconnectGraceMs > 0) {
-    room.reconnectGracePlayerId = null;
-  }
-  const delayMs =
-    Math.max(
-      0,
-      Math.min(timerDurationMs, remainingMs + reconnectGraceMs)
-    );
-  room.turnTimeRemainingMs = delayMs;
-  room.turnDeadlineAt = Date.now() + delayMs;
-  room.turnTimer = setTimeout(() => {
-    room.turnTimer = null;
-    room.turnDeadlineAt = null;
-    room.turnTimeRemainingMs = null;
-
-    if (
-      rooms.get(roomCode) !== room ||
-      room.gameState === null ||
-      room.gameState.status !== "playing" ||
-      room.isPaused ||
-      room.isAnimating
-    ) {
-      return;
+function validateGameSetting(
+  setting: GameSetting,
+  value: unknown
+): value is GameSettingValue {
+  if (setting.type === "number") {
+    if (typeof value !== "number" || !Number.isInteger(value)) return false;
+    if (setting.control === "range") {
+      return value >= setting.min &&
+        value <= setting.max &&
+        (value - setting.min) % setting.step === 0;
     }
-
-    const currentPlayer =
-      room.gameState.players[room.gameState.currentPlayerIndex];
-
-    if (!currentPlayer) {
-      return;
-    }
-
-    handleEgyptianWarAction(
-      roomCode,
-      currentPlayer.id,
-      "play-card",
-      (response) => {
-        if (!response.success && rooms.get(roomCode) === room) {
-          startTurnTimer(roomCode, room);
-          sendActiveGameState(roomCode, room);
-        }
-      },
-      true
-    );
-  }, delayMs);
+    return setting.options.includes(value);
+  }
+  return typeof value === "boolean";
 }
 
-function collectValidSlap(
-  roomCode: string,
-  playerId: string,
-  room: Room,
-  respond: (response: { success: boolean; message?: string }) => void
-): void {
-  let resolution = room.pendingSlapResolution;
-
-  if (resolution === null) {
-    resolution = {
-      timer: setTimeout(() => {
-        resolveCollectedSlaps(roomCode, room);
-      }, slapCollectionWindowMs),
-      candidates: new Map()
-    };
-    room.pendingSlapResolution = resolution;
-    suspendTurnTimer(room);
-  }
-
-  if (!resolution.candidates.has(playerId)) {
-    resolution.candidates.set(playerId, {
-      playerId,
-      adjustedArrivalTime: performance.now(),
-      jitterMs: defaultSlapJitterMs
-    });
-  }
-
-  respond({ success: true });
-}
-
-function resolveCollectedSlaps(
-  roomCode: string,
-  room: Room
-): void {
-  const resolution = room.pendingSlapResolution;
-  room.pendingSlapResolution = null;
-
-  if (
-    !resolution ||
-    rooms.get(roomCode) !== room ||
-    room.gameState === null ||
-    room.gameState.status !== "playing" ||
-    room.isAnimating
-  ) {
-    return;
-  }
-
-  const candidates = Array.from(resolution.candidates.values());
-  if (candidates.length === 0) {
-    if (!room.isPaused) {
-      startTurnTimer(roomCode, room);
-    }
-    return;
-  }
-
-  const winner = selectWeightedSlapWinner(candidates);
-
-  if (!winner) {
-    throw new Error("No slap candidate was selected.");
-  }
-
-  const winnerAdjustedTime = winner.adjustedArrivalTime;
-
-  const orderedCandidates = [
-    winner,
-    ...candidates
-      .filter(
-        (candidate) => candidate.playerId !== winner.playerId
-      )
-      .sort(
-        (first, second) =>
-          first.adjustedArrivalTime -
-          second.adjustedArrivalTime
-      )
-  ];
-
-  let cappedAttemptCount = 0;
-
-  const slapAttempts = orderedCandidates.map((candidate) => {
-    const adjustedDifference = Math.max(
-      0,
-      candidate.adjustedArrivalTime - winnerAdjustedTime
-    );
-
-    const scaledDelay = adjustedDifference * 1.5;
-
-    let delayMs = Math.round(
-      Math.min(scaledDelay, slapCollectionWindowMs)
-    );
-
-    if (scaledDelay >= slapCollectionWindowMs) {
-      delayMs += cappedAttemptCount * 8;
-      cappedAttemptCount += 1;
-    }
-
-    return {
-      playerId: candidate.playerId,
-      delayMs,
-      isWinner: candidate.playerId === winner.playerId
-    };
-  });
-
-  handleEgyptianWarAction(
-    roomCode,
-    winner.playerId,
-    "slap",
-    (response) => {
-      if (
-        !response.success &&
-        rooms.get(roomCode) === room &&
-        room.gameState?.status === "playing" &&
-        !room.isPaused
-      ) {
-        startTurnTimer(roomCode, room);
-        sendActiveGameState(roomCode, room);
-      }
-    },
-    false,
-    true,
-    slapAttempts
-  );
-}
-
-function createEgyptianWarPublicState(room: Room) {
-  if (room.gameState === null) {
-    return null;
-  }
-
-  return createPublicEgyptianWarState(
-    room.gameState,
-    room.isPaused,
-    room.isAnimating,
-    getTurnTimerSeconds(room),
-    getTurnTimeRemainingMs(room),
-    room.disconnectPausedPlayerId !== null
-      ? "A player disconnected; the host may resume the game."
-      : room.isPaused
-        ? "Game paused by the host."
-        : null,
-    new Set(
-      Array.from(room.players.values())
-        .filter((player) => player.isConnected)
-        .map((player) => player.id)
-    )
-  );
+function disposeGameSession(room: Room): void {
+  const session = room.gameSession;
+  room.gameSession = null;
+  session?.dispose();
 }
 
 function getGameViewer(room: Room, memberId: string): GameViewer | null {
-  if (room.players.has(memberId)) {
-    return { memberId, role: "player" };
-  }
-
-  if (room.spectators.has(memberId)) {
-    return { memberId, role: "spectator" };
-  }
-
+  if (room.players.has(memberId)) return { memberId, role: "player" };
+  if (room.spectators.has(memberId)) return { memberId, role: "spectator" };
   return null;
-}
-
-function emitGameSessionStateToMember(
-  room: Room,
-  memberId: string,
-  target: Socket
-): void {
-  const viewer = getGameViewer(room, memberId);
-  if (room.activeGameId === null || room.gameSession === null || !viewer) {
-    return;
-  }
-
-  target.emit("game-state", {
-    gameId: room.activeGameId,
-    state: room.gameSession.getPublicState(viewer)
-  });
 }
 
 function sendActiveGameState(
@@ -744,343 +417,37 @@ function sendActiveGameState(
   room: Room,
   targetSocket?: Socket
 ): void {
-  if (room.gameState === null || room.gameSession === null) {
-    return;
-  }
-
+  if (room.activeGameId === null || room.gameSession === null) return;
+  const send = (memberId: string, target: Socket) => {
+    const viewer = getGameViewer(room, memberId);
+    if (!viewer || room.activeGameId === null || room.gameSession === null) return;
+    target.emit("game-state", {
+      gameId: room.activeGameId,
+      state: room.gameSession.getPublicState(viewer)
+    });
+  };
   if (targetSocket) {
-    emitGameSessionStateToMember(room, targetSocket.id, targetSocket);
-  } else {
-    for (const member of [
-      ...room.players.values(),
-      ...room.spectators.values()
-    ]) {
-      if (!member.isConnected) {
-        continue;
-      }
-
-      const memberSocket = io.sockets.sockets.get(member.id);
-      if (memberSocket) {
-        emitGameSessionStateToMember(room, member.id, memberSocket);
-      }
-    }
-  }
-}
-
-function emitGameEvent(
-  roomCode: string,
-  gameId: string,
-  event: GameEvent
-): void {
-  io.to(roomCode).emit("game-event", {
-    gameId,
-    event
-  });
-}
-
-function emitEgyptianWarPauseChanged(
-  roomCode: string,
-  isPaused: boolean
-): void {
-  emitGameEvent(roomCode, egyptianWar.id, {
-    type: "pause-changed",
-    payload: { isPaused }
-  });
-}
-
-function completeEgyptianWar(roomCode: string, room: Room): void {
-  const state = room.gameState;
-
-  if (state === null || state.status !== "finished") {
+    send(targetSocket.id, targetSocket);
     return;
   }
+  for (const member of [...room.players.values(), ...room.spectators.values()]) {
+    if (!member.isConnected) continue;
+    const target = io.sockets.sockets.get(member.id);
+    if (target) send(member.id, target);
+  }
+}
 
-  clearTurnTimer(room);
-  cancelPendingSlapResolution(room);
+function finishActiveGame(
+  roomCode: string,
+  room: Room,
+  winnerId: string | null,
+  message: string
+): void {
+  if (rooms.get(roomCode) !== room || room.activeGameId === null) return;
   disposeGameSession(room);
   room.activeGameId = null;
-  room.gameState = null;
-  room.isPaused = false;
-  room.isAnimating = false;
   promoteSpectatorsToPlayers(roomCode, room);
-  io.to(roomCode).emit("game-ended", {
-    winnerId: state.winnerId,
-    message: state.activityMessage
-  });
-}
-
-function validateGameSetting(
-  setting: GameSetting,
-  value: unknown
-): value is GameSettingValue {
-  if (setting.type === "number") {
-    if (typeof value !== "number" || !Number.isInteger(value)) {
-      return false;
-    }
-
-    if (setting.control === "range") {
-      return value >= setting.min &&
-        value <= setting.max &&
-        (value - setting.min) % setting.step === 0;
-    }
-
-    return setting.options.includes(value);
-  }
-
-  return typeof value === "boolean";
-}
-
-function handleEgyptianWarAction(
-  roomCode: string,
-  playerId: string,
-  action: EgyptianWarAction,
-  respond: (response: { success: boolean; message?: string }) => void,
-  isTurnTimeout = false,
-  isResolvedSlap = false,
-  slapAttempts: SlapAnimationAttempt[] = []
-): void {
-  const room = rooms.get(roomCode);
-
-  if (
-    !room ||
-    room.activeGameId !== egyptianWar.id ||
-    room.gameState === null ||
-    room.gameState.status !== "playing"
-  ) {
-    respond({
-      success: false,
-      message: "Egyptian War is not active in that room."
-    });
-    return;
-  }
-
-  if (!room.players.has(playerId)) {
-    respond({
-      success: false,
-      message: "You are not a player in that room."
-    });
-    return;
-  }
-
-  if (room.isPaused && !isResolvedSlap) {
-    respond({
-      success: false,
-      message: "The host has paused the game."
-    });
-    return;
-  }
-
-  if (room.isAnimating) {
-    respond({
-      success: false,
-      message: "Wait for the current action to finish."
-    });
-    return;
-  }
-
-  const state = room.gameState;
-  if (
-    action === "slap" &&
-    !isTurnTimeout &&
-    !isResolvedSlap &&
-    state.pile.length > state.penaltyPileCardCount &&
-    isEgyptianWarPileSlappable(
-      state.pile.slice(state.penaltyPileCardCount),
-      state.settings
-    )
-  ) {
-    collectValidSlap(roomCode, playerId, room, respond);
-    return;
-  }
-
-  if (room.pendingSlapResolution !== null && !isResolvedSlap) {
-    respond({
-      success: false,
-      message: "A slap is being resolved. Please wait."
-    });
-    return;
-  }
-
-  const currentPlayer = state.players[state.currentPlayerIndex];
-  const currentPlayerIdBeforeAction = currentPlayer?.id ?? null;
-  const isResolvingSlapWindow =
-    isTurnTimeout && state.pendingPileWinnerId !== null;
-  const playedCard =
-    !isResolvingSlapWindow &&
-      action === "play-card" &&
-      currentPlayer?.id === playerId &&
-      currentPlayer.cards.length > 0
-      ? currentPlayer.cards[0]
-      : null;
-  const wasSlappable =
-    action === "slap" &&
-    isEgyptianWarPileSlappable(
-      state.pile.slice(state.penaltyPileCardCount),
-      state.settings
-    );
-  const previousPileCount = state.pile.length;
-  const previousCardCounts = new Map(
-    state.players.map((player) => [player.id, player.cards.length])
-  );
-
-  try {
-    if (isTurnTimeout) {
-      resolveEgyptianWarTurnTimeout(state);
-    } else {
-      applyEgyptianWarAction(state, playerId, action);
-    }
-  } catch (error) {
-    if (!(error instanceof EgyptianWarRuleError)) {
-      console.error(
-        `Unexpected error while processing ${action} in room ${roomCode}:`,
-        error
-      );
-      respond({
-        success: false,
-        message: "Unable to process that game action."
-      });
-      return;
-    }
-
-    respond({
-      success: false,
-      message: error.message
-    });
-    return;
-  }
-
-  suspendTurnTimer(room);
-  const currentPlayerIdAfterAction =
-    state.players[state.currentPlayerIndex]?.id ?? null;
-
-  if (
-    action !== "slap" ||
-    (wasSlappable && playerId === currentPlayerIdBeforeAction) ||
-    currentPlayerIdAfterAction !== currentPlayerIdBeforeAction
-  ) {
-    room.turnTimeRemainingMs = null;
-    room.reconnectGraceUsedThisTurn = false;
-  }
-
-  const pileWinner = state.players.find((player) =>
-    player.cards.length >
-    (previousCardCounts.get(player.id) ?? player.cards.length)
-  ) ?? (
-      state.status === "finished"
-        ? state.players.find((player) => player.id === state.winnerId)
-        : undefined
-    );
-  const pileWasAwarded =
-    pileWinner !== undefined &&
-    (previousPileCount > 0 || playedCard !== null);
-  const isFinalWin = state.status === "finished";
-  const penaltyCardCount =
-    action === "slap" && !wasSlappable
-      ? (previousCardCounts.get(playerId) ?? 0) -
-      (state.players.find((player) => player.id === playerId)?.cards.length ?? 0)
-      : 0;
-  const collectedPileCardCount = pileWinner
-    ? previousPileCount +
-    (playedCard === null ? 0 : 1) +
-    penaltyCardCount
-    : 0;
-
-  room.animationId += 1;
-  const animation = {
-    id: room.animationId,
-    action: isResolvingSlapWindow ? "timeout" : action,
-    actorId: playerId,
-    slapAttempts:
-      action === "slap" ? slapAttempts : [],
-    playedCard,
-    isValidSlap: action === "slap" && wasSlappable,
-    winnerId: pileWinner?.id ?? state.winnerId,
-    transferCardCount: collectedPileCardCount,
-    pileCardCountBeforeTransfer: collectedPileCardCount,
-    penaltyCardCount,
-    isFinalWin
-  };
-
-  room.isAnimating = true;
-  emitGameEvent(roomCode, egyptianWar.id, {
-    type: "animation",
-    payload: animation
-  });
-  sendActiveGameState(roomCode, room);
-  respond({ success: true });
-
-  const animationDuration = isFinalWin
-    ? 3600
-    : animation.transferCardCount > 0
-      ? 2400
-      : action === "slap"
-        ? 1050
-        : playedCard
-          ? 650
-          : 450;
-
-  setTimeout(() => {
-    if (
-      rooms.get(roomCode) !== room ||
-      room.animationId !== animation.id ||
-      room.gameState === null
-    ) {
-      return;
-    }
-
-    room.isAnimating = false;
-
-    if (room.gameState.status === "finished") {
-      completeEgyptianWar(roomCode, room);
-      return;
-    }
-
-    startTurnTimer(roomCode, room);
-    sendActiveGameState(roomCode, room);
-  }, animationDuration);
-}
-
-function createEmbeddedEgyptianWarSession(
-  roomCode: string,
-  room: Room
-): GameSession {
-  return {
-    getPublicState() {
-      const state = createEgyptianWarPublicState(room);
-      if (state === null) {
-        throw new Error("Egyptian War has no active state.");
-      }
-      return state;
-    },
-    handleAction(memberId: string, action: GameActionEnvelope) {
-      const actionType = action.type;
-      if (actionType !== "play-card" && actionType !== "slap") {
-        return {
-          success: false,
-          message: "That game action is not supported."
-        };
-      }
-
-      return new Promise((resolve) => {
-        handleEgyptianWarAction(
-          roomCode,
-          memberId,
-          actionType,
-          resolve
-        );
-      });
-    },
-    dispose() {
-      clearTurnTimer(room);
-      cancelPendingSlapResolution(room);
-    }
-  };
-}
-
-function disposeGameSession(room: Room): void {
-  const session = room.gameSession;
-  room.gameSession = null;
-  session?.dispose();
+  io.to(roomCode).emit("game-ended", { winnerId, message });
 }
 
 io.on("connection", (socket) => {
@@ -1118,12 +485,6 @@ io.on("connection", (socket) => {
       }
 
       sendRoomMemberLists(roomCode, room);
-      if (
-        roomMember.role === "player" &&
-        room.disconnectPausedPlayerId === null
-      ) {
-        emitEgyptianWarPauseChanged(roomCode, room.isPaused);
-      }
     } else {
       const revokedMessage = revokedSocketMessages.get(socket.id);
       if (revokedMessage) {
@@ -1200,12 +561,6 @@ io.on("connection", (socket) => {
         });
       }
       sendRoomMemberLists(session.roomCode, room);
-      if (role === "player") {
-        emitEgyptianWarPauseChanged(
-          session.roomCode,
-          room.isPaused
-        );
-      }
       respond({ success: true, role });
       return;
     }
@@ -1225,49 +580,6 @@ io.on("connection", (socket) => {
       room.hostId = socket.id;
     }
 
-    const gamePlayer = role === "player"
-      ? room.gameState?.players.find(
-      (candidate) => candidate.id === oldPlayerId
-      )
-      : undefined;
-
-    if (gamePlayer) {
-      gamePlayer.id = socket.id;
-    }
-
-    if (role === "player" && room.gameState?.challenge) {
-      if (room.gameState.challenge.challengerId === oldPlayerId) {
-        room.gameState.challenge.challengerId = socket.id;
-      }
-
-      if (room.gameState.challenge.responderId === oldPlayerId) {
-        room.gameState.challenge.responderId = socket.id;
-      }
-    }
-
-    if (
-      role === "player" &&
-      room.gameState?.pendingPileWinnerId === oldPlayerId
-    ) {
-      room.gameState.pendingPileWinnerId = socket.id;
-    }
-
-    if (role === "player" && room.reconnectGracePlayerId === oldPlayerId) {
-      room.reconnectGracePlayerId = socket.id;
-    }
-
-    const pendingSlapCandidate = role === "player"
-      ? room.pendingSlapResolution?.candidates.get(oldPlayerId)
-      : undefined;
-    if (pendingSlapCandidate) {
-      room.pendingSlapResolution?.candidates.delete(oldPlayerId);
-      pendingSlapCandidate.playerId = socket.id;
-      room.pendingSlapResolution?.candidates.set(
-        socket.id,
-        pendingSlapCandidate
-      );
-    }
-
     if (previousSocket && oldPlayerId !== socket.id) {
       previousSocket.emit("room-session-replaced");
       previousSocket.leave(session.roomCode);
@@ -1280,10 +592,6 @@ io.on("connection", (socket) => {
       disconnectedPlayerTimers.delete(oldPlayerId);
     }
 
-    if (role === "player" && room.disconnectPausedPlayerId === oldPlayerId) {
-      room.disconnectPausedPlayerId = socket.id;
-    }
-
     removePlayerResumeTokens(oldPlayerId);
     const rotatedResumeToken = createPlayerResumeToken(
       session.roomCode,
@@ -1292,7 +600,7 @@ io.on("connection", (socket) => {
     playerResumeTokens.delete(token);
     socket.join(session.roomCode);
     if (role === "player") {
-      markPlayerReconnected(session.roomCode, socket.id, room);
+      room.gameSession?.memberReconnected?.(socket.id, oldPlayerId);
     }
     sendRoomResumed(socket, session.roomCode, room);
     socket.emit("room-resume-token", rotatedResumeToken);
@@ -1308,12 +616,6 @@ io.on("connection", (socket) => {
     }
 
     sendRoomMemberLists(session.roomCode, room);
-    if (role === "player") {
-      emitEgyptianWarPauseChanged(
-        session.roomCode,
-        room.isPaused
-      );
-    }
     respond({ success: true, role });
   });
 
@@ -1355,19 +657,7 @@ io.on("connection", (socket) => {
       gameSettings: {},
       isLocked: false,
       activeGameId: null,
-      gameSession: null,
-      gameState: null,
-      isPaused: false,
-      isAnimating: false,
-      animationId: 0,
-      turnTimer: null,
-      turnDeadlineAt: null,
-      turnTimeRemainingMs: null,
-      reconnectGracePlayerId: null,
-      reconnectGraceUsedThisTurn: false,
-      pendingSlapResolution: null,
-      disconnectPausedPlayerId: null,
-      wasPausedBeforeDisconnect: false
+      gameSession: null
     };
 
     room.players.set(socket.id, {
@@ -1509,12 +799,12 @@ io.on("connection", (socket) => {
       role,
       activeGameId: room.activeGameId,
       gameSettings: room.gameSettings,
-      isPaused: room.isPaused,
+      isPaused: room.gameSession?.getLifecycleState().isPaused ?? false,
       chatEnabled:
         getGameDefinition(room.activeGameId)?.chatEnabled ?? false
     });
 
-    if (role === "spectator" && room.activeGameId === egyptianWar.id) {
+    if (role === "spectator" && room.activeGameId !== null) {
       sendActiveGameState(roomCode, room, socket);
     }
   });
@@ -1783,205 +1073,50 @@ io.on("connection", (socket) => {
       return;
     }
 
-    const isActiveEgyptianWar =
-      room.activeGameId === egyptianWar.id &&
-      room.gameState?.status === "playing";
-
-    if (isActiveEgyptianWar && room.isAnimating) {
-      respond({
-        success: false,
-        message: "Wait for the current game animation to finish."
-      });
-      return;
-    }
-
-    if (
-      isActiveEgyptianWar &&
-      room.pendingSlapResolution !== null
-    ) {
-      respond({
-        success: false,
-        message: "Wait for the slap decision to finish."
-      });
-      return;
-    }
-
-    if (room.activeGameId !== null && !isActiveEgyptianWar) {
-      respond({
-        success: false,
-        message: "Players cannot be kicked during this game."
-      });
-      return;
-    }
-
     if (playerId === room.hostId) {
-      respond({
-        success: false,
-        message: "The host cannot remove themselves."
-      });
+      respond({ success: false, message: "The host cannot remove themselves." });
       return;
     }
 
     const player = room.players.get(playerId);
-
     if (!player) {
-      respond({
-        success: false,
-        message: "That player is no longer in the room."
-      });
+      respond({ success: false, message: "That player is no longer in the room." });
       return;
     }
 
-    if (isActiveEgyptianWar && player.isConnected) {
-      respond({
-        success: false,
-        message: "Only disconnected players can be kicked during a game."
-      });
+    const wasInActiveGame = room.gameSession !== null;
+    const removalResult = room.gameSession?.memberRemoved?.(playerId) ??
+      (wasInActiveGame
+        ? { success: false, message: "Players cannot be removed during this game." }
+        : { success: true, message: "Player removed from the lobby." });
+    if (!removalResult.success) {
+      respond(removalResult);
       return;
-    }
-
-    const currentGamePlayerId =
-      room.gameState?.players[room.gameState.currentPlayerIndex]?.id ??
-      null;
-    if (isActiveEgyptianWar && room.turnTimer !== null) {
-      suspendTurnTimer(room);
-    }
-
-    if (isActiveEgyptianWar && room.gameState) {
-      try {
-        removeEgyptianWarPlayer(room.gameState, playerId);
-      } catch (error) {
-        if (!(error instanceof EgyptianWarRuleError)) {
-          console.error(
-            `Unable to remove ${player.name} from Egyptian War in room ${roomCode}:`,
-            error
-          );
-          respond({
-            success: false,
-            message: "Unable to remove that player from the game."
-          });
-          return;
-        }
-
-        respond({
-          success: false,
-          message: error.message
-        });
-        return;
-      }
     }
 
     room.players.delete(playerId);
     socketRoomCodes.delete(playerId);
-    const kickedMessage = isActiveEgyptianWar
+    const kickedMessage = wasInActiveGame
       ? "You were kicked from the game while disconnected."
       : "You were kicked from the lobby while disconnected.";
     removePlayerResumeTokens(playerId, kickedMessage);
     revokedSocketMessages.set(playerId, kickedMessage);
-    setTimeout(() => {
-      revokedSocketMessages.delete(playerId);
-    }, reconnectGracePeriodMs);
+    setTimeout(() => revokedSocketMessages.delete(playerId), reconnectGracePeriodMs);
     const reconnectTimer = disconnectedPlayerTimers.get(playerId);
-
     if (reconnectTimer !== undefined) {
       clearTimeout(reconnectTimer);
       disconnectedPlayerTimers.delete(playerId);
     }
-
-    if (room.reconnectGracePlayerId === playerId) {
-      room.reconnectGracePlayerId = null;
-    }
-
-    if (room.disconnectPausedPlayerId === playerId) {
-      const otherDisconnectedPlayer = Array.from(
-        room.players.values()
-      ).find((candidate) => !candidate.isConnected);
-      room.disconnectPausedPlayerId =
-        otherDisconnectedPlayer?.id ?? null;
-
-      if (room.disconnectPausedPlayerId === null) {
-        room.isPaused = room.wasPausedBeforeDisconnect;
-        room.wasPausedBeforeDisconnect = false;
-      }
-    }
-
     const playerSocket = io.sockets.sockets.get(playerId);
-
     if (playerSocket) {
-      playerSocket.emit("kicked-from-room", {
-        message: kickedMessage
-      });
-
+      playerSocket.emit("kicked-from-room", { message: kickedMessage });
       playerSocket.leave(roomCode);
     }
-
-    const nextGamePlayerId =
-      room.gameState?.players[room.gameState.currentPlayerIndex]?.id ??
-      null;
-    if (
-      isActiveEgyptianWar &&
-      currentGamePlayerId !== nextGamePlayerId
-    ) {
-      room.turnTimeRemainingMs = null;
-      room.reconnectGraceUsedThisTurn = false;
-    }
-
     sendRoomMemberLists(roomCode, room);
-    if (isActiveEgyptianWar && room.gameState) {
-      if (room.gameState.status === "finished") {
-        room.animationId += 1;
-        const finalAnimationId = room.animationId;
-        const winner = room.gameState.players.find(
-          (gamePlayer) => gamePlayer.id === room.gameState?.winnerId
-        );
-        room.isAnimating = true;
-        const animation = {
-          id: finalAnimationId,
-          action: "kick",
-          actorId: playerId,
-          playedCard: null,
-          isValidSlap: false,
-          winnerId: winner?.id ?? null,
-          transferCardCount: room.gameState.totalCardCount,
-          pileCardCountBeforeTransfer: room.gameState.totalCardCount,
-          penaltyCardCount: 0,
-          isFinalWin: winner !== undefined
-        };
-        emitGameEvent(roomCode, egyptianWar.id, {
-          type: "animation",
-          payload: animation
-        });
-        sendActiveGameState(roomCode, room);
-        setTimeout(() => {
-          if (
-            rooms.get(roomCode) === room &&
-            room.animationId === finalAnimationId
-          ) {
-            completeEgyptianWar(roomCode, room);
-          }
-        }, gameEndAnimationMs);
-      } else {
-        if (
-          !room.isPaused &&
-          !room.isAnimating &&
-          room.turnTimer === null
-        ) {
-          startTurnTimer(roomCode, room);
-        }
-        sendActiveGameState(roomCode, room);
-      }
-    }
-
-    console.log(
-      `${player.name} was removed from room ${roomCode}`
-    );
-
+    console.log(`${player.name} was removed from room ${roomCode}`);
     respond({
       success: true,
-      message: isActiveEgyptianWar
-        ? room.gameState?.activityMessage ??
-        "Disconnected player removed from the game."
-        : "Player removed from the lobby."
+      message: removalResult.message ?? "Player removed."
     });
   });
 
@@ -2075,30 +1210,38 @@ io.on("connection", (socket) => {
       return;
     }
 
-    const settings: EgyptianWarSettings = {
-      deckCount:
-        typeof room.gameSettings.deckCount === "number"
-          ? room.gameSettings.deckCount
-          : 1,
-      includeJokers: room.gameSettings.includeJokers === true,
-      allowDoubles: room.gameSettings.allowDoubles === true,
-      allowSandwiches: room.gameSettings.allowSandwiches === true,
-      allowFourInARow: room.gameSettings.allowFourInARow === true,
-      allowTopBottom: room.gameSettings.allowTopBottom === true,
-      allowTens: room.gameSettings.allowTens === true,
-      allowMarriage: room.gameSettings.allowMarriage === true,
-      falseSlapPenaltyCards:
-        typeof room.gameSettings.falseSlapPenaltyCards === "number"
-          ? room.gameSettings.falseSlapPenaltyCards
-          : 2
-    };
+    const gamePackage = gamePackagesById.get(game.id);
+    if (!gamePackage) {
+      respond({ success: false, message: "The selected game package is unavailable." });
+      return;
+    }
 
+    let createdSession: GameSession | null = null;
     try {
-      room.gameState = createEgyptianWarState(
-        Array.from(room.players.values()),
-        settings,
-        deterministicTestRandomInteger
-      );
+      createdSession = gamePackage.server.createSession({
+        roomCode,
+        members: () => [
+          ...Array.from(room.players.values(), (member) => ({
+            ...member,
+            role: "player" as const
+          })),
+          ...Array.from(room.spectators.values(), (member) => ({
+            ...member,
+            role: "spectator" as const
+          }))
+        ],
+        broadcastState: () => sendActiveGameState(roomCode, room),
+        emitEvent: (event) => {
+          io.to(roomCode).emit("game-event", { gameId: game.id, event });
+        },
+        finish: ({ winnerId, reason }) => {
+          if (room.gameSession === createdSession) {
+            finishActiveGame(roomCode, room, winnerId, reason);
+          }
+        },
+        now: Date.now,
+        randomInteger: deterministicTestRandomInteger
+      }, room.gameSettings);
     } catch (error) {
       console.error(`Unable to initialize ${game.name} in room ${roomCode}:`, error);
       respond({
@@ -2109,15 +1252,7 @@ io.on("connection", (socket) => {
     }
 
     room.activeGameId = game.id;
-    room.gameSession = createEmbeddedEgyptianWarSession(
-      roomCode,
-      room
-    );
-    room.isPaused = false;
-    room.isAnimating = false;
-    room.reconnectGraceUsedThisTurn = false;
-    cancelPendingSlapResolution(room);
-    clearTurnTimer(room);
+    room.gameSession = createdSession;
 
     io.to(roomCode).emit("game-started", {
       gameId: game.id,
@@ -2125,7 +1260,7 @@ io.on("connection", (socket) => {
       chatEnabled: game.chatEnabled,
       settings: room.gameSettings
     });
-    startTurnTimer(roomCode, room);
+    room.gameSession.start?.();
     sendActiveGameState(roomCode, room);
 
     console.log(`${game.name} started in room ${roomCode}`);
@@ -2141,15 +1276,10 @@ io.on("connection", (socket) => {
       .toUpperCase();
     const room = rooms.get(roomCode);
 
-    if (
-      !room ||
-      room.activeGameId !== egyptianWar.id ||
-      room.gameState === null ||
-      room.gameState.status !== "playing"
-    ) {
+    if (!room || room.activeGameId === null || room.gameSession === null) {
       respond({
         success: false,
-        message: "Egyptian War is not active in that room."
+        message: "No game is active in that room."
       });
       return;
     }
@@ -2170,36 +1300,18 @@ io.on("connection", (socket) => {
       return;
     }
 
-    if (data.isPaused === room.isPaused) {
+    const lifecycle = room.gameSession.getLifecycleState();
+    if (data.isPaused === lifecycle.isPaused) {
       respond({ success: true });
       return;
     }
-
-    if (data.isPaused) {
-      if (room.pendingSlapResolution !== null) {
-        respond({
-          success: false,
-          message: "Wait for the accepted slap decision before pausing."
-        });
-        return;
-      }
-
-      suspendTurnTimer(room);
-    }
-
-    if (room.disconnectPausedPlayerId !== null) {
-      room.wasPausedBeforeDisconnect = data.isPaused;
-    }
-
-    room.isPaused = data.isPaused;
-
-    if (!room.isPaused) {
-      startTurnTimer(roomCode, room);
-    }
-
-    emitEgyptianWarPauseChanged(roomCode, room.isPaused);
-    sendActiveGameState(roomCode, room);
-    respond({ success: true });
+    const result = data.isPaused
+      ? room.gameSession.pause?.()
+      : room.gameSession.resume?.();
+    respond(result ?? {
+      success: false,
+      message: "This game does not support pausing."
+    });
   });
 
   socket.on("close-room", (data, respond) => {
@@ -2232,8 +1344,6 @@ io.on("connection", (socket) => {
       return;
     }
 
-    clearTurnTimer(room);
-    cancelPendingSlapResolution(room);
     disposeGameSession(room);
     const memberIds = new Set([
       ...room.players.keys(),
@@ -2263,14 +1373,10 @@ io.on("connection", (socket) => {
       .toUpperCase();
     const room = rooms.get(roomCode);
 
-    if (
-      !room ||
-      room.activeGameId !== egyptianWar.id ||
-      room.gameState === null
-    ) {
+    if (!room || room.activeGameId === null || room.gameSession === null) {
       respond({
         success: false,
-        message: "Egyptian War is not active in that room."
+        message: "No game is active in that room."
       });
       return;
     }
@@ -2283,19 +1389,12 @@ io.on("connection", (socket) => {
       return;
     }
 
-    clearTurnTimer(room);
-    cancelPendingSlapResolution(room);
-    disposeGameSession(room);
-    room.animationId += 1;
-    room.activeGameId = null;
-    room.gameState = null;
-    room.isPaused = false;
-    room.isAnimating = false;
-    promoteSpectatorsToPlayers(roomCode, room);
-    io.to(roomCode).emit("game-ended", {
-      winnerId: null,
-      message: "The host ended the game and returned everyone to the lobby."
-    });
+    finishActiveGame(
+      roomCode,
+      room,
+      null,
+      "The host ended the game and returned everyone to the lobby."
+    );
     respond({ success: true });
   });
 
@@ -2441,7 +1540,7 @@ io.on("connection", (socket) => {
 
         if (disconnectedMember.role === "spectator") {
           room.spectators.delete(socket.id);
-        } else if (room.hostId !== socket.id && room.gameState === null) {
+        } else if (room.hostId !== socket.id && room.gameSession === null) {
           room.players.delete(socket.id);
         } else {
           return;
@@ -2468,25 +1567,11 @@ io.on("connection", (socket) => {
 
     player.isConnected = false;
 
-    if (room.gameState?.status === "playing") {
-      suspendTurnTimer(room);
-      if (room.disconnectPausedPlayerId === null) {
-        room.wasPausedBeforeDisconnect = room.isPaused;
-        room.disconnectPausedPlayerId = socket.id;
-      }
-
-      room.isPaused = true;
-      room.isAnimating = false;
-      room.animationId += 1;
-      room.gameState.activityMessage =
-        `${player.name} disconnected. The game is paused until they return.`;
-      emitEgyptianWarPauseChanged(roomCode, true);
-      sendActiveGameState(roomCode, room);
-    }
+    room.gameSession?.memberDisconnected?.(socket.id);
 
     sendRoomMemberLists(roomCode, room);
 
-    if (room.gameState !== null) {
+    if (room.gameSession !== null) {
       return;
     }
 
@@ -2507,8 +1592,6 @@ io.on("connection", (socket) => {
       }
 
       if (room.hostId === socket.id) {
-        clearTurnTimer(room);
-        cancelPendingSlapResolution(room);
         disposeGameSession(room);
         io.to(roomCode).emit("room-closed");
 
@@ -2531,39 +1614,6 @@ io.on("connection", (socket) => {
         rooms.delete(roomCode);
         console.log(`Room ${roomCode} closed after host recovery expired`);
         return;
-      }
-
-      if (room.gameState !== null) {
-        clearTurnTimer(room);
-        cancelPendingSlapResolution(room);
-        disposeGameSession(room);
-        room.animationId += 1;
-        room.activeGameId = null;
-        room.gameState = null;
-        room.isPaused = false;
-        room.isAnimating = false;
-        room.disconnectPausedPlayerId = null;
-        room.wasPausedBeforeDisconnect = false;
-        promoteSpectatorsToPlayers(roomCode, room);
-        io.to(roomCode).emit("game-ended", {
-          winnerId: null,
-          message:
-            `${player.name} did not reconnect in time. The game ended and everyone returned to the lobby.`
-        });
-      } else if (room.disconnectPausedPlayerId === socket.id) {
-        const otherDisconnectedPlayer = Array.from(
-          room.players.values()
-        ).find(
-          (candidate) =>
-            candidate.id !== socket.id && !candidate.isConnected
-        );
-
-        room.disconnectPausedPlayerId =
-          otherDisconnectedPlayer?.id ?? null;
-        if (room.disconnectPausedPlayerId === null) {
-          room.isPaused = room.wasPausedBeforeDisconnect;
-          room.wasPausedBeforeDisconnect = false;
-        }
       }
 
       room.players.delete(socket.id);

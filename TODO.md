@@ -34,7 +34,7 @@
 - [x] Validate registered manifests and reject incompatible versions, duplicate game IDs, and malformed settings.
 - [x] Register the embedded Egyptian War definition through the plugin registry without changing gameplay.
 - [x] Add generic game state, event, and action envelopes and migrate the built-in browser client to them.
-- [ ] Move active room state and game actions behind the generic `GameSession` lifecycle.
+- [x] Move active room state and game actions behind the generic `GameSession` lifecycle.
 - [x] Remove the temporary Egyptian-War-specific Socket.IO compatibility events after introducing the session adapter.
 - [x] Add a generic browser game host and route active `GameClientModule` state and events through it.
 - [x] Establish independently buildable GameHub SDK and Egyptian War workspaces with package-name imports.

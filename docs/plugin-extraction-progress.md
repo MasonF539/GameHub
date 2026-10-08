@@ -11,7 +11,7 @@ to an independently versioned GameHub plugin.
 - Moved Egyptian War engine code, tests, design notes, preview media, music,
   effects, HTML markup, and CSS into `games/egyptian-war`.
 - Added a generic browser game-client host and generic Socket.IO envelopes.
-- Added a transitional server `GameSession` adapter.
+- Added the generic server `GameSession` lifecycle and package factory.
 - Made picker previews manifest-driven.
 - Let game packages register their own music and effects.
 - Made `#game-root` the actual browser host root.
@@ -26,11 +26,27 @@ to an independently versioned GameHub plugin.
   chat, member removal, notifications, and host state.
 - Added package-side browser module registration and generic platform-event
   routing without game-specific code in `public/client.js`.
+- Moved authoritative Egyptian War state, timers, slap arbitration,
+  animations, pause/disconnect recovery, member removal, and completion into
+  its package-owned `GameSession`.
+- Removed Egyptian War engine imports and game-specific room state from
+  GameHub's server.
+- Moved the installed-game list into `gamehub.config.json`, leaving GameHub's
+  server free of Egyptian War package names and implementation imports.
 
 ## In progress
 
-- Move authoritative timers, arbitration orchestration, and member lifecycle
-  handling behind the package `GameSession`.
+- Prepare the completed in-repository package boundary for its independent
+  repository and add a minimal second plugin before stabilizing the API.
+
+## Verification
+
+- The full production Docker build compiles both workspaces and passes all 52
+  automated tests.
+- The production container serves injected package markup and the
+  package-owned browser module from its declared public route.
+- GameHub's runtime client and server contain no Egyptian War implementation
+  branches or imports; the installed package list lives in configuration.
 
 ## Final repository split
 

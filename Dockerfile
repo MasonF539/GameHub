@@ -8,6 +8,7 @@ COPY games/egyptian-war/package.json ./games/egyptian-war/package.json
 RUN npm ci
 
 COPY tsconfig.json ./
+COPY gamehub.config.json ./
 COPY packages ./packages
 COPY games ./games
 COPY src ./src
@@ -33,6 +34,7 @@ COPY --from=build /app/packages/game-sdk/dist ./packages/game-sdk/dist
 COPY --from=build /app/games/egyptian-war/dist ./games/egyptian-war/dist
 COPY --from=build /app/games/egyptian-war/public ./games/egyptian-war/public
 COPY public ./public
+COPY gamehub.config.json ./gamehub.config.json
 
 EXPOSE 3000
 

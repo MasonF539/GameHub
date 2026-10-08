@@ -1,4 +1,5 @@
 import type { GameDefinition } from "./gameDefinition.js";
+import type { GameServerPlugin } from "./plugin.js";
 
 export const gameHubGameApiVersion = 1 as const;
 
@@ -29,4 +30,5 @@ export type GamePluginManifest = {
 export type GamePluginPackage = {
   manifest: GamePluginManifest;
   publicDirectory: string;
+  server: GameServerPlugin;
 };

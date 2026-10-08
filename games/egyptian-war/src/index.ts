@@ -1,6 +1,7 @@
 import path from "node:path";
 import type { GamePluginPackage } from "@gamehub/game-sdk";
 import { egyptianWarManifest as manifest } from "./definition.js";
+import { egyptianWarServer as server } from "./session.js";
 
 export {
   egyptianWar,
@@ -31,8 +32,10 @@ export {
   selectWeightedSlapWinner,
   slapCollectionWindowMs
 } from "./slapArbitration.js";
+export { egyptianWarServer } from "./session.js";
 
 export const gameHubPlugin: GamePluginPackage = {
   manifest,
-  publicDirectory: path.resolve(__dirname, "..", "public")
+  publicDirectory: path.resolve(__dirname, "..", "public"),
+  server
 };
