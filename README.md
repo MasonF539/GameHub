@@ -119,7 +119,8 @@ GameHub/
 ├── .vscode/
 │   └── tasks.json
 ├── docs/
-│   └── egyptian-war-design.md
+│   ├── egyptian-war-design.md
+│   └── game-plugin-architecture.md
 ├── public/
 │   ├── assets/
 │   │   ├── audio/
@@ -131,6 +132,13 @@ GameHub/
 │   ├── index.html
 │   └── style.css
 ├── src/
+│   ├── game-sdk/
+│   │   ├── gameDefinition.ts
+│   │   ├── index.ts
+│   │   ├── manifest.ts
+│   │   ├── plugin.ts
+│   │   ├── registry.ts
+│   │   └── registry.test.ts
 │   ├── games/
 │   │   ├── egyptianWar/
 │   │   │   ├── definition.ts

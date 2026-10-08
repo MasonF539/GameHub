@@ -3,7 +3,10 @@ import { randomBytes } from "node:crypto";
 import http from "http";
 import path from "path";
 import { Server, type Socket } from "socket.io";
-import { egyptianWar } from "./games/egyptianWar/definition.js";
+import {
+  egyptianWar,
+  egyptianWarManifest
+} from "./games/egyptianWar/definition.js";
 import {
   applyEgyptianWarAction,
   createEgyptianWarState,
@@ -17,6 +20,7 @@ import {
   type EgyptianWarState
 } from "./games/egyptianWar/engine.js";
 import type { GameSetting } from "./games/gameDefinition.js";
+import { GamePluginRegistry } from "./game-sdk/registry.js";
 import {
   defaultSlapJitterMs,
   selectWeightedSlapWinner,
@@ -87,9 +91,16 @@ const availableAvatars = [
   "🧙"
 ];
 
-const availableGames = [
-  egyptianWar
-];
+const gamePluginRegistry = new GamePluginRegistry([
+  egyptianWarManifest
+]);
+const availableGames = gamePluginRegistry.listDefinitions();
+
+function getGameDefinition(gameId: string | null) {
+  return gameId === null
+    ? null
+    : gamePluginRegistry.getDefinition(gameId);
+}
 
 const app = express();
 const server = http.createServer(app);
@@ -320,9 +331,8 @@ function sendRoomResumed(
     gameSettings: room.gameSettings,
     activeGameId: room.activeGameId,
     isPaused: room.isPaused,
-    chatEnabled: availableGames.find(
-      (game) => game.id === room.activeGameId
-    )?.chatEnabled ?? false
+    chatEnabled:
+      getGameDefinition(room.activeGameId)?.chatEnabled ?? false
   });
 
   if (room.activeGameId === egyptianWar.id) {
@@ -333,7 +343,7 @@ function sendRoomResumed(
 function createDefaultSettings(
   gameId: string
 ): Record<string, GameSettingValue> | null {
-  const game = availableGames.find((item) => item.id === gameId);
+  const game = getGameDefinition(gameId);
 
   if (!game) {
     return null;
@@ -1297,9 +1307,8 @@ io.on("connection", (socket) => {
       activeGameId: room.activeGameId,
       gameSettings: room.gameSettings,
       isPaused: room.isPaused,
-      chatEnabled: availableGames.find(
-        (game) => game.id === room.activeGameId
-      )?.chatEnabled ?? false
+      chatEnabled:
+        getGameDefinition(room.activeGameId)?.chatEnabled ?? false
     });
 
     if (role === "spectator" && room.activeGameId === egyptianWar.id) {
@@ -1339,7 +1348,7 @@ io.on("connection", (socket) => {
       return;
     }
 
-    const game = availableGames.find((item) => item.id === gameId);
+    const game = getGameDefinition(gameId);
 
     if (!game) {
       respond({
@@ -1413,9 +1422,7 @@ io.on("connection", (socket) => {
       return;
     }
 
-    const game = availableGames.find(
-      (item) => item.id === room.selectedGameId
-    );
+    const game = getGameDefinition(room.selectedGameId);
 
     if (!game) {
       respond({
@@ -1823,9 +1830,7 @@ io.on("connection", (socket) => {
       return;
     }
 
-    const game = availableGames.find(
-      (item) => item.id === room.selectedGameId
-    );
+    const game = getGameDefinition(room.selectedGameId);
 
     if (!game) {
       respond({
@@ -2104,9 +2109,7 @@ io.on("connection", (socket) => {
       return;
     }
 
-    const game = availableGames.find(
-      (availableGame) => availableGame.id === room.activeGameId
-    );
+    const game = getGameDefinition(room.activeGameId);
 
     if (!game?.chatEnabled) {
       respond({

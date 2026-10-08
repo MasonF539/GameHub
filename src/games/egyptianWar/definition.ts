@@ -1,4 +1,8 @@
 import type { GameDefinition } from "../gameDefinition.js";
+import {
+  gameHubGameApiVersion,
+  type GamePluginManifest
+} from "../../game-sdk/manifest.js";
 
 export type CardSuit =
   | "clubs"
@@ -143,4 +147,15 @@ export const egyptianWar: GameDefinition = {
       unit: "second"
     }
   ]
+};
+
+// Egyptian War still uses GameHub's embedded client while its browser UI and
+// server lifecycle are moved behind the plugin contracts.
+export const egyptianWarManifest: GamePluginManifest = {
+  apiVersion: gameHubGameApiVersion,
+  packageVersion: "1.0.0",
+  definition: egyptianWar,
+  client: {
+    delivery: "embedded"
+  }
 };

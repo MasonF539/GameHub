@@ -28,6 +28,19 @@
 
 ## Architecture requirements
 
+### Installable game plugins
+
+- [x] Define versioned server, client, and manifest contracts in the initial GameHub game SDK.
+- [x] Validate registered manifests and reject incompatible versions, duplicate game IDs, and malformed settings.
+- [x] Register the embedded Egyptian War definition through the plugin registry without changing gameplay.
+- [ ] Move active room state and game actions behind the generic `GameSession` lifecycle.
+- [ ] Replace Egyptian-War-specific Socket.IO events with generic game state, event, and action envelopes.
+- [ ] Add a generic browser game root and load `GameClientModule` implementations into it.
+- [ ] Move Egyptian War markup, styles, previews, and game audio into its package boundary.
+- [ ] Load installed game packages from explicit administrator-controlled configuration.
+- [ ] Extract Egyptian War into its own repository and reinstall it as a pinned package dependency.
+- [ ] Add a minimal second plugin to prove that GameHub contains no Egyptian War assumptions.
+
 Each playable game should support:
 
 - [x] Live events for changes occurring during the game.
