@@ -31,6 +31,7 @@ RUN npm ci --omit=dev
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/packages/game-sdk/dist ./packages/game-sdk/dist
 COPY --from=build /app/games/egyptian-war/dist ./games/egyptian-war/dist
+COPY --from=build /app/games/egyptian-war/public ./games/egyptian-war/public
 COPY public ./public
 
 EXPOSE 3000

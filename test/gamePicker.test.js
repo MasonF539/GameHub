@@ -110,10 +110,13 @@ test("renders available games as preview cards for every player", () => {
   assert.match(card.textContent, /2–6 players/);
   const preview = card.querySelector(".game-picker-preview-video");
   assert.ok(preview);
-  assert.match(preview.src, /\/assets\/game-previews\/egyptian-war\.mp4$/);
+  assert.match(
+    preview.src,
+    /\/games\/egyptian-war\/assets\/game-previews\/preview\.mp4$/
+  );
   assert.match(
     preview.poster,
-    /\/assets\/game-previews\/egyptian-war-poster\.webp$/
+    /\/games\/egyptian-war\/assets\/game-previews\/poster\.webp$/
   );
   assert.equal(preview.autoplay, true);
   assert.equal(preview.loop, true);

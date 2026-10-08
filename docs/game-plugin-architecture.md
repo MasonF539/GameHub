@@ -30,7 +30,9 @@ through a transitional `GameSession` adapter, and the browser mounts its
 embedded `GameClientModule` through the generic game host. State, event, and
 action traffic uses generic envelopes. Timer and animation orchestration is
 still handled directly by `server.ts`, while markup, styles, and most browser
-logic remain in GameHub's shared public files.
+logic remain in GameHub's shared public files. Preview media and game-specific
+audio now live in the Egyptian War workspace and are served from its own public
+route.
 
 The intended migration order is:
 

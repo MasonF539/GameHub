@@ -145,6 +145,13 @@ app.use(
   )
 );
 
+app.use(
+  "/games/egyptian-war",
+  express.static(
+    path.join(process.cwd(), "games", "egyptian-war", "public")
+  )
+);
+
 app.use(express.static(path.join(process.cwd(), "public")));
 
 function generateRoomCode(): string {

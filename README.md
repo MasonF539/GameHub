@@ -117,8 +117,9 @@ docker compose --profile public down
 GameHub uses npm workspaces so the plugin boundary is exercised before the
 packages are moved into separate repositories. `packages/game-sdk` contains
 the shared contracts, while `games/egyptian-war` owns the independently
-buildable game engine, tests, documentation, and package metadata. Browser
-presentation and media are the next part of the migration.
+buildable game engine, tests, documentation, package metadata, preview media,
+and game-specific audio. Its remaining browser markup, styles, and logic are
+the next part of the migration.
 
 ```text
 GameHub/
@@ -129,6 +130,7 @@ GameHub/
 ├── games/
 │   └── egyptian-war/
 │       ├── docs/
+│       ├── public/
 │       ├── src/
 │       ├── package.json
 │       └── tsconfig.json
@@ -137,7 +139,6 @@ GameHub/
 │   │   ├── audio/
 │   │   │   ├── effects/
 │   │   │   └── music/
-│   │   └── game-previews/
 │   ├── audio.js
 │   ├── client.js
 │   ├── index.html

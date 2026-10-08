@@ -9,14 +9,14 @@
   };
   const musicSources = {
     menu: "/assets/audio/music/menu-lobby.mp3",
-    "egyptian-war": "/assets/audio/music/egyptian-war.mp3"
+    "egyptian-war": "/games/egyptian-war/assets/audio/music/egyptian-war.mp3"
   };
   const effectSources = {
     "player-join": "/assets/audio/effects/player-join.mp3",
-    "card-play": "/assets/audio/effects/card-play.mp3",
-    slap: "/assets/audio/effects/slap.mp3",
-    "pile-win": "/assets/audio/effects/pile-win.mp3",
-    "game-win": "/assets/audio/effects/game-win.mp3"
+    "card-play": "/games/egyptian-war/assets/audio/effects/card-play.mp3",
+    slap: "/games/egyptian-war/assets/audio/effects/slap.mp3",
+    "pile-win": "/games/egyptian-war/assets/audio/effects/pile-win.mp3",
+    "game-win": "/games/egyptian-war/assets/audio/effects/game-win.mp3"
   };
   const effectVolumes = {
     "player-join": 0.8,

@@ -393,7 +393,7 @@ body {
 
 .game-picker-preview.is-egyptian-war {
   background:
-    #1d222d url("/assets/game-previews/egyptian-war-poster.webp")
+    #1d222d url("/games/egyptian-war/assets/game-previews/poster.webp")
     center / cover no-repeat;
 }
 

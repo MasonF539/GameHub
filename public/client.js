@@ -650,9 +650,9 @@ function createGamePreview(game) {
     ).matches;
     previewVideo.className = "game-picker-preview-video";
     previewVideo.src =
-      "/assets/game-previews/egyptian-war.mp4";
+      "/games/egyptian-war/assets/game-previews/preview.mp4";
     previewVideo.poster =
-      "/assets/game-previews/egyptian-war-poster.webp";
+      "/games/egyptian-war/assets/game-previews/poster.webp";
     previewVideo.muted = true;
     previewVideo.defaultMuted = true;
     previewVideo.loop = !prefersReducedPreviewMotion;
