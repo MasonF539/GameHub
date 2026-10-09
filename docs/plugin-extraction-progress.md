@@ -35,17 +35,25 @@ to an independently versioned GameHub plugin.
   server free of Egyptian War package names and implementation imports.
 - Split production and test compilation so published `dist` directories do
   not contain test JavaScript or empty test declaration modules.
+- Added a minimal fixture plugin for GameHub integration coverage and moved
+  Egyptian War-specific session, browser animation, and audio-registration
+  coverage into the game package.
+- Moved the generic gameplay-view wrapper into GameHub's page shell so game
+  packages provide only the markup mounted inside `#game-root`.
+- Added per-package markup roots, active-root client mounting, and ES-module
+  entry-point loading for module-delivered game clients.
+- Centralized the avatar catalog in server-rendered platform configuration and
+  hardened room requests with optional acknowledgements, cryptographic room
+  codes, and invalid-join throttling.
 
 ## In progress
 
-- Add a minimal second plugin to verify that GameHub has no remaining
-  Egyptian War assumptions before stabilizing the SDK API.
-- Move `games/egyptian-war` into its independent repository, publish or pin
-  its package, and reinstall it in GameHub as an external dependency.
+- Move `games/egyptian-war` into its independent repository, publish it to npm,
+  and reinstall an exact version in GameHub as an external dependency.
 
 ## Verification
 
-- The full production Docker build compiles both workspaces and passes all 52
+- The full production Docker build compiles both workspaces and passes all 58
   automated tests.
 - The production container serves injected package markup and the
   package-owned browser module from its declared public route.
@@ -58,6 +66,11 @@ Once the in-repository boundary is complete, `games/egyptian-war` can become
 its own repository and return to GameHub as a pinned package dependency. The
 GameHub repository keeps the SDK, platform, room system, transport, picker,
 chat, spectators, settings, and generic game host.
+
+`packages/game-sdk` stays in GameHub because it is the platform-owned contract
+used by every game, not a playable game itself. Egyptian War and future game
+repositories consume an exact SDK version published to the public npm registry
+instead of copying its source.
 
 Egyptian War is intentionally a GameHub plugin rather than a standalone web
 application. Its independent repository will contain the game implementation

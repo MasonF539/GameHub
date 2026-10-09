@@ -3,27 +3,13 @@ const test = require("node:test");
 const fs = require("node:fs");
 const path = require("node:path");
 const { JSDOM } = require("jsdom");
-const { GameClientHost } = require("../public/gameHost.js");
 
 function createClient(reducedMotion = false) {
-  const indexShell = fs.readFileSync(
-    path.join(__dirname, "..", "public", "index.html"),
+  const html = fs.readFileSync(
+    path.join(__dirname, "..", "public", "template.html"),
     "utf8"
   );
-  const gameMarkup = fs.readFileSync(
-    path.join(
-      __dirname,
-      "..",
-      "games",
-      "egyptian-war",
-      "public",
-      "template.html"
-    ),
-    "utf8"
-  );
-  const html = indexShell.replace("<!-- game-plugin-markup -->", gameMarkup);
   const dom = new JSDOM(html, { url: "http://localhost" });
-  const handlers = new Map();
   const playedEffects = [];
   const audioScenes = [];
 
@@ -31,9 +17,7 @@ function createClient(reducedMotion = false) {
   global.document = dom.window.document;
   global.localStorage = dom.window.localStorage;
   global.CSS = dom.window.CSS ?? { escape: (value) => String(value) };
-  if (!global.CSS.escape) {
-    global.CSS.escape = (value) => String(value);
-  }
+  if (!global.CSS.escape) global.CSS.escape = (value) => String(value);
   window.matchMedia = () => ({ matches: reducedMotion });
   window.GameHubAudio = {
     playEffect(effectName) {
@@ -43,7 +27,6 @@ function createClient(reducedMotion = false) {
       audioScenes.push(sceneName);
     }
   };
-  window.GameHubGameClientHost = GameClientHost;
   global.bootstrap = {
     Toast: { getOrCreateInstance: () => ({ show() {} }) },
     Modal: {
@@ -51,12 +34,6 @@ function createClient(reducedMotion = false) {
       getOrCreateInstance: () => ({ hide() {}, show() {} })
     }
   };
-  global.io = () => ({
-    on(event, handler) {
-      handlers.set(event, handler);
-    },
-    emit() {}
-  });
 
   const intervals = [];
   const originalSetInterval = global.setInterval;
@@ -65,17 +42,26 @@ function createClient(reducedMotion = false) {
     intervals.push(interval);
     return interval;
   };
-  const modulePath = require.resolve(
-    "../games/egyptian-war/public/client.js"
-  );
+  const modulePath = require.resolve("../public/client.js");
   delete require.cache[modulePath];
   const client = require(modulePath);
   global.setInterval = originalSetInterval;
+
   const arena = document.querySelector("#egyptian-war-arena");
   const pile = document.querySelector("#egyptian-war-pile-stack");
   const players = document.querySelector("#egyptian-war-players");
-  arena.getBoundingClientRect = () => ({ left: 0, top: 0, width: 600, height: 400 });
-  pile.getBoundingClientRect = () => ({ left: 280, top: 180, width: 40, height: 40 });
+  arena.getBoundingClientRect = () => ({
+    left: 0,
+    top: 0,
+    width: 600,
+    height: 400
+  });
+  pile.getBoundingClientRect = () => ({
+    left: 280,
+    top: 180,
+    width: 40,
+    height: 40
+  });
 
   const addSeat = (id, left, top) => {
     const seat = document.createElement("div");
@@ -88,6 +74,9 @@ function createClient(reducedMotion = false) {
   const close = () => {
     intervals.forEach((interval) => clearInterval(interval));
     dom.window.close();
+    delete global.window;
+    delete global.document;
+    delete global.localStorage;
   };
 
   return { client, close, addSeat, playedEffects, audioScenes };
@@ -140,10 +129,7 @@ test("orders slap hands, sounds, and pile transfer after every hand lands", asyn
 
   await new Promise((resolve) => setTimeout(resolve, 80));
   assert.equal(winnerSeat.classList.contains("is-pile-winner"), true);
-  assert.equal(
-    message.textContent,
-    "Winner slapped first and won the pile."
-  );
+  assert.equal(message.textContent, "Winner slapped first and won the pile.");
   assert.deepEqual(playedEffects, ["slap", "slap", "pile-win"]);
   assert.equal(document.querySelectorAll(".is-transferring").length, 0);
 
@@ -198,8 +184,7 @@ test("moves and sounds a played card from the player seat to the pile", async ()
     width: 100,
     height: 140
   });
-  document.querySelector("#egyptian-war-pile-stack")
-    .appendChild(dealtCard);
+  document.querySelector("#egyptian-war-pile-stack").appendChild(dealtCard);
 
   client.animateEgyptianWarOutcome(animation({
     action: "play-card",
@@ -214,10 +199,7 @@ test("moves and sounds a played card from the player seat to the pile", async ()
   assert.equal(hand.style.top, "200px");
   assert.equal(hand.style.getPropertyValue("--play-hand-x"), "178px");
   assert.equal(hand.style.getPropertyValue("--play-hand-y"), "0px");
-  assert.equal(
-    hand.style.getPropertyValue("--play-hand-rotation"),
-    "90deg"
-  );
+  assert.equal(hand.style.getPropertyValue("--play-hand-rotation"), "90deg");
   assert.deepEqual(playedEffects, []);
   await new Promise((resolve) => setTimeout(resolve, 440));
   assert.deepEqual(playedEffects, ["card-play"]);
@@ -234,7 +216,7 @@ test("shows and sounds the game winner distinctly", async () => {
     players: [{
       id: "winner",
       name: "Frog",
-      avatar: "🐸",
+      avatar: "\u{1F438}",
       cardCount: 54
     }]
   }));
@@ -244,7 +226,7 @@ test("shows and sounds the game winner distinctly", async () => {
   assert.equal(victory.parentElement.id, "egyptian-war-arena");
   assert.equal(
     victory.querySelector(".egyptian-war-victory-avatar").textContent,
-    "🐸"
+    "\u{1F438}"
   );
   assert.equal(
     victory.querySelector(".egyptian-war-victory-winner").textContent,

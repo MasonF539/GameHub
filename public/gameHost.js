@@ -49,9 +49,19 @@
       }
 
       this.unmount();
+      let gameRoot = this.root;
+      const pluginRoots = typeof this.root.querySelectorAll === "function"
+        ? this.root.querySelectorAll("[data-game-plugin-root]")
+        : [];
+      for (const candidate of pluginRoots) {
+        const isActive = candidate.getAttribute("data-game-plugin-root") === gameId;
+        candidate.hidden = !isActive;
+        if (isActive) gameRoot = candidate;
+      }
+      this.setActiveStyles(gameId);
       const context = {
         ...this.createContext(gameId),
-        root: this.root,
+        root: gameRoot,
         gameId,
         launchData
       };
@@ -88,11 +98,26 @@
       this.activeInstance?.receivePlatformEvent?.(event);
     }
 
+    setActiveStyles(gameId) {
+      const ownerDocument = this.root.ownerDocument ?? globalScope.document;
+      if (typeof ownerDocument?.querySelectorAll !== "function") return;
+      for (const stylesheet of ownerDocument.querySelectorAll("[data-game-plugin-style]")) {
+        stylesheet.disabled =
+          stylesheet.getAttribute("data-game-plugin-style") !== gameId;
+      }
+    }
+
     unmount() {
       const instance = this.activeInstance;
       this.activeGameId = null;
       this.activeInstance = null;
       instance?.destroy();
+      if (typeof this.root.querySelectorAll === "function") {
+        for (const candidate of this.root.querySelectorAll("[data-game-plugin-root]")) {
+          candidate.hidden = true;
+        }
+      }
+      this.setActiveStyles(null);
     }
   }
 

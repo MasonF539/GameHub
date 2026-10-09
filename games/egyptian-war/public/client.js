@@ -3,36 +3,39 @@ let currentContext = null;
 let currentSettings = {};
 let timerInterval = null;
 
-const egyptianWarTurn = document.querySelector("#egyptian-war-turn");
-const egyptianWarTurnTimer = document.querySelector("#egyptian-war-turn-timer");
-const egyptianWarTurnTimerBar = document.querySelector("#egyptian-war-turn-timer-bar");
-const egyptianWarTurnTimerValue = document.querySelector("#egyptian-war-turn-timer-value");
-const egyptianWarChallenge = document.querySelector("#egyptian-war-challenge");
-const egyptianWarPileCount = document.querySelector("#egyptian-war-pile-count");
-const egyptianWarTopCard = document.querySelector("#egyptian-war-top-card");
-const egyptianWarPlayers = document.querySelector("#egyptian-war-players");
-const egyptianWarArena = document.querySelector("#egyptian-war-arena");
-const egyptianWarPileStack = document.querySelector("#egyptian-war-pile-stack");
-const egyptianWarPlayCardButton = document.querySelector("#egyptian-war-play-card");
-const egyptianWarSlapButton = document.querySelector("#egyptian-war-slap");
-const egyptianWarPauseButton = document.querySelector("#egyptian-war-pause");
-const egyptianWarExitButton = document.querySelector("#egyptian-war-exit-game");
-const egyptianWarHostControls = document.querySelector("#egyptian-war-host-controls");
-const egyptianWarSlapRulesList = document.querySelector("#egyptian-war-slap-rules-list");
-const toggleSlapRulesButton = document.querySelector("#toggle-slap-rules");
-const egyptianWarMessage = document.querySelector("#egyptian-war-message");
-const egyptianWarVictory = document.querySelector("#egyptian-war-victory");
-const egyptianWarAnimationLayer = document.querySelector("#egyptian-war-animation-layer");
-const egyptianWarChat = document.querySelector("#egyptian-war-chat");
-const egyptianWarChatForm = document.querySelector("#egyptian-war-chat-form");
-const egyptianWarChatInput = document.querySelector("#egyptian-war-chat-input");
-const egyptianWarChatMessages = document.querySelector("#egyptian-war-chat-messages");
-const egyptianWarSpectators = document.querySelector("#egyptian-war-spectators");
-const egyptianWarSpectatorList = document.querySelector("#egyptian-war-spectator-list");
-const showGameChatButton = document.querySelector("#show-game-chat");
-const showGameSpectatorsButton = document.querySelector("#show-game-spectators");
-const toggleGameSidePanelButton = document.querySelector("#toggle-game-side-panel");
-const egyptianWarSidePanel = document.querySelector(".egyptian-war-side-panel");
+const egyptianWarRoot =
+  document.querySelector('[data-game-plugin-root="egyptian-war"]') ?? document;
+const findEgyptianWarElement = (selector) => egyptianWarRoot.querySelector(selector);
+const egyptianWarTurn = findEgyptianWarElement("#egyptian-war-turn");
+const egyptianWarTurnTimer = findEgyptianWarElement("#egyptian-war-turn-timer");
+const egyptianWarTurnTimerBar = findEgyptianWarElement("#egyptian-war-turn-timer-bar");
+const egyptianWarTurnTimerValue = findEgyptianWarElement("#egyptian-war-turn-timer-value");
+const egyptianWarChallenge = findEgyptianWarElement("#egyptian-war-challenge");
+const egyptianWarPileCount = findEgyptianWarElement("#egyptian-war-pile-count");
+const egyptianWarTopCard = findEgyptianWarElement("#egyptian-war-top-card");
+const egyptianWarPlayers = findEgyptianWarElement("#egyptian-war-players");
+const egyptianWarArena = findEgyptianWarElement("#egyptian-war-arena");
+const egyptianWarPileStack = findEgyptianWarElement("#egyptian-war-pile-stack");
+const egyptianWarPlayCardButton = findEgyptianWarElement("#egyptian-war-play-card");
+const egyptianWarSlapButton = findEgyptianWarElement("#egyptian-war-slap");
+const egyptianWarPauseButton = findEgyptianWarElement("#egyptian-war-pause");
+const egyptianWarExitButton = findEgyptianWarElement("#egyptian-war-exit-game");
+const egyptianWarHostControls = findEgyptianWarElement("#egyptian-war-host-controls");
+const egyptianWarSlapRulesList = findEgyptianWarElement("#egyptian-war-slap-rules-list");
+const toggleSlapRulesButton = findEgyptianWarElement("#toggle-slap-rules");
+const egyptianWarMessage = findEgyptianWarElement("#egyptian-war-message");
+const egyptianWarVictory = findEgyptianWarElement("#egyptian-war-victory");
+const egyptianWarAnimationLayer = findEgyptianWarElement("#egyptian-war-animation-layer");
+const egyptianWarChat = findEgyptianWarElement("#egyptian-war-chat");
+const egyptianWarChatForm = findEgyptianWarElement("#egyptian-war-chat-form");
+const egyptianWarChatInput = findEgyptianWarElement("#egyptian-war-chat-input");
+const egyptianWarChatMessages = findEgyptianWarElement("#egyptian-war-chat-messages");
+const egyptianWarSpectators = findEgyptianWarElement("#egyptian-war-spectators");
+const egyptianWarSpectatorList = findEgyptianWarElement("#egyptian-war-spectator-list");
+const showGameChatButton = findEgyptianWarElement("#show-game-chat");
+const showGameSpectatorsButton = findEgyptianWarElement("#show-game-spectators");
+const toggleGameSidePanelButton = findEgyptianWarElement("#toggle-game-side-panel");
+const egyptianWarSidePanel = findEgyptianWarElement(".egyptian-war-side-panel");
 
 let previousEgyptianWarState = null;
 let visibleEgyptianWarCards = [];
@@ -357,7 +360,7 @@ function animateEgyptianWarOutcome(animation) {
   ).matches;
   clearEgyptianWarSoundTimeouts();
   egyptianWarAnimationLayer.replaceChildren();
-  const arena = document.querySelector("#egyptian-war-arena");
+  const arena = findEgyptianWarElement("#egyptian-war-arena");
   const center = getEgyptianWarCenter(
     egyptianWarPileStack,
     arena

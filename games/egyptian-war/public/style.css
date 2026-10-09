@@ -1,26 +1,26 @@
-#gameplay-view {
+#gameplay-view:has([data-game-plugin-root="egyptian-war"]:not([hidden])) {
   width: 100%;
   max-width: 76rem;
   background:
     radial-gradient(ellipse 65% 75% at 50% 44%, #727275 0%, #262629 56%, #17171a 100%);
 }
 
-body:has(#gameplay-view:not(.d-none)) {
+body:has([data-game-plugin-root="egyptian-war"]:not([hidden])) {
   overflow: hidden;
 }
 
-body:has(#gameplay-view:not(.d-none))>main {
+body:has([data-game-plugin-root="egyptian-war"]:not([hidden]))>main {
   width: 100%;
   max-width: none;
   height: 100dvh;
   padding: 0.5rem !important;
 }
 
-body:has(#gameplay-view:not(.d-none))>main>header {
+body:has([data-game-plugin-root="egyptian-war"]:not([hidden]))>main>header {
   display: none;
 }
 
-body:has(#gameplay-view:not(.d-none)) #gameplay-view {
+body:has([data-game-plugin-root="egyptian-war"]:not([hidden])) #gameplay-view {
   height: 100%;
   max-width: 100rem;
 }

@@ -15,6 +15,7 @@ import type {
   GameSession,
   GameViewer
 } from "@gamehub/game-sdk";
+import { FailedAttemptLimiter } from "./failedAttemptLimiter.js";
 
 type GameSettingValue = boolean | number;
 
@@ -128,6 +129,7 @@ const indexShell = readFileSync(
 const gameMarkupMarker = "<!-- game-plugin-markup -->";
 const gameStyleMarker = "<!-- game-plugin-styles -->";
 const gameScriptMarker = "<!-- game-plugin-scripts -->";
+const gameHubConfigMarker = "<!-- gamehub-config -->";
 
 function replaceRequiredMarker(
   html: string,
@@ -145,23 +147,42 @@ function gamePublicUrl(gameId: string, resourcePath: string): string {
 }
 
 const gameMarkup = installedGamePackages.flatMap((gamePackage) => {
+  const gameId = gamePackage.manifest.definition.id;
   const markupPath = gamePackage.manifest.client.markupPath;
   return markupPath
-    ? [readFileSync(path.join(gamePackage.publicDirectory, markupPath), "utf8")]
+    ? [
+      `<div data-game-plugin-root="${gameId}" hidden>`,
+      readFileSync(path.join(gamePackage.publicDirectory, markupPath), "utf8"),
+      "</div>"
+    ].join("\n")
     : [];
 }).join("\n");
 const gameStyles = installedGamePackages.flatMap((gamePackage) => {
   const gameId = gamePackage.manifest.definition.id;
   return (gamePackage.manifest.client.stylePaths ?? []).map(
     (stylePath) =>
-      `<link rel="stylesheet" href="${gamePublicUrl(gameId, stylePath)}">`
+      `<link rel="stylesheet" href="${gamePublicUrl(gameId, stylePath)}" ` +
+      `data-game-plugin-style="${gameId}" disabled>`
   );
 }).join("\n  ");
 const gameScripts = installedGamePackages.flatMap((gamePackage) => {
   const gameId = gamePackage.manifest.definition.id;
-  return (gamePackage.manifest.client.entryPaths ?? []).map(
-    (entryPath) => `<script src="${gamePublicUrl(gameId, entryPath)}"></script>`
-  );
+  const moduleEntryPath = gamePackage.manifest.client.delivery === "module"
+    ? gamePackage.manifest.client.entryPath
+    : null;
+  const classicScripts = (gamePackage.manifest.client.entryPaths ?? [])
+    .filter((entryPath) => entryPath !== moduleEntryPath)
+    .map(
+      (entryPath) =>
+        `<script src="${gamePublicUrl(gameId, entryPath)}"></script>`
+    );
+  if (gamePackage.manifest.client.delivery !== "module") {
+    return classicScripts;
+  }
+  return [
+    ...classicScripts,
+    `<script type="module" src="${gamePublicUrl(gameId, gamePackage.manifest.client.entryPath)}"></script>`
+  ];
 }).join("\n  ");
 
 let renderedIndex = replaceRequiredMarker(
@@ -171,6 +192,11 @@ let renderedIndex = replaceRequiredMarker(
 );
 renderedIndex = replaceRequiredMarker(renderedIndex, gameStyleMarker, gameStyles);
 renderedIndex = replaceRequiredMarker(renderedIndex, gameScriptMarker, gameScripts);
+renderedIndex = replaceRequiredMarker(
+  renderedIndex,
+  gameHubConfigMarker,
+  JSON.stringify({ avatars: availableAvatars }).replace(/</g, "\\u003c")
+);
 const reconnectGracePeriodMs = 120_000;
 const io = new Server(server, {
   connectionStateRecovery: {
@@ -200,6 +226,7 @@ const playerResumeTokens =
   new Map<string, { roomCode: string; playerId: string }>();
 const revokedResumeTokenMessages = new Map<string, string>();
 const revokedSocketMessages = new Map<string, string>();
+const invalidJoinLimiter = new FailedAttemptLimiter(10, 60_000);
 
 app.use(
   "/vendor/bootstrap",
@@ -229,7 +256,7 @@ function generateRoomCode(): string {
     code = "";
 
     for (let index = 0; index < 6; index += 1) {
-      const randomIndex = Math.floor(Math.random() * characters.length);
+      const randomIndex = randomInt(characters.length);
       code += characters[randomIndex];
     }
   } while (rooms.has(code));
@@ -344,6 +371,47 @@ function markPlayerReconnected(
   room.gameSession?.memberReconnected?.(playerId);
 }
 
+function isValidPlayerName(playerName: string): boolean {
+  return playerName.length >= 1 &&
+    playerName.length <= 20 &&
+    !/[\u0000-\u001F\u007F]/.test(playerName);
+}
+
+type SocketResponse = (response: unknown) => void;
+
+function onSocketRequest(
+  socket: Socket,
+  event: string,
+  handler: (data: any, respond: SocketResponse) => void
+): void {
+  socket.on(event, (data: any, candidateResponse?: unknown) => {
+    const respond: SocketResponse = typeof candidateResponse === "function"
+      ? candidateResponse as SocketResponse
+      : () => undefined;
+    try {
+      handler(data, respond);
+    } catch (error) {
+      console.error(`Unable to process Socket.IO request ${event}:`, error);
+      respond({
+        success: false,
+        message: "Unable to process that request."
+      });
+    }
+  });
+}
+
+function getSocketClientAddress(socket: Socket): string {
+  const cloudflareAddress = socket.handshake.headers["cf-connecting-ip"];
+  if (
+    typeof cloudflareAddress === "string" &&
+    cloudflareAddress.length > 0 &&
+    cloudflareAddress.length <= 64
+  ) {
+    return cloudflareAddress;
+  }
+  return socket.handshake.address;
+}
+
 function sendRoomResumed(
   socket: Socket,
   roomCode: string,
@@ -403,7 +471,11 @@ function validateGameSetting(
 function disposeGameSession(room: Room): void {
   const session = room.gameSession;
   room.gameSession = null;
-  session?.dispose();
+  try {
+    session?.dispose();
+  } catch (error) {
+    console.error("Unable to dispose a game session cleanly:", error);
+  }
 }
 
 function getGameViewer(room: Room, memberId: string): GameViewer | null {
@@ -497,7 +569,7 @@ io.on("connection", (socket) => {
     }
   }
 
-  socket.on("resume-room", (data, respond) => {
+  onSocketRequest(socket, "resume-room", (data, respond) => {
     const token = String(data?.resumeToken ?? "");
     const session = playerResumeTokens.get(token);
 
@@ -619,7 +691,7 @@ io.on("connection", (socket) => {
     respond({ success: true, role });
   });
 
-  socket.on("create-room", (data, respond) => {
+  onSocketRequest(socket, "create-room", (data, respond) => {
     if (socketRoomCodes.has(socket.id)) {
       respond({
         success: false,
@@ -631,7 +703,7 @@ io.on("connection", (socket) => {
     const playerName = String(data?.playerName ?? "").trim();
     const avatar = String(data?.avatar ?? "");
 
-    if (playerName.length < 1 || playerName.length > 20) {
+    if (!isValidPlayerName(playerName)) {
       respond({
         success: false,
         message: "Enter a name between 1 and 20 characters."
@@ -687,7 +759,7 @@ io.on("connection", (socket) => {
     });
   });
 
-  socket.on("join-room", (data, respond) => {
+  onSocketRequest(socket, "join-room", (data, respond) => {
     if (socketRoomCodes.has(socket.id)) {
       respond({
         success: false,
@@ -699,8 +771,18 @@ io.on("connection", (socket) => {
     const roomCode = String(data?.roomCode ?? "").trim().toUpperCase();
     const playerName = String(data?.playerName ?? "").trim();
     const avatar = String(data?.avatar ?? "");
+    const joinLimitKey = getSocketClientAddress(socket);
+
+    if (invalidJoinLimiter.isBlocked(joinLimitKey)) {
+      respond({
+        success: false,
+        message: "Too many unsuccessful join attempts. Try again in a minute."
+      });
+      return;
+    }
 
     if (roomCode.length !== 6) {
+      invalidJoinLimiter.recordFailure(joinLimitKey);
       respond({
         success: false,
         message: "Enter a valid six-character room code."
@@ -708,7 +790,7 @@ io.on("connection", (socket) => {
       return;
     }
 
-    if (playerName.length < 1 || playerName.length > 20) {
+    if (!isValidPlayerName(playerName)) {
       respond({
         success: false,
         message: "Enter a name between 1 and 20 characters."
@@ -727,6 +809,7 @@ io.on("connection", (socket) => {
     const room = rooms.get(roomCode);
 
     if (!room) {
+      invalidJoinLimiter.recordFailure(joinLimitKey);
       respond({
         success: false,
         message: "That room does not exist."
@@ -767,6 +850,8 @@ io.on("connection", (socket) => {
     } else {
       room.spectators.set(socket.id, roomMember);
     }
+
+    invalidJoinLimiter.clear(joinLimitKey);
 
     socketRoomCodes.set(socket.id, roomCode);
     socket.join(roomCode);
@@ -809,7 +894,7 @@ io.on("connection", (socket) => {
     }
   });
 
-  socket.on("select-game", (data, respond) => {
+  onSocketRequest(socket, "select-game", (data, respond) => {
     const roomCode = String(data?.roomCode ?? "")
       .trim()
       .toUpperCase();
@@ -876,7 +961,7 @@ io.on("connection", (socket) => {
     });
   });
 
-  socket.on("update-game-settings", (data, respond) => {
+  onSocketRequest(socket, "update-game-settings", (data, respond) => {
     const roomCode = String(data?.roomCode ?? "")
       .trim()
       .toUpperCase();
@@ -968,7 +1053,7 @@ io.on("connection", (socket) => {
     });
   });
 
-  socket.on("set-room-locked", (data, respond) => {
+  onSocketRequest(socket, "set-room-locked", (data, respond) => {
     const roomCode = String(data?.roomCode ?? "")
       .trim()
       .toUpperCase();
@@ -1014,7 +1099,7 @@ io.on("connection", (socket) => {
     });
   });
 
-  socket.on("kick-player", (data, respond) => {
+  onSocketRequest(socket, "kick-player", (data, respond) => {
     const roomCode = String(data?.roomCode ?? "")
       .trim()
       .toUpperCase();
@@ -1120,7 +1205,7 @@ io.on("connection", (socket) => {
     });
   });
 
-  socket.on("start-game", (data, respond) => {
+  onSocketRequest(socket, "start-game", (data, respond) => {
     const roomCode = String(data?.roomCode ?? "")
       .trim()
       .toUpperCase();
@@ -1254,13 +1339,25 @@ io.on("connection", (socket) => {
     room.activeGameId = game.id;
     room.gameSession = createdSession;
 
+    try {
+      room.gameSession.start?.();
+    } catch (error) {
+      console.error(`Unable to start ${game.name} in room ${roomCode}:`, error);
+      disposeGameSession(room);
+      room.activeGameId = null;
+      respond({
+        success: false,
+        message: "Unable to start the game. Please try again."
+      });
+      return;
+    }
+
     io.to(roomCode).emit("game-started", {
       gameId: game.id,
       name: game.name,
       chatEnabled: game.chatEnabled,
       settings: room.gameSettings
     });
-    room.gameSession.start?.();
     sendActiveGameState(roomCode, room);
 
     console.log(`${game.name} started in room ${roomCode}`);
@@ -1270,7 +1367,7 @@ io.on("connection", (socket) => {
     });
   });
 
-  socket.on("toggle-game-pause", (data, respond) => {
+  onSocketRequest(socket, "toggle-game-pause", (data, respond) => {
     const roomCode = String(data?.roomCode ?? "")
       .trim()
       .toUpperCase();
@@ -1314,7 +1411,7 @@ io.on("connection", (socket) => {
     });
   });
 
-  socket.on("close-room", (data, respond) => {
+  onSocketRequest(socket, "close-room", (data, respond) => {
     const roomCode = String(data?.roomCode ?? "")
       .trim()
       .toUpperCase();
@@ -1367,7 +1464,7 @@ io.on("connection", (socket) => {
     console.log(`Room ${roomCode} closed by its host`);
   });
 
-  socket.on("close-game-to-lobby", (data, respond) => {
+  onSocketRequest(socket, "close-game-to-lobby", (data, respond) => {
     const roomCode = String(data?.roomCode ?? "")
       .trim()
       .toUpperCase();
@@ -1398,7 +1495,7 @@ io.on("connection", (socket) => {
     respond({ success: true });
   });
 
-  socket.on("game-chat-send", (data, respond) => {
+  onSocketRequest(socket, "game-chat-send", (data, respond) => {
     const roomCode = String(data?.roomCode ?? "")
       .trim()
       .toUpperCase();
@@ -1466,7 +1563,7 @@ io.on("connection", (socket) => {
     respond({ success: true });
   });
 
-  socket.on("game-action", (data, respond) => {
+  onSocketRequest(socket, "game-action", (data, respond) => {
     const roomCode = String(data?.roomCode ?? "")
       .trim()
       .toUpperCase();
@@ -1486,10 +1583,23 @@ io.on("connection", (socket) => {
       return;
     }
 
-    Promise.resolve(room.gameSession.handleAction(socket.id, {
+    if (!getRoomMember(room, socket.id)) {
+      respond({
+        success: false,
+        message: "Join this room before submitting game actions."
+      });
+      return;
+    }
+
+    Promise.resolve().then(() => room.gameSession?.handleAction(socket.id, {
       type: actionType,
       payload: data?.action?.payload
-    })).then(respond).catch((error) => {
+    })).then((result) => {
+      respond(result ?? {
+        success: false,
+        message: "That game is no longer active."
+      });
+    }).catch((error) => {
       console.error(
         "Unable to process " + gameId +
           " action in room " + roomCode + ":",

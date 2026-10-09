@@ -6,27 +6,18 @@ const { JSDOM } = require("jsdom");
 const { GameClientHost } = require("../public/gameHost.js");
 
 function createClient({ prefersReducedMotion = false } = {}) {
-  const indexShell = fs.readFileSync(
+  const html = fs.readFileSync(
     path.join(__dirname, "..", "public", "index.html"),
     "utf8"
   );
-  const gameMarkup = fs.readFileSync(
-    path.join(
-      __dirname,
-      "..",
-      "games",
-      "egyptian-war",
-      "public",
-      "template.html"
-    ),
-    "utf8"
-  );
-  const html = indexShell.replace("<!-- game-plugin-markup -->", gameMarkup);
   const dom = new JSDOM(html, { url: "http://localhost" });
   const handlers = new Map();
   const emitted = [];
   const playedEffects = [];
   const audioScenes = [];
+  const gameClientStates = [];
+  const gameClientEvents = [];
+  const gameClientContexts = [];
   let modalHideCount = 0;
 
   global.window = dom.window;
@@ -69,6 +60,21 @@ function createClient({ prefersReducedMotion = false } = {}) {
     }
   });
 
+  global.GameHubRegisterGameClientModule("example-game", {
+    mount(context) {
+      gameClientContexts.push(context);
+      return {
+        receiveState(state) {
+          gameClientStates.push(state);
+        },
+        receiveEvent(event) {
+          gameClientEvents.push(event);
+        },
+        destroy() {}
+      };
+    }
+  });
+
   const intervals = [];
   const originalSetInterval = global.setInterval;
   global.setInterval = (...arguments_) => {
@@ -77,13 +83,8 @@ function createClient({ prefersReducedMotion = false } = {}) {
     return interval;
   };
 
-  const gameModulePath = require.resolve(
-    "../games/egyptian-war/public/client.js"
-  );
   const modulePath = require.resolve("../public/client.js");
-  delete require.cache[gameModulePath];
   delete require.cache[modulePath];
-  require(gameModulePath);
   require(modulePath);
   global.setInterval = originalSetInterval;
 
@@ -99,15 +100,18 @@ function createClient({ prefersReducedMotion = false } = {}) {
     handlers,
     playedEffects,
     audioScenes,
+    gameClientStates,
+    gameClientEvents,
+    gameClientContexts,
     getModalHideCount: () => modalHideCount
   };
 }
 
 function game(overrides = {}) {
   return {
-    id: "egyptian-war",
-    name: "Egyptian War",
-    description: "Race to slap special card combinations.",
+    id: "example-game",
+    name: "Example Game",
+    description: "A game used to test the generic picker.",
     isPlayable: true,
     chatEnabled: true,
     rules: [],
@@ -115,8 +119,8 @@ function game(overrides = {}) {
     maxPlayers: 6,
     settings: [],
     preview: {
-      videoPath: "/games/egyptian-war/assets/game-previews/preview.mp4",
-      posterPath: "/games/egyptian-war/assets/game-previews/poster.webp"
+      videoPath: "/games/example-game/preview.mp4",
+      posterPath: "/games/example-game/poster.webp"
     },
     ...overrides
   };
@@ -128,19 +132,19 @@ test("renders available games as preview cards for every player", () => {
   handlers.get("available-games")([game()]);
 
   const pickerButton = document.querySelector("#open-game-picker");
-  const card = document.querySelector('[data-game-id="egyptian-war"]');
+  const card = document.querySelector('[data-game-id="example-game"]');
   assert.equal(pickerButton.disabled, false);
-  assert.match(card.textContent, /Egyptian War/);
-  assert.match(card.textContent, /2–6 players/);
+  assert.match(card.textContent, /Example Game/);
+  assert.match(card.textContent, /2\u20136 players/);
   const preview = card.querySelector(".game-picker-preview-video");
   assert.ok(preview);
   assert.match(
     preview.src,
-    /\/games\/egyptian-war\/assets\/game-previews\/preview\.mp4$/
+    /\/games\/example-game\/preview\.mp4$/
   );
   assert.match(
     preview.poster,
-    /\/games\/egyptian-war\/assets\/game-previews\/poster\.webp$/
+    /\/games\/example-game\/poster\.webp$/
   );
   assert.equal(preview.autoplay, true);
   assert.equal(preview.loop, true);
@@ -198,46 +202,57 @@ test("sounds only subsequent player joins, not spectators", () => {
   close();
 });
 
-test("routes browser game state, events, and actions through generic envelopes", () => {
-  const { close, emitted, handlers } = createClient();
+test("routes browser game state, events, and actions through generic envelopes", async () => {
+  const {
+    close,
+    emitted,
+    handlers,
+    gameClientStates,
+    gameClientEvents,
+    gameClientContexts
+  } = createClient();
 
   assert.equal(handlers.has("game-state"), true);
   assert.equal(handlers.has("game-event"), true);
-  assert.equal(handlers.has("egyptian-war-state"), false);
-  assert.equal(handlers.has("egyptian-war-animation"), false);
 
   handlers.get("room-resumed")({
     roomCode: "ABC123",
     isHost: true,
     isLocked: false,
-    selectedGameId: "egyptian-war",
+    selectedGameId: "example-game",
     gameSettings: {},
-    activeGameId: "egyptian-war",
+    activeGameId: "example-game",
     isPaused: false,
     chatEnabled: true
   });
 
   handlers.get("game-event")({
-    gameId: "egyptian-war",
+    gameId: "example-game",
     event: {
       type: "pause-changed",
       payload: { isPaused: true }
     }
   });
-  assert.equal(
-    document.querySelector("#egyptian-war-pause").textContent,
-    "Resume"
-  );
+  handlers.get("game-state")({
+    gameId: "example-game",
+    state: { turn: 2 }
+  });
+  assert.deepEqual(gameClientStates, [{ turn: 2 }]);
+  assert.deepEqual(gameClientEvents, [{
+    type: "pause-changed",
+    payload: { isPaused: true }
+  }]);
 
-  const playCard = document.querySelector("#egyptian-war-play-card");
-  playCard.disabled = false;
-  playCard.click();
+  assert.equal(gameClientContexts.length, 1);
+  const actionPromise = gameClientContexts[0].submitAction({ type: "advance" });
   const action = emitted.find((item) => item.event === "game-action");
   assert.deepEqual(action.data, {
     roomCode: "ABC123",
-    gameId: "egyptian-war",
-    action: { type: "play-card" }
+    gameId: "example-game",
+    action: { type: "advance" }
   });
+  action.respond({ success: true });
+  assert.deepEqual(await actionPromise, { success: true });
 
   close();
 });
@@ -260,7 +275,7 @@ test("only the host can request a game from the picker", () => {
     roomCode: "ABC123",
     isHost: true,
     isLocked: false,
-    selectedGameId: "egyptian-war",
+    selectedGameId: "example-game",
     gameSettings: {},
     activeGameId: null,
     isPaused: false,
@@ -290,22 +305,22 @@ test("highlights the server-confirmed selection and closes after acknowledgement
     roomCode: "ABC123",
     isHost: true,
     isLocked: false,
-    selectedGameId: "egyptian-war",
+    selectedGameId: "example-game",
     gameSettings: {},
     activeGameId: null,
     isPaused: false,
     chatEnabled: true
   });
-  handlers.get("game-selected")({ gameId: "egyptian-war", settings: {} });
+  handlers.get("game-selected")({ gameId: "example-game", settings: {} });
 
   assert.equal(
-    document.querySelector('[data-game-id="egyptian-war"]')
+    document.querySelector('[data-game-id="example-game"]')
       .classList.contains("is-selected"),
     true
   );
   assert.equal(
     document.querySelector("#selected-game-name").textContent,
-    "Egyptian War"
+    "Example Game"
   );
 
   document.querySelector('[data-game-id="second-game"]').click();

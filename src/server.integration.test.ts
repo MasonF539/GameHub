@@ -3,7 +3,6 @@ import { fork, type ChildProcess } from "node:child_process";
 import path from "node:path";
 import test from "node:test";
 import { io as createClient, type Socket } from "socket.io-client";
-import type { PublicEgyptianWarState } from "@gamehub/egyptian-war";
 
 type Ack = {
   success: boolean;
@@ -13,9 +12,26 @@ type Ack = {
   role?: "player" | "spectator";
 };
 
+type FixtureState = {
+  actionCount: number;
+  isPaused: boolean;
+  viewerRole: "player" | "spectator";
+  members: Array<{
+    id: string;
+    name: string;
+    isConnected: boolean;
+    role: "player" | "spectator";
+  }>;
+};
+
+const fixtureGameId = "fixture-game";
+
 function emitAck(socket: Socket, event: string, data: unknown): Promise<Ack> {
   return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => reject(new Error(`${event} acknowledgement timed out`)), 4_000);
+    const timeout = setTimeout(
+      () => reject(new Error(`${event} acknowledgement timed out`)),
+      4_000
+    );
     socket.emit(event, data, (response: Ack) => {
       clearTimeout(timeout);
       resolve(response);
@@ -23,14 +39,14 @@ function emitAck(socket: Socket, event: string, data: unknown): Promise<Ack> {
   });
 }
 
-function emitEgyptianWarAction(
+function emitGameAction(
   socket: Socket,
   roomCode: string,
-  type: "play-card" | "slap"
+  type: string
 ): Promise<Ack> {
   return emitAck(socket, "game-action", {
     roomCode,
-    gameId: "egyptian-war",
+    gameId: fixtureGameId,
     action: { type }
   });
 }
@@ -56,46 +72,25 @@ function waitForEvent<T>(
   });
 }
 
-function waitForEgyptianWarState(
+function waitForFixtureState(
   socket: Socket,
-  predicate: (state: PublicEgyptianWarState) => boolean = () => true,
+  predicate: (state: FixtureState) => boolean = () => true,
   timeoutMs = 5_000
-): Promise<PublicEgyptianWarState> {
-  return waitForEvent<{
-    gameId: string;
-    state: PublicEgyptianWarState;
-  }>(
+): Promise<FixtureState> {
+  return waitForEvent<{ gameId: string; state: FixtureState }>(
     socket,
     "game-state",
     (envelope) =>
-      envelope.gameId === "egyptian-war" &&
-      predicate(envelope.state),
+      envelope.gameId === fixtureGameId && predicate(envelope.state),
     timeoutMs
   ).then((envelope) => envelope.state);
 }
 
-function waitForEgyptianWarEvent<T>(
-  socket: Socket,
-  eventType: string,
-  predicate: (payload: T) => boolean = () => true,
-  timeoutMs = 5_000
-): Promise<T> {
-  return waitForEvent<{
-    gameId: string;
-    event: { type: string; payload: T };
-  }>(
-    socket,
-    "game-event",
-    (envelope) =>
-      envelope.gameId === "egyptian-war" &&
-      envelope.event.type === eventType &&
-      predicate(envelope.event.payload),
-    timeoutMs
-  ).then((envelope) => envelope.event.payload);
-}
-
 async function connect(url: string): Promise<Socket> {
-  const socket = createClient(url, { transports: ["websocket"], reconnection: false });
+  const socket = createClient(url, {
+    transports: ["websocket"],
+    reconnection: false
+  });
   if (socket.connected) return socket;
   await waitForEvent(socket, "connect");
   return socket;
@@ -107,23 +102,23 @@ async function stopServer(server: ChildProcess): Promise<void> {
   await new Promise<void>((resolve) => server.once("exit", () => resolve()));
 }
 
-async function startServer(): Promise<{
-  server: ChildProcess;
-  url: string;
-}> {
-  const server = fork(
-    path.join(process.cwd(), "dist", "server.js"),
-    [],
-    {
-      env: {
-        ...process.env,
-        PORT: "0",
-        NODE_ENV: "test",
-        GAMEHUB_DETERMINISTIC_DECK: "true"
-      },
-      stdio: ["ignore", "pipe", "pipe", "ipc"]
-    }
+async function startServer(): Promise<{ server: ChildProcess; url: string }> {
+  const fixturePackage = path.join(
+    process.cwd(),
+    "test",
+    "fixtures",
+    "minimal-game-plugin",
+    "index.js"
   );
+  const server = fork(path.join(process.cwd(), "dist", "server.js"), [], {
+    env: {
+      ...process.env,
+      PORT: "0",
+      NODE_ENV: "test",
+      GAMEHUB_GAME_PACKAGES: fixturePackage
+    },
+    stdio: ["ignore", "pipe", "pipe", "ipc"]
+  });
   let stderr = "";
   server.stderr?.on("data", (chunk) => {
     stderr += String(chunk);
@@ -166,254 +161,182 @@ async function startServer(): Promise<{
   });
 }
 
-test("accepted slaps survive disconnect pause", { timeout: 45_000 }, async () => {
-  const { server, url } = await startServer();
-  const host = createClient(url, { transports: ["websocket"], reconnection: true });
-  let guest: Socket | null = null;
+test(
+  "a configured plugin receives generic actions, spectators, and lifecycle events",
+  { timeout: 30_000 },
+  async () => {
+    const { server, url } = await startServer();
+    const host = await connect(url);
+    let guest: Socket | null = null;
+    let spectator: Socket | null = null;
+    let resumedSpectator: Socket | null = null;
+    let outsider: Socket | null = null;
 
-  try {
-    await waitForEvent(host, "connect", () => true, 8_000);
-    const pageResponse = await fetch(url);
-    const pageHtml = await pageResponse.text();
-    assert.equal(pageResponse.status, 200);
-    assert.match(pageHtml, /id="game-root"/);
-    assert.match(pageHtml, /id="gameplay-view"/);
-    assert.doesNotMatch(pageHtml, /game-plugin-markup/);
-    assert.match(pageHtml, /\/games\/egyptian-war\/style\.css/);
+    try {
+      const pageResponse = await fetch(url);
+      const pageHtml = await pageResponse.text();
+      assert.equal(pageResponse.status, 200);
+      assert.match(pageHtml, /id="game-root"/);
+      assert.match(pageHtml, /id="fixture-game-view"/);
+      assert.match(pageHtml, /data-game-plugin-root="fixture-game"/);
+      assert.match(
+        pageHtml,
+        /\/games\/fixture-game\/style\.css[^>]+data-game-plugin-style="fixture-game"[^>]+disabled/
+      );
+      assert.match(
+        pageHtml,
+        /<script type="module" src="\/games\/fixture-game\/client\.js"><\/script>/
+      );
+      assert.match(pageHtml, /"avatars":\[/);
+      assert.doesNotMatch(pageHtml, /egyptian-war/i);
 
-    const created = await emitAck(host, "create-room", { playerName: "Host", avatar: "🐱" });
-    assert.equal(created.success, true);
-    const roomCode = created.roomCode;
-    assert.ok(roomCode);
+      host.emit("create-room", { playerName: "", avatar: "" });
 
-    guest = await connect(url);
-    assert.equal((await emitAck(guest, "join-room", { roomCode, playerName: "Guest", avatar: "🐶" })).success, true);
-    assert.equal((await emitAck(host, "select-game", { roomCode, gameId: "egyptian-war" })).success, true);
-    assert.equal((await emitAck(host, "update-game-settings", {
-      roomCode,
-      settings: {
-        deckCount: 1,
-        includeJokers: true,
-        allowDoubles: true,
-        allowSandwiches: true,
-        allowFourInARow: true,
-        allowTopBottom: true,
-        allowTens: true,
-        allowMarriage: true,
-        falseSlapPenaltyCards: 2,
-        turnTimerSeconds: 120
-      }
-    })).success, true);
+      const controlCharacterName = await emitAck(host, "create-room", {
+        playerName: "Bad\nName",
+        avatar: "\u{1F431}"
+      });
+      assert.equal(controlCharacterName.success, false);
 
-    let latestState: PublicEgyptianWarState | null = null;
-    host.on("game-state", (envelope: {
-      gameId: string;
-      state: PublicEgyptianWarState;
-    }) => {
-      if (envelope.gameId === "egyptian-war") {
-        latestState = envelope.state;
-      }
-    });
-    assert.equal((await emitAck(host, "start-game", { roomCode })).success, true);
+      const created = await emitAck(host, "create-room", {
+        playerName: "Host",
+        avatar: "\u{1F431}"
+      });
+      assert.equal(created.success, true);
+      const roomCode = created.roomCode;
+      assert.ok(roomCode);
 
-    const sockets = new Map([[host.id!, host], [guest.id!, guest]]);
-    for (let turns = 0; turns < 54; turns += 1) {
-      const currentLatestState =
-        latestState as PublicEgyptianWarState | null;
-      const readyState: PublicEgyptianWarState =
-        currentLatestState !== null &&
-        !currentLatestState.isAnimating &&
-        !currentLatestState.isPaused
-          ? currentLatestState
-          : await waitForEgyptianWarState(
-            host,
-            (state) => !state.isAnimating && !state.isPaused,
-            5_000
-          );
-      assert.ok(readyState);
-      latestState = readyState;
-      if (readyState.isSlappable) break;
-      const currentSocket = readyState.currentPlayerId
-        ? sockets.get(readyState.currentPlayerId)
-        : undefined;
-      assert.ok(currentSocket);
-      latestState = null;
+      guest = await connect(url);
+      assert.equal((await emitAck(guest, "join-room", {
+        roomCode,
+        playerName: "Guest",
+        avatar: "\u{1F436}"
+      })).success, true);
+      assert.equal((await emitAck(host, "select-game", {
+        roomCode,
+        gameId: fixtureGameId
+      })).success, true);
+
+      const initialStatePromise = waitForFixtureState(host);
+      assert.equal((await emitAck(host, "start-game", { roomCode })).success, true);
+      const initialState = await initialStatePromise;
+      assert.equal(initialState.viewerRole, "player");
+      assert.equal(initialState.members.length, 2);
+
+      outsider = await connect(url);
+      const outsiderAction = await emitGameAction(
+        outsider,
+        roomCode,
+        "advance"
+      );
+      assert.equal(outsiderAction.success, false);
+      assert.match(outsiderAction.message ?? "", /join this room/i);
+
+      const failedPluginAction = await emitGameAction(host, roomCode, "throw");
+      assert.equal(failedPluginAction.success, false);
+      assert.match(failedPluginAction.message ?? "", /unable to process/i);
+
+      const advancedStatePromise = waitForFixtureState(
+        host,
+        (state) => state.actionCount === 1
+      );
+      assert.equal((await emitGameAction(host, roomCode, "advance")).success, true);
+      assert.equal((await advancedStatePromise).actionCount, 1);
+
+      const pausedStatePromise = waitForFixtureState(
+        guest,
+        (state) => state.isPaused
+      );
+      assert.equal((await emitAck(host, "toggle-game-pause", {
+        roomCode,
+        isPaused: true
+      })).success, true);
+      assert.equal((await pausedStatePromise).isPaused, true);
+
+      const resumedStatePromise = waitForFixtureState(
+        guest,
+        (state) => !state.isPaused
+      );
+      assert.equal((await emitAck(host, "toggle-game-pause", {
+        roomCode,
+        isPaused: false
+      })).success, true);
+      assert.equal((await resumedStatePromise).isPaused, false);
+
+      spectator = await connect(url);
+      const spectatorStatePromise = waitForFixtureState(spectator);
+      const spectatorListPromise = waitForEvent<Array<{
+        name: string;
+        isConnected: boolean;
+      }>>(
+        host,
+        "spectator-list",
+        (spectators) => spectators.some((member) => member.name === "Viewer")
+      );
+      const joined = await emitAck(spectator, "join-room", {
+        roomCode,
+        playerName: "Viewer",
+        avatar: "\u{1F98A}"
+      });
+      assert.equal(joined.success, true);
+      assert.equal(joined.role, "spectator");
+      assert.equal((await spectatorStatePromise).viewerRole, "spectator");
+      assert.equal((await spectatorListPromise)[0]?.name, "Viewer");
+
+      const spectatorAction = await emitGameAction(
+        spectator,
+        roomCode,
+        "advance"
+      );
+      assert.equal(spectatorAction.success, false);
+      assert.match(spectatorAction.message ?? "", /not a player/i);
+
+      const disconnectedListPromise = waitForEvent<Array<{
+        name: string;
+        isConnected: boolean;
+      }>>(
+        host,
+        "spectator-list",
+        (spectators) => spectators.some(
+          (member) => member.name === "Viewer" && !member.isConnected
+        )
+      );
+      spectator.disconnect();
+      await disconnectedListPromise;
+
+      resumedSpectator = await connect(url);
+      const reconnectedStatePromise = waitForFixtureState(resumedSpectator);
+      assert.ok(joined.resumeToken);
+      const resumed = await emitAck(resumedSpectator, "resume-room", {
+        resumeToken: joined.resumeToken
+      });
+      assert.equal(resumed.success, true);
+      assert.equal(resumed.role, "spectator");
+      assert.equal((await reconnectedStatePromise).viewerRole, "spectator");
+
+      const promotedPlayersPromise = waitForEvent<Array<{
+        name: string;
+        isConnected: boolean;
+      }>>(
+        host,
+        "player-list",
+        (players) => players.some((player) => player.name === "Viewer")
+      );
+      assert.equal((await emitAck(host, "close-game-to-lobby", {
+        roomCode
+      })).success, true);
+      const promotedPlayers = await promotedPlayersPromise;
       assert.equal(
-        (await emitEgyptianWarAction(currentSocket, roomCode, "play-card"))
-          .success,
+        promotedPlayers.find((player) => player.name === "Viewer")?.isConnected,
         true
       );
+    } finally {
+      host.disconnect();
+      guest?.disconnect();
+      spectator?.disconnect();
+      resumedSpectator?.disconnect();
+      outsider?.disconnect();
+      await stopServer(server);
     }
-
-    assert.ok(latestState?.isSlappable, "expected the shuffled game to reach a valid slap");
-    const animationPromise = waitForEgyptianWarEvent<{
-      action: string;
-      slapAttempts: Array<{ playerId: string; delayMs: number; isWinner: boolean }>;
-    }>(host, "animation", (value) => value.action === "slap", 5_000);
-
-    assert.equal(
-      (await emitEgyptianWarAction(host, roomCode, "slap")).success,
-      true
-    );
-    const pauseResponse = await emitAck(host, "toggle-game-pause", { roomCode, isPaused: true });
-    assert.equal(pauseResponse.success, false);
-    assert.match(pauseResponse.message ?? "", /slap decision/i);
-    assert.equal(
-      (await emitEgyptianWarAction(guest, roomCode, "slap")).success,
-      true
-    );
-    guest.disconnect();
-
-    const animation = await animationPromise;
-    assert.equal(animation.slapAttempts.length, 2);
-    assert.equal(animation.slapAttempts.filter((attempt) => attempt.isWinner).length, 1);
-    assert.ok(animation.slapAttempts.every((attempt) => Number.isFinite(attempt.delayMs)));
-    const pausedState = await waitForEgyptianWarState(
-      host,
-      (state) => state.isPaused,
-      5_000
-    );
-    assert.equal(pausedState.isPaused, true);
-  } finally {
-    host.disconnect();
-    guest?.disconnect();
-    await stopServer(server);
   }
-});
-
-test("late joiners spectate without pausing gameplay and return to the lobby as players", { timeout: 30_000 }, async () => {
-  const { server, url } = await startServer();
-  const host = await connect(url);
-  let guest: Socket | null = null;
-  let spectator: Socket | null = null;
-  let resumedSpectator: Socket | null = null;
-
-  try {
-    const created = await emitAck(host, "create-room", {
-      playerName: "Host",
-      avatar: "🐱"
-    });
-    assert.equal(created.success, true);
-    const roomCode = created.roomCode;
-    assert.ok(roomCode);
-
-    guest = await connect(url);
-    assert.equal((await emitAck(guest, "join-room", {
-      roomCode,
-      playerName: "Guest",
-      avatar: "🐶"
-    })).success, true);
-    assert.equal((await emitAck(host, "select-game", {
-      roomCode,
-      gameId: "egyptian-war"
-    })).success, true);
-
-    const initialStatePromise = waitForEgyptianWarState(host);
-    assert.equal((await emitAck(host, "start-game", { roomCode })).success, true);
-    const initialState = await initialStatePromise;
-
-    spectator = await connect(url);
-    const spectatorStatePromise = waitForEgyptianWarState(spectator);
-    const spectatorListPromise = waitForEvent<Array<{
-      id: string;
-      name: string;
-      isConnected: boolean;
-    }>>(
-      host,
-      "spectator-list",
-      (spectators) => spectators.some((member) => member.name === "Viewer")
-    );
-    const joined = await emitAck(spectator, "join-room", {
-      roomCode,
-      playerName: "Viewer",
-      avatar: "🦊"
-    });
-    assert.equal(joined.success, true);
-    assert.equal(joined.role, "spectator");
-
-    const spectatorState = await spectatorStatePromise;
-    assert.equal(spectatorState.players.length, 2);
-    assert.equal((await spectatorListPromise)[0]?.name, "Viewer");
-
-    const playAttempt = await emitEgyptianWarAction(
-      spectator,
-      roomCode,
-      "play-card"
-    );
-    assert.equal(playAttempt.success, false);
-    assert.match(playAttempt.message ?? "", /not a player/i);
-    const slapAttempt = await emitEgyptianWarAction(
-      spectator,
-      roomCode,
-      "slap"
-    );
-    assert.equal(slapAttempt.success, false);
-    assert.match(slapAttempt.message ?? "", /not a player/i);
-
-    const disconnectedListPromise = waitForEvent<Array<{
-      name: string;
-      isConnected: boolean;
-    }>>(
-      host,
-      "spectator-list",
-      (spectators) => spectators.some(
-        (member) => member.name === "Viewer" && !member.isConnected
-      )
-    );
-    spectator.disconnect();
-    await disconnectedListPromise;
-
-    const sockets = new Map([[host.id!, host], [guest.id!, guest]]);
-    const currentSocket = initialState.currentPlayerId
-      ? sockets.get(initialState.currentPlayerId)
-      : undefined;
-    assert.ok(currentSocket);
-    assert.equal(
-      (await emitEgyptianWarAction(currentSocket, roomCode, "play-card"))
-        .success,
-      true
-    );
-
-    resumedSpectator = await connect(url);
-    const resumedStatePromise = waitForEgyptianWarState(resumedSpectator);
-    const reconnectedListPromise = waitForEvent<Array<{
-      name: string;
-      isConnected: boolean;
-    }>>(
-      host,
-      "spectator-list",
-      (spectators) => spectators.some(
-        (member) => member.name === "Viewer" && member.isConnected
-      )
-    );
-    assert.ok(joined.resumeToken);
-    const resumed = await emitAck(resumedSpectator, "resume-room", {
-      resumeToken: joined.resumeToken
-    });
-    assert.equal(resumed.success, true);
-    assert.equal(resumed.role, "spectator");
-    assert.equal((await resumedStatePromise).players.length, 2);
-    await reconnectedListPromise;
-
-    const promotedPlayersPromise = waitForEvent<Array<{
-      name: string;
-      isConnected: boolean;
-    }>>(
-      host,
-      "player-list",
-      (players) => players.some((player) => player.name === "Viewer")
-    );
-    assert.equal((await emitAck(host, "close-game-to-lobby", { roomCode })).success, true);
-    const promotedPlayers = await promotedPlayersPromise;
-    assert.equal(
-      promotedPlayers.find((player) => player.name === "Viewer")?.isConnected,
-      true
-    );
-  } finally {
-    host.disconnect();
-    guest?.disconnect();
-    spectator?.disconnect();
-    resumedSpectator?.disconnect();
-    await stopServer(server);
-  }
-});
+);

@@ -6,7 +6,7 @@ The server runs locally in Docker and can optionally use a temporary Cloudflare 
 
 ## Current features
 
-- Six-character room codes with hide and reveal controls
+- Cryptographically generated six-character room codes with hide/reveal controls and invalid-join throttling
 - Shared lobby visible to the host and joined players
 - Player names and selectable avatars
 - Host identification in the player list
@@ -116,10 +116,15 @@ docker compose --profile public down
 
 GameHub uses npm workspaces so the plugin boundary is exercised before the
 packages are moved into separate repositories. `packages/game-sdk` contains
-the shared contracts, while `games/egyptian-war` owns the independently
-buildable game engine, tests, documentation, package metadata, preview media,
-game-specific audio, HTML fragment, stylesheet, browser controller, and
-authoritative server session. GameHub loads enabled packages from
+the shared contracts that connect GameHub to every game plugin. It is reusable
+GameHub platform code—not a playable game—and therefore lives under
+`packages/` rather than `games/`. It will remain owned and versioned by
+GameHub after Egyptian War moves to its own repository.
+
+`games/egyptian-war` owns the independently buildable game engine, tests,
+documentation, package metadata, preview media, game-specific audio, HTML
+fragment, stylesheet, browser controller, and authoritative server session.
+GameHub loads enabled game packages from
 `gamehub.config.json` (or the `GAMEHUB_GAME_PACKAGES` environment override)
 and communicates through the SDK contracts.
 
@@ -135,6 +140,7 @@ GameHub/
 │       ├── docs/
 │       ├── public/
 │       ├── src/
+│       ├── test/
 │       ├── package.json
 │       ├── tsconfig.json
 │       └── tsconfig.test.json
@@ -157,8 +163,9 @@ GameHub/
 │   ├── server.integration.test.ts
 │   └── server.ts
 ├── test/
+│   ├── fixtures/
+│   │   └── minimal-game-plugin/
 │   ├── audio.test.js
-│   ├── clientAnimation.test.js
 │   ├── gameHost.test.js
 │   └── gamePicker.test.js
 ├── .dockerignore

@@ -176,7 +176,9 @@
       </div>
     </section>
 
-    <div id="game-root"><!-- game-plugin-markup --></div>
+    <section id="gameplay-view" class="card game-card shadow mx-auto d-none">
+      <div id="game-root"><!-- game-plugin-markup --></div>
+    </section>
 
     <div id="app-settings-modal" class="modal fade" tabindex="-1" aria-labelledby="app-settings-modal-title"
       aria-describedby="app-settings-modal-description" aria-hidden="true">
@@ -246,7 +248,7 @@
                   <div class="audio-setting-header">
                     <div>
                       <label class="audio-setting-title" for="audio-game-volume">Game sounds</label>
-                      <p class="audio-setting-description mb-0">Cards, slaps, pile wins, and game victories.</p>
+                      <p class="audio-setting-description mb-0">Game actions, round results, and victories.</p>
                     </div>
                   </div>
                   <div class="audio-volume-row">
@@ -372,6 +374,7 @@
   </main>
 
   <script src="/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
+  <script id="gamehub-config" type="application/json"><!-- gamehub-config --></script>
   <script src="/socket.io/socket.io.js"></script>
   <script src="/audio.js"></script>
   <script src="/gameHost.js"></script>

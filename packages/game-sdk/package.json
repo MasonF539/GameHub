@@ -7,13 +7,22 @@
   "files": [
     "dist"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MasonF539/GameHub.git",
+    "directory": "packages/game-sdk"
+  },
   "scripts": {
     "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
     "clean:test": "node -e \"require('node:fs').rmSync('dist-test',{recursive:true,force:true})\"",
     "build": "npm run clean && tsc",
     "build:test": "npm run clean:test && tsc -p tsconfig.test.json",
     "check": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json",
-    "test": "npm run build:test && node --test dist-test/*.test.js"
+    "test": "npm run build:test && node --test dist-test/*.test.js",
+    "prepack": "npm run build"
   },
   "license": "ISC",
   "type": "commonjs",

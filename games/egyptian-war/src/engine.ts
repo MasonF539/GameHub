@@ -328,6 +328,28 @@ function awardPile(
   }
 }
 
+function awardFinalPileOrOpenSlapWindow(
+  state: EgyptianWarState,
+  defaultWinnerId: string,
+  awardMessage: string
+): void {
+  if (
+    isEgyptianWarPileSlappable(
+      state.pile.slice(state.penaltyPileCardCount),
+      state.settings
+    )
+  ) {
+    state.challenge = null;
+    state.pendingPileWinnerId = defaultWinnerId;
+    state.activityMessage =
+      "No player can continue, but the final card is slappable. " +
+      "The pile will be awarded when the slap window ends.";
+    return;
+  }
+
+  awardPile(state, defaultWinnerId, awardMessage);
+}
+
 export function removeEgyptianWarPlayer(
   state: EgyptianWarState,
   playerId: string
@@ -401,21 +423,19 @@ export function removeEgyptianWarPlayer(
         `${survivingChallengePlayer.name} won the pile.`
     );
   } else if (state.pendingPileWinnerId === playerId) {
-    state.pendingPileWinnerId = null;
-    const currentPlayer =
+    const fallbackWinner =
       state.players[state.currentPlayerIndex]?.cards.length
         ? state.players[state.currentPlayerIndex]
         : state.players.find(
           (player) => !player.isEliminated && player.cards.length > 0
-        );
+        ) ?? state.players[0];
 
-    if (currentPlayer) {
-      awardPile(
-        state,
-        currentPlayer.id,
+    if (fallbackWinner) {
+      state.pendingPileWinnerId = fallbackWinner.id;
+      state.currentPlayerIndex = state.players.indexOf(fallbackWinner);
+      state.activityMessage =
         `${removedPlayer.name} was removed before the pile was claimed. ` +
-          `${currentPlayer.name} won the pile.`
-      );
+        `${fallbackWinner.name} will receive it if nobody slaps.`;
     }
   } else if (wasCurrentPlayer) {
     const nextPlayer = state.players.find(
@@ -493,7 +513,7 @@ function passChallengeAfterElimination(
       throw new Error("The challenge owner is no longer in the game.");
     }
 
-    awardPile(
+    awardFinalPileOrOpenSlapWindow(
       state,
       challenger.id,
       `${player.name} ran out of cards. No player could continue the challenge, so ${challenger.name} won the pile.`
@@ -778,7 +798,7 @@ export function applyEgyptianWarAction(
       );
 
       if (nextIndex === null) {
-        awardPile(
+        awardFinalPileOrOpenSlapWindow(
           state,
           playerId,
           `${player.name} played ${describeCardRank(card.rank)} with no opponent able to answer and won the pile.`
@@ -861,7 +881,7 @@ export function applyEgyptianWarAction(
     const nextIndex = nextPlayerIndex(state, playerIndex, playerId);
 
     if (nextIndex === null) {
-      awardPile(
+      awardFinalPileOrOpenSlapWindow(
         state,
         playerId,
         `${player.name} played ${describeCardRank(card.rank)} with no opponent able to answer and won the pile.`
@@ -897,7 +917,7 @@ export function applyEgyptianWarAction(
   const nextIndex = nextPlayerIndex(state, playerIndex);
 
   if (nextIndex === null) {
-    awardPile(
+    awardFinalPileOrOpenSlapWindow(
       state,
       playerId,
       `${player.name} collected the final cards and wins.`

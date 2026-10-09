@@ -38,4 +38,6 @@ COPY gamehub.config.json ./gamehub.config.json
 
 EXPOSE 3000
 
+USER node
+
 CMD ["node", "dist/server.js"]

@@ -26,6 +26,14 @@ The independently buildable `@gamehub/game-sdk` workspace under
 
 The manifest API and package version are separate. `apiVersion` describes compatibility with GameHub, while `packageVersion` describes a release of the game itself.
 
+The SDK is part of the GameHub platform, not a game plugin. The `packages/`
+directory holds reusable platform packages, while `games/` holds playable game
+implementations being prepared for extraction. After Egyptian War moves to its
+own repository, GameHub will continue to own and version the SDK so Egyptian
+War and future games can depend on the same stable contract. The selected
+distribution path is the public npm registry, using exact SDK versions in game
+package dependencies.
+
 ## Current in-repository boundary
 
 Egyptian War is an independently buildable `@gamehub/egyptian-war` workspace
@@ -45,8 +53,8 @@ The intended migration order is:
 4. Route the embedded Egyptian War client through GameHub's generic browser game host.
 5. Move Egyptian War styles, templates, previews, music, and effects into its game package.
 6. Add package discovery from an explicit administrator-controlled configuration.
-7. Extract the complete package into the Egyptian War repository and install it back into GameHub as a versioned dependency.
-8. Verify the boundary with a minimal second game before treating the API as stable.
+7. Publish the GameHub SDK to npm, extract the complete game package into the Egyptian War repository, make it depend on an exact SDK release, and install the game back into GameHub as a pinned dependency.
+8. Keep the minimal fixture plugin as integration coverage proving the host lifecycle works without Egyptian War-specific behavior.
 
 ## Ownership boundary
 
@@ -55,3 +63,13 @@ GameHub keeps its own `index.html`, core stylesheet, and client code. A game mod
 The platform owns menu/lobby audio and player-join notifications. Individual game packages own game music and action effects and register them through the shared audio service.
 
 The server remains authoritative across the boundary. Browser modules may request actions but cannot supply trusted state, winners, clocks, scores, or arbitration results.
+
+GameHub wraps each package's declared markup in a game-specific root, hides
+inactive roots, and passes only the active package root to `mount()`. Package
+clients must query within that root and namespace their CSS. Embedded clients
+load their declared classic `entryPaths`; module clients additionally load the
+required `entryPath` as an ES module.
+
+Platform request handlers accept missing Socket.IO acknowledgement callbacks
+without throwing. Room codes use cryptographically secure randomness, and
+repeated invalid room-code guesses are limited before room lookup continues.

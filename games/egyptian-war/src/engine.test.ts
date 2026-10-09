@@ -554,6 +554,57 @@ test("a final failed challenge that creates a slap waits for a slap or timer", (
   assert.equal(state.players[0].cards.length, 4);
 });
 
+test("a slappable last card stays available so an eliminated player can reenter", () => {
+  const state = makeState(
+    [[card("2", "p1-last")], []],
+    {
+      pile: [card("2", "pile-2")],
+      players: [
+        { ...players[0], cards: [card("2", "p1-last")], isEliminated: false },
+        { ...players[1], cards: [], isEliminated: true }
+      ]
+    }
+  );
+
+  applyEgyptianWarAction(state, players[0].id, "play-card");
+
+  assert.equal(state.status, "playing");
+  assert.equal(state.pendingPileWinnerId, players[0].id);
+  assert.equal(state.pile.length, 2);
+
+  applyEgyptianWarAction(state, players[1].id, "slap");
+
+  assert.equal(state.winnerId, players[1].id);
+  assert.equal(state.players[1].cards.length, 2);
+  assert.equal(state.pile.length, 0);
+});
+
+test("removing a pending pile winner preserves the reentry slap window", () => {
+  const state = makeState(
+    [[], [], []],
+    {
+      pile: [card("2", "pile-1"), card("2", "pile-2")],
+      players: players.map((player) => ({
+        ...player,
+        cards: [],
+        isEliminated: true
+      })),
+      pendingPileWinnerId: players[0].id
+    }
+  );
+
+  removeEgyptianWarPlayer(state, players[0].id);
+
+  assert.equal(state.status, "playing");
+  assert.equal(state.pendingPileWinnerId, players[1].id);
+  assert.equal(state.pile.length, 2);
+
+  applyEgyptianWarAction(state, players[2].id, "slap");
+
+  assert.equal(state.winnerId, players[2].id);
+  assert.equal(state.players[1].cards.length, 2);
+});
+
 test("passes remaining challenge attempts when a responder runs out of cards", () => {
   const state = makeState([
     [card("queen", "p1-q"), card("2", "p1-2")],

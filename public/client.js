@@ -123,23 +123,20 @@ const previousAvatarButton = document.querySelector("#previous-avatar");
 const avatarPreview = document.querySelector("#avatar-preview");
 const nextAvatarButton = document.querySelector("#next-avatar");
 
-const avatars = [
-  "🐱",
-  "🐶",
-  "🦊",
-  "🐸",
-  "🐼",
-  "🐯",
-  "🐵",
-  "🐙",
-  "🦄",
-  "🐲",
-  "🤖",
-  "👻",
-  "👽",
-  "🥷",
-  "🧙"
-];
+const gameHubConfigElement = document.querySelector("#gamehub-config");
+let avatars = [];
+try {
+  const configuredAvatars = JSON.parse(
+    gameHubConfigElement?.textContent ?? "{}"
+  ).avatars;
+  if (Array.isArray(configuredAvatars)) {
+    avatars = configuredAvatars.filter(
+      (avatar) => typeof avatar === "string" && avatar !== ""
+    );
+  }
+} catch {
+  avatars = [];
+}
 
 let selectedAvatarIndex = 0;
 let currentRoomCode = null;
