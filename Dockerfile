@@ -14,8 +14,10 @@ COPY games ./games
 COPY src ./src
 COPY public ./public
 COPY test ./test
+COPY scripts ./scripts
 
 RUN npm test
+RUN npm run verify:packages
 
 
 FROM node:24-alpine

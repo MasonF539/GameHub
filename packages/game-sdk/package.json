@@ -4,6 +4,13 @@
   "description": "Versioned contracts for GameHub game plugins.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "require": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
   "files": [
     "dist"
   ],
@@ -26,6 +33,9 @@
   },
   "license": "ISC",
   "type": "commonjs",
+  "engines": {
+    "node": ">=20"
+  },
   "devDependencies": {
     "@types/node": "^26.6.4",
     "typescript": "^7.0.2"

@@ -11,6 +11,11 @@ Installation requires adding the dependency and its package name to the
 configured list. The package lock and Docker build then select an exact,
 reproducible version.
 
+The Docker build runs `npm run verify:packages` after the test suite. That
+check packs the SDK and Egyptian War using their publish manifests, installs
+both archives into an empty temporary consumer, and loads the installed game.
+It guards against imports or required files that exist only in the workspace.
+
 Game packages execute trusted server code. They are not a sandbox for packages supplied by room hosts or browser clients.
 
 ## Versioned contracts

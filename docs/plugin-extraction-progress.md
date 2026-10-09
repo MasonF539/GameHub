@@ -45,11 +45,16 @@ to an independently versioned GameHub plugin.
 - Centralized the avatar catalog in server-rendered platform configuration and
   hardened room requests with optional acknowledgements, cryptographic room
   codes, and invalid-join throttling.
+- Added publish-safe package exports, package-local licenses, and an artifact
+  verification step that packs both packages, installs their tarballs into a
+  clean temporary consumer, and loads Egyptian War without workspace source.
 
 ## In progress
 
 - Move `games/egyptian-war` into its independent repository, publish it to npm,
   and reinstall an exact version in GameHub as an external dependency.
+- Publish the SDK first so the independent Egyptian War repository can create
+  its own lockfile against the real exact SDK release.
 
 ## Verification
 
@@ -57,6 +62,9 @@ to an independently versioned GameHub plugin.
   automated tests.
 - The production container serves injected package markup and the
   package-owned browser module from its declared public route.
+- `npm run verify:packages` confirms the SDK and game tarballs contain their
+  compiled declarations/runtime and required public assets, exclude source and
+  test folders, and work when installed outside the monorepo.
 - GameHub's runtime client and server contain no Egyptian War implementation
   branches or imports; the installed package list lives in configuration.
 

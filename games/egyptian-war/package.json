@@ -4,6 +4,13 @@
   "description": "Egyptian War game plugin for GameHub.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "require": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
   "files": [
     "dist",
     "docs",
@@ -23,6 +30,14 @@
   },
   "license": "ISC",
   "type": "commonjs",
+  "engines": {
+    "node": ">=20"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MasonF539/GameHub.git",
+    "directory": "games/egyptian-war"
+  },
   "dependencies": {
     "@gamehub/game-sdk": "1.0.0"
   },

@@ -141,6 +141,7 @@ GameHub/
 │       ├── public/
 │       ├── src/
 │       ├── test/
+│       ├── LICENSE
 │       ├── package.json
 │       ├── tsconfig.json
 │       └── tsconfig.test.json
@@ -156,12 +157,16 @@ GameHub/
 ├── packages/
 │   └── game-sdk/
 │       ├── src/
+│       ├── LICENSE
 │       ├── package.json
 │       ├── tsconfig.json
 │       └── tsconfig.test.json
 ├── src/
+│   ├── failedAttemptLimiter.ts
 │   ├── server.integration.test.ts
 │   └── server.ts
+├── scripts/
+│   └── verify-package-artifacts.mjs
 ├── test/
 │   ├── fixtures/
 │   │   └── minimal-game-plugin/
@@ -174,6 +179,7 @@ GameHub/
 ├── Dockerfile
 ├── GameHub.ps1
 ├── gamehub.config.json
+├── LICENSE
 ├── package.json
 ├── package-lock.json
 ├── README.md

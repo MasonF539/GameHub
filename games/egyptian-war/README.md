@@ -29,3 +29,7 @@ When the package moves to its independent repository, it will consume an exact
 `@gamehub/game-sdk` release and publish as a public npm package. GameHub can
 then install an exact Egyptian War version and enable it through
 `gamehub.config.json`.
+
+Before the split, GameHub's `npm run verify:packages` command packs the SDK and
+this game, installs both archives into a clean temporary project, and confirms
+that the installed plugin and public directory work without monorepo source.
