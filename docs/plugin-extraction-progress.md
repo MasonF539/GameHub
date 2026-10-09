@@ -55,6 +55,8 @@ to an independently versioned GameHub plugin.
   and reinstall an exact version in GameHub as an external dependency.
 - Publish the SDK first so the independent Egyptian War repository can create
   its own lockfile against the real exact SDK release.
+- Confirm the npm scope and destination GitHub repository name before changing
+  the package's repository metadata or publishing either package.
 
 ## Verification
 

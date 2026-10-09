@@ -33,3 +33,12 @@ then install an exact Egyptian War version and enable it through
 Before the split, GameHub's `npm run verify:packages` command packs the SDK and
 this game, installs both archives into a clean temporary project, and confirms
 that the installed plugin and public directory work without monorepo source.
+
+## Standalone repository preparation
+
+The package directory includes its own README, license, TypeScript settings,
+tests, public assets, package metadata, and ignore rules. Its only GameHub code
+dependency is the exact `@gamehub/game-sdk` package version declared in
+`package.json`. A standalone lockfile should be generated after that SDK
+version is published, so it records the real registry artifact rather than a
+monorepo workspace link.
