@@ -31,7 +31,7 @@
     "test": "npm run build:test && node --test dist-test/*.test.js",
     "prepack": "npm run build"
   },
-  "license": "ISC",
+  "license": "PolyForm-Noncommercial-1.0.0",
   "type": "commonjs",
   "engines": {
     "node": ">=20"
