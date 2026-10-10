@@ -95,7 +95,7 @@ function loadGamePackage(packageName: string): GamePluginPackage {
   if (
     gamePackage.server.manifest.apiVersion !== gamePackage.manifest.apiVersion ||
     gamePackage.server.manifest.definition.id !==
-      gamePackage.manifest.definition.id
+    gamePackage.manifest.definition.id
   ) {
     throw new Error(
       `Installed game package ${packageName} has mismatched client and server manifests.`
@@ -218,13 +218,13 @@ const io = new Server(server, {
 const configuredPort = Number(process.env.PORT);
 const port =
   Number.isInteger(configuredPort) &&
-  configuredPort >= 0 &&
-  configuredPort <= 65_535
+    configuredPort >= 0 &&
+    configuredPort <= 65_535
     ? configuredPort
     : 3000;
 const deterministicTestRandomInteger =
   process.env.NODE_ENV === "test" &&
-  process.env.GAMEHUB_DETERMINISTIC_DECK === "true"
+    process.env.GAMEHUB_DETERMINISTIC_DECK === "true"
     ? (maxExclusive: number): number => maxExclusive - 1
     : randomInt;
 const maxLobbyPlayers = 12;
@@ -1362,7 +1362,7 @@ io.on("connection", (socket) => {
     });
   });
 
-  onSocketRequest(socket, "leave-room", (_data, respond) => {
+  onSocketRequest(socket, "leave-lobby", (_data, respond) => {
     const roomCode = socketRoomCodes.get(socket.id);
     const room = roomCode ? rooms.get(roomCode) : undefined;
     const found = room ? getRoomMember(room, socket.id) : null;
@@ -1380,20 +1380,54 @@ io.on("connection", (socket) => {
       return;
     }
 
-    if (found.role === "player" && room.gameSession !== null) {
-      const result = room.gameSession.memberRemoved?.(
-        socket.id,
-        { voluntary: true }
-      ) ?? { success: false, message: "You cannot leave during this game." };
+    removeMemberFromRoom(roomCode, room, socket.id, found.role);
+    console.log(`${found.member.name} left lobby ${roomCode}`);
+    respond({ success: true });
+  });
 
-      if (!result.success) {
-        respond(result);
-        return;
-      }
+  onSocketRequest(socket, "leave-game", (_data, respond) => {
+    const roomCode = socketRoomCodes.get(socket.id);
+    const room = roomCode ? rooms.get(roomCode) : undefined;
+    const found = room ? getRoomMember(room, socket.id) : null;
+
+    if (!roomCode || !room || !found) {
+      respond({ success: false, message: "You are not in a room." });
+      return;
     }
 
-    removeMemberFromRoom(roomCode, room, socket.id, found.role);
-    console.log(`${found.member.name} left room ${roomCode}`);
+    if (room.hostId === socket.id) {
+      respond({
+        success: false,
+        message: "The host cannot leave the game."
+      });
+      return;
+    }
+
+    if (found.role !== "player" || room.gameSession === null) {
+      respond({
+        success: false,
+        message: "You are not in an active game."
+      });
+      return;
+    }
+
+    const result =
+      room.gameSession.memberRemoved?.(
+        socket.id,
+        { voluntary: true }
+      ) ?? {
+        success: false,
+        message: "You cannot leave during this game."
+      };
+
+    if (!result.success) {
+      respond(result);
+      return;
+    }
+
+    // IMPORTANT: do NOT call removeMemberFromRoom().
+    // The player is leaving the game but staying in the lobby.
+    console.log(`${found.member.name} left game ${roomCode}`);
     respond({ success: true });
   });
 
@@ -1763,7 +1797,7 @@ io.on("connection", (socket) => {
     }).catch((error) => {
       console.error(
         "Unable to process " + gameId +
-          " action in room " + roomCode + ":",
+        " action in room " + roomCode + ":",
         error
       );
       respond({

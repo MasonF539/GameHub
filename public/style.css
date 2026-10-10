@@ -16,6 +16,55 @@ body {
   display: contents;
 }
 
+/*
+ * A game's markup is wrapped in a plugin root. The wrapper must not create a
+ * layout box of its own: the game's panel sizes itself (height: 100%) against
+ * #gameplay-view, and an auto-height wrapper in between collapses the board.
+ */
+[data-game-plugin-root] {
+  display: contents;
+}
+
+[data-game-plugin-root][hidden] {
+  display: none;
+}
+
+/*
+ * The connection indicator lives in the hub header, so its styles belong to
+ * the hub. Game stylesheets stay disabled until a game starts.
+ */
+.server-connection-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0;
+  margin: 0;
+  color: #f8f9fa !important;
+  background: transparent !important;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.server-connection-status::before {
+  width: 0.55rem;
+  height: 0.55rem;
+  flex: 0 0 auto;
+  content: "";
+  background: #ffc107;
+  border-radius: 50%;
+  box-shadow: 0 0 0.4rem rgba(255, 193, 7, 0.7);
+}
+
+.server-connection-status.text-bg-success::before {
+  background: #20c973;
+  box-shadow: 0 0 0.4rem rgba(32, 201, 115, 0.7);
+}
+
+.server-connection-status.text-bg-danger::before {
+  background: #dc3545;
+  box-shadow: 0 0 0.4rem rgba(220, 53, 69, 0.7);
+}
+
 .app-settings-button {
   position: fixed;
   z-index: 1040;
@@ -206,7 +255,8 @@ body {
   position: relative;
 }
 
-#close-lobby {
+#close-lobby,
+#leave-lobby {
   position: absolute;
   top: 1.5rem;
   right: 1.5rem;
@@ -282,6 +332,11 @@ body {
 
 .game-picker-modal-content .btn-close {
   filter: invert(1) grayscale(100%) brightness(200%);
+}
+
+#settings-modal-body #setting-turnTimerSeconds {
+  width: 6rem;
+  flex: 0 0 6rem;
 }
 
 .game-picker-grid {
@@ -601,7 +656,8 @@ body {
     min-height: 0;
   }
 
-  #close-lobby {
+  #close-lobby,
+  #leave-lobby {
     top: 0.8rem;
     right: 0.8rem;
   }

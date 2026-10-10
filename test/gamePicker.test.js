@@ -329,3 +329,68 @@ test("highlights the server-confirmed selection and closes after acknowledgement
   assert.equal(getModalHideCount(), 1);
   close();
 });
+
+test("a guest who confirms Leave Game returns to the lobby", () => {
+  const { close, emitted, handlers, getModalHideCount } = createClient();
+
+  handlers.get("room-resumed")({
+    roomCode: "ABC123",
+    isHost: false,
+    role: "player",
+    isLocked: false,
+    selectedGameId: "example-game",
+    gameSettings: {},
+    activeGameId: "example-game",
+    isPaused: false,
+    chatEnabled: true
+  });
+  assert.equal(document.querySelector("#gameplay-view").classList.contains("d-none"), false);
+  assert.equal(document.querySelector("#lobby-view").classList.contains("d-none"), true);
+
+  document.querySelector("#confirm-leave-game").click();
+  const leaveRequest = emitted.find((item) => item.event === "leave-game");
+  assert.ok(leaveRequest, "the confirmation should emit leave-game");
+  assert.deepEqual(leaveRequest.data, { roomCode: "ABC123" });
+
+  leaveRequest.respond({ success: true });
+
+  assert.equal(getModalHideCount(), 1);
+  assert.equal(document.querySelector("#gameplay-view").classList.contains("d-none"), true);
+  assert.equal(document.querySelector("#lobby-view").classList.contains("d-none"), false);
+  assert.equal(document.querySelector("#entry-view").classList.contains("d-none"), true);
+  assert.match(document.querySelector("#game-status").textContent, /left the game and returned to the lobby/i);
+  close();
+});
+
+test("a guest who leaves the lobby returns to entry and clears the saved room session", () => {
+  const { close, emitted, handlers } = createClient();
+
+  handlers.get("room-resumed")({
+    roomCode: "ABC123",
+    isHost: false,
+    role: "player",
+    isLocked: false,
+    selectedGameId: "example-game",
+    gameSettings: {},
+    activeGameId: null,
+    isPaused: false,
+    chatEnabled: true
+  });
+  handlers.get("room-resume-token")("resume-token");
+  assert.equal(document.querySelector("#lobby-view").classList.contains("d-none"), false);
+  assert.equal(localStorage.getItem("gamehub:last-room"), "ABC123");
+
+  document.querySelector("#leave-lobby").click();
+  const leaveRequest = emitted.find((item) => item.event === "leave-lobby");
+  assert.ok(leaveRequest, "the button should emit leave-lobby");
+  assert.deepEqual(leaveRequest.data, { roomCode: "ABC123" });
+
+  leaveRequest.respond({ success: true });
+
+  assert.equal(document.querySelector("#entry-view").classList.contains("d-none"), false);
+  assert.equal(document.querySelector("#lobby-view").classList.contains("d-none"), true);
+  assert.equal(document.querySelector("#gameplay-view").classList.contains("d-none"), true);
+  assert.equal(localStorage.getItem("gamehub:last-room"), null);
+  assert.equal(localStorage.getItem("gamehub:resume:ABC123"), null);
+  close();
+});

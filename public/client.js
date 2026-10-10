@@ -64,7 +64,9 @@ const gameClientHost = new window.GameHubGameClientHost({
         resolve
       );
     }),
-    requestLeave: () => leaveRoom(),
+    requestLeave: () => {
+      bootstrap.Modal.getOrCreateInstance(leaveGameModalElement).show();
+    },
     notify: showToast,
     requestExit: () => {
       bootstrap.Modal.getOrCreateInstance(exitGameModalElement).show();
@@ -77,10 +79,14 @@ const confirmCloseLobbyButton =
   document.querySelector("#confirm-close-lobby");
 const confirmExitGameButton =
   document.querySelector("#confirm-exit-game");
+const confirmLeaveGameButton =
+  document.querySelector("#confirm-leave-game");
 const closeLobbyModalElement =
   document.querySelector("#close-lobby-modal");
 const exitGameModalElement =
   document.querySelector("#exit-game-modal");
+const leaveGameModalElement =
+  document.querySelector("#leave-game-modal");
 const createRoomButton = document.querySelector("#create-room");
 const createdRoom = document.querySelector("#created-room");
 const toggleRoomCodeButton =
@@ -116,7 +122,7 @@ const saveGameSettingsButton =
 const startGameButton = document.querySelector("#start-game");
 const gameStatus = document.querySelector("#game-status");
 const closeLobbyButton = document.querySelector("#close-lobby");
-const leaveRoomButton = document.querySelector("#leave-room");
+const leaveLobbyButton = document.querySelector("#leave-lobby");
 
 const joinRoomButton = document.querySelector("#join-room");
 const roomCodeInput = document.querySelector("#room-code");
@@ -305,7 +311,7 @@ function showLobby(roomCode, isHost) {
   isRoomLocked = false;
 
   closeLobbyButton.classList.toggle("d-none", !isHost);
-  leaveRoomButton.classList.toggle("d-none", isHost);
+  leaveLobbyButton.classList.toggle("d-none", isHost);
   toggleRoomLockButton.classList.toggle("d-none", !isHost);
   startGameButton.classList.toggle("d-none", !isHost);
   updateGamePicker();
@@ -323,8 +329,19 @@ function showLobby(roomCode, isHost) {
 
 function showEntry() {
   gameHubAudio.setScene("menu");
+  gameplayView.classList.add("d-none");
   lobbyView.classList.add("d-none");
   entryView.classList.remove("d-none");
+}
+
+function showLobbyAfterLeavingGame() {
+  gameClientHost.unmount();
+  gameplayView.classList.add("d-none");
+  entryView.classList.add("d-none");
+  lobbyView.classList.remove("d-none");
+  gameHubAudio.setScene("menu");
+  isCurrentUserSpectator = false;
+  gameStatus.textContent = "You left the game and returned to the lobby.";
 }
 
 function resetRoomState() {
@@ -1121,32 +1138,52 @@ socket.on("kicked-from-room", ({ message }) => {
   showToast(message);
 });
 
-function leaveRoom() {
-  return new Promise((resolve) => {
-    if (currentRoomCode === null) {
-      resolve({ success: false, message: "You are not in a room." });
-      return;
-    }
+confirmLeaveGameButton.addEventListener("click", () => {
+  if (currentRoomCode === null || isCurrentUserHost) {
+    return;
+  }
 
-    socket.emit("leave-room", { roomCode: currentRoomCode }, (response) => {
-      if (response?.success) {
-        clearResumeSession();
-        resetRoomState();
-        showEntry();
-        showToast("You left the room.");
+  confirmLeaveGameButton.disabled = true;
+  socket.emit(
+    "leave-game",
+    { roomCode: currentRoomCode },
+    (response) => {
+      confirmLeaveGameButton.disabled = false;
+      if (!response.success) {
+        showToast(response.message);
+        return;
       }
 
-      resolve(response ?? { success: false, message: "Unable to leave." });
-    });
-  });
-}
+      bootstrap.Modal
+        .getOrCreateInstance(leaveGameModalElement)
+        .hide();
+      showLobbyAfterLeavingGame();
+    }
+  );
+});
 
-leaveRoomButton.addEventListener("click", async () => {
-  const response = await leaveRoom();
-
-  if (!response.success) {
-    showToast(response.message);
+leaveLobbyButton.addEventListener("click", () => {
+  if (currentRoomCode === null || isCurrentUserHost) {
+    return;
   }
+
+  leaveLobbyButton.disabled = true;
+  socket.emit(
+    "leave-lobby",
+    { roomCode: currentRoomCode },
+    (response) => {
+      leaveLobbyButton.disabled = false;
+
+      if (!response.success) {
+        showToast(response.message);
+        return;
+      }
+
+      clearResumeSession(currentRoomCode);
+      resetRoomState();
+      showEntry();
+    }
+  );
 });
 
 socket.on("room-closed", () => {

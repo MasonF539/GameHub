@@ -144,40 +144,8 @@ body:has([data-game-plugin-root="egyptian-war"]:not([hidden])) #gameplay-view {
   font-size: clamp(1.2rem, 2.5vh, 2rem);
 }
 
-.server-connection-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0;
-  margin: 0;
-  color: #f8f9fa !important;
-  background: transparent !important;
-  font-size: 0.78rem;
-  font-weight: 600;
-}
-
 .egyptian-war-connection-status {
   align-self: flex-end;
-}
-
-.server-connection-status::before {
-  width: 0.55rem;
-  height: 0.55rem;
-  flex: 0 0 auto;
-  content: "";
-  background: #ffc107;
-  border-radius: 50%;
-  box-shadow: 0 0 0.4rem rgba(255, 193, 7, 0.7);
-}
-
-.server-connection-status.text-bg-success::before {
-  background: #20c973;
-  box-shadow: 0 0 0.4rem rgba(32, 201, 115, 0.7);
-}
-
-.server-connection-status.text-bg-danger::before {
-  background: #dc3545;
-  box-shadow: 0 0 0.4rem rgba(220, 53, 69, 0.7);
 }
 
 .egyptian-war-play-layout {
@@ -196,6 +164,7 @@ body:has([data-game-plugin-root="egyptian-war"]:not([hidden])) #gameplay-view {
   flex-direction: column;
 }
 
+/* Sits below the hub's fixed Settings button instead of underneath it on another plane. */
 .egyptian-war-top-right {
   position: absolute;
   top: 1.5rem;

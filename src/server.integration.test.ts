@@ -415,19 +415,19 @@ test("a guest can leave a room, but the host cannot leave it", { timeout: 20_000
     assert.ok(roomCode);
     assert.equal((await emitAck(guest, "join-room", { roomCode, playerName: "Guest", avatar: dogAvatar })).success, true);
 
-    const hostLeave = await emitAck(host, "leave-room", { roomCode });
-    assert.equal(hostLeave.success, false);
+    const hostLeave = await emitAck(host, "leave-lobby", { roomCode });
+    assert.equal(hostLeave.success, false); 
 
     const listAfterLeave = waitForEvent<Array<{ name: string }>>(
       host,
       "player-list",
       (players) => players.length === 1
     );
-    assert.equal((await emitAck(guest, "leave-room", { roomCode })).success, true);
+    assert.equal((await emitAck(guest, "leave-lobby", { roomCode })).success, true);
     assert.deepEqual((await listAfterLeave).map((player) => player.name), ["Host"]);
 
     // A member who left is no longer in any room.
-    assert.equal((await emitAck(guest, "leave-room", { roomCode })).success, false);
+    assert.equal((await emitAck(guest, "leave-lobby", { roomCode })).success, false);
     const rejoin = await emitAck(guest, "join-room", { roomCode, playerName: "Guest", avatar: dogAvatar });
     assert.equal(rejoin.success, true);
   } finally {
@@ -450,7 +450,7 @@ test("a guest can leave an active game and the host keeps playing", { timeout: 2
     assert.equal((await emitAck(host, "select-game", { roomCode, gameId: fixtureGameId })).success, true);
     assert.equal((await emitAck(host, "start-game", { roomCode })).success, true);
 
-    assert.equal((await emitAck(guest, "leave-room", { roomCode })).success, true);
+    assert.equal((await emitAck(guest, "leave-game", { roomCode })).success, true);
     // The room and its game are still there for the host.
     assert.equal((await emitGameAction(host, roomCode, "advance")).success, true);
   } finally {

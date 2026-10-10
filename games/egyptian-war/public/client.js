@@ -176,10 +176,7 @@ function showEgyptianWarGame(game) {
   setEgyptianWarTimerHidden(true);
   egyptianWarTimerRemainingMs = null;
   egyptianWarTimerDeadline = null;
-  egyptianWarHostControls.classList.toggle(
-    "d-none",
-    !currentContext.isHost
-  );
+  egyptianWarHostControls.classList.toggle("d-none", !currentContext.isHost);
   egyptianWarLeaveButton.classList.toggle("d-none", currentContext.isHost);
   egyptianWarPauseButton.textContent =
     game.isPaused ? "Resume" : "Pause";
@@ -1066,17 +1063,7 @@ egyptianWarPauseButton.addEventListener("click", async () => {
   if (!response.success) currentContext.notify(response.message);
 });
 egyptianWarExitButton.addEventListener("click", () => currentContext?.requestExit());
-egyptianWarLeaveButton.addEventListener("click", async () => {
-  if (!currentContext) return;
-  const warning = currentContext.role === "spectator"
-    ? "Leave this room?"
-    : "Leave this room? Your cards will be added to the next pile.";
-  if (!window.confirm(warning)) return;
-  const response = await currentContext.requestLeave();
-  if (!response?.success) {
-    currentContext.notify(response?.message ?? "Unable to leave the room.");
-  }
-});
+egyptianWarLeaveButton.addEventListener("click", () => currentContext?.requestLeave());
 egyptianWarChatForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   const message = egyptianWarChatInput.value.trim();
