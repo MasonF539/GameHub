@@ -73,7 +73,15 @@ export interface GameSession {
   resume?(): GameActionResult;
   memberDisconnected?(memberId: string): void;
   memberReconnected?(memberId: string, previousMemberId?: string): void;
-  memberRemoved?(memberId: string): GameActionResult;
+  /**
+   * A member is leaving the game. `voluntary` is true when they left on
+   * their own (they may still be connected) and false when the host removed
+   * a disconnected player.
+   */
+  memberRemoved?(
+    memberId: string,
+    options?: { voluntary?: boolean }
+  ): GameActionResult;
   dispose(): void;
 }
 
@@ -107,6 +115,8 @@ export type GameClientContext = {
   requestPause(isPaused: boolean): Promise<GameActionResult>;
   sendChat(message: string): Promise<GameActionResult>;
   removeMember(memberId: string): Promise<GameActionResult>;
+  /** Leaves the room (not available to the host, who closes the lobby). */
+  requestLeave(): Promise<GameActionResult>;
   notify(message: string): void;
   requestExit(): void;
 };

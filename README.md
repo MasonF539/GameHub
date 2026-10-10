@@ -22,7 +22,7 @@ The server runs locally in Docker and can optionally use a temporary Cloudflare 
 - Game-specific minimum and maximum player limits
 - Twelve-player lobby capacity
 - Host-controlled lobby locking and unlocking
-- Host-controlled player removal
+- Host-controlled player removal, plus a Leave Room button for everyone else
 - Synchronized game selection and settings
 - Bootstrap game picker with responsive cards and an optimized Egyptian War gameplay preview
 - Egyptian War rules with configurable deck count, slap settings, and turn timer
@@ -222,9 +222,27 @@ The resulting `node_modules` folder is excluded from Git.
 - The public address changes when the tunnel restarts.
 - Egyptian War is currently the only playable game.
 - Accounts, persistent data, and moderation tools have not been implemented.
+- If the host disconnects for two minutes, the room is closed, even during a game.
 
 ## Security model
 
 Players send actions to the server, but the server remains responsible for validating rooms, host permissions, game state, timing, and scores.
 
-Anything delivered to a browser can be inspected by that player. Secret values, correct answers, authoritative timers, and score calculations should remain on the server.
+Anything delivered to a browser can be inspected by that player. Secret values, correct answers, authoritative timers, and score calculations should remain on the server. The public game state therefore does not say whether the pile can currently be slapped.
+
+Other protections:
+
+- Failed join attempts, room creation, and per-connection requests are rate limited, and the number of rooms is capped.
+- Saved room sessions (resume tokens) expire after 24 hours.
+- Player names must be unique within a room and cannot contain invisible or direction-override characters.
+- Pages are served with a Content-Security-Policy and other security headers.
+
+### Settings
+
+These can be set as environment variables (the Docker compose file passes them through):
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `GAMEHUB_TRUST_CLOUDFLARE_IP` | `false` | Use Cloudflare's `cf-connecting-ip` header to identify visitors. The launcher's Public mode turns this on. Only enable it when GameHub is reached through the tunnel and untrusted people cannot reach port 3000 directly, because otherwise the header can be forged. |
+| `GAMEHUB_MAX_ROOMS` | `200` | Maximum number of rooms the server holds at once. |
+| `CLOUDFLARED_VERSION` | `latest` | Cloudflare tunnel image tag. Set it to a specific release to pin the tunnel version. |

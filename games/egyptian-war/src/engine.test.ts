@@ -59,6 +59,7 @@ function makeState(
     pile: [...pile],
     deferredCards: [],
     penaltyPileCardCount: 0,
+    pileVersion: 0,
     currentPlayerIndex: 0,
     settings,
     challenge: null,
@@ -142,12 +143,12 @@ test("smoothly favors earlier slaps inside the jitter window", () => {
   const candidates = [
     {
       playerId: "early",
-      adjustedArrivalTime: 100,
+      receivedAtMs: 100,
       jitterMs: 2
     },
     {
       playerId: "slightly-later",
-      adjustedArrivalTime: 115,
+      receivedAtMs: 115,
       jitterMs: 2
     }
   ];
@@ -167,12 +168,12 @@ test("excludes slaps outside their jitter comparison window", () => {
   const candidates = [
     {
       playerId: "early",
-      adjustedArrivalTime: 100,
+      receivedAtMs: 100,
       jitterMs: 2
     },
     {
       playerId: "too-late",
-      adjustedArrivalTime: 121,
+      receivedAtMs: 121,
       jitterMs: 2
     }
   ];
@@ -188,23 +189,23 @@ test("excludes slaps outside their jitter comparison window", () => {
 test("rejects non-finite slap candidates and random values safely", () => {
   const validCandidate = {
     playerId: "valid",
-    adjustedArrivalTime: 100,
+    receivedAtMs: 100,
     jitterMs: 5
   };
   const invalidCandidates = [
     {
       playerId: "nan-arrival",
-      adjustedArrivalTime: Number.NaN,
+      receivedAtMs: Number.NaN,
       jitterMs: 5
     },
     {
       playerId: "infinite-arrival",
-      adjustedArrivalTime: Number.POSITIVE_INFINITY,
+      receivedAtMs: Number.POSITIVE_INFINITY,
       jitterMs: 5
     },
     {
       playerId: "nan-jitter",
-      adjustedArrivalTime: 90,
+      receivedAtMs: 90,
       jitterMs: Number.NaN
     }
   ];
@@ -544,7 +545,7 @@ test("a final failed challenge that creates a slap waits for a slap or timer", (
   assert.equal(state.status, "playing");
   assert.throws(
     () => applyEgyptianWarAction(state, players[0].id, "play-card"),
-    /slap window/
+    /pile is being resolved/
   );
 
   resolveEgyptianWarTurnTimeout(state);
@@ -1010,4 +1011,122 @@ test("finishes when one player owns all cards", () => {
   assert.equal(state.winnerId, players[0].id);
   assert.equal(state.players[0].cards.length, 3);
   assert.equal(state.pile.length, 0);
+});
+
+test("a challenger never has to answer their own challenge", () => {
+  const state = makeState([
+    [card("ace", "p1-ace"), card("4", "p1-4"), card("5", "p1-5"), card("6", "p1-6")],
+    [card("2", "p2-2"), card("2", "p2-2b")]
+  ]);
+
+  applyEgyptianWarAction(state, players[0].id, "play-card");
+  applyEgyptianWarAction(state, players[1].id, "play-card");
+  // The second 2 makes a double and empties the only opponent's hand.
+  applyEgyptianWarAction(state, players[1].id, "play-card");
+
+  assert.equal(state.challenge, null);
+  assert.equal(state.pendingPileWinnerId, players[0].id);
+
+  resolveEgyptianWarTurnTimeout(state);
+
+  assert.equal(state.status, "finished");
+  assert.equal(state.winnerId, players[0].id);
+});
+
+test("a slap from a player with no cards is ignored when the pile is not slappable", () => {
+  const state = makeState(
+    [
+      [card("4", "p1-4"), card("5", "p1-5")],
+      [card("6", "p2-6"), card("7", "p2-7")],
+      []
+    ],
+    { pile: [card("2", "pile-2"), card("9", "pile-9")] }
+  );
+  state.players[2].isEliminated = true;
+  const message = state.activityMessage;
+  const version = state.pileVersion;
+
+  assert.throws(
+    () => applyEgyptianWarAction(state, players[2].id, "slap"),
+    /did not count/
+  );
+  assert.equal(state.pile.length, 2);
+  assert.equal(state.activityMessage, message);
+  assert.equal(state.pileVersion, version);
+});
+
+test("messages about a pending final pile do not reveal that it is slappable", () => {
+  const state = makeState(
+    [
+      [card("4", "p1-4")],
+      [card("2", "p2-2"), card("3", "p2-3")]
+    ],
+    {
+      pile: [card("2", "pile-2"), card("jack", "pile-jack")],
+      currentPlayerIndex: 1,
+      challenge: {
+        challengerId: players[0].id,
+        responderId: players[1].id,
+        attemptsRemaining: 1
+      }
+    }
+  );
+
+  applyEgyptianWarAction(state, players[1].id, "play-card");
+
+  assert.equal(state.pendingPileWinnerId, players[0].id);
+  assert.doesNotMatch(state.activityMessage, /slap/i);
+});
+
+test("pileVersion changes only when the face-up pile changes", () => {
+  const state = makeState([
+    [card("4", "p1-4"), card("7", "p1-7")],
+    [card("5", "p2-5"), card("9", "p2-9"), card("3", "p2-3")]
+  ]);
+
+  assert.equal(state.pileVersion, 0);
+
+  applyEgyptianWarAction(state, players[0].id, "play-card");
+  assert.equal(state.pileVersion, 1);
+
+  // A false slap moves cards under the pile but leaves the face-up cards alone.
+  applyEgyptianWarAction(state, players[1].id, "slap");
+  assert.equal(state.pileVersion, 1);
+
+  applyEgyptianWarAction(state, players[1].id, "play-card");
+  assert.equal(state.pileVersion, 2);
+  assert.equal(
+    createPublicEgyptianWarState(state).pileVersion,
+    2
+  );
+});
+
+test("removing the only player who holds cards hands everything over immediately", () => {
+  const state = makeState(
+    [
+      [card("4", "p1-4"), card("5", "p1-5"), card("6", "p1-6")],
+      [],
+      []
+    ],
+    { pile: [card("2", "pile-2"), card("9", "pile-9")] }
+  );
+  state.players[1].isEliminated = true;
+  state.players[2].isEliminated = true;
+
+  removeEgyptianWarPlayer(state, players[0].id);
+
+  assert.equal(state.status, "finished");
+  assert.equal(state.winnerId, players[1].id);
+  assert.equal(state.deferredCards.length, 0);
+});
+
+test("public state does not expose slap-pattern flags", () => {
+  const state = makeState(
+    [[card("4", "p1-4")], [card("5", "p2-5")]],
+    { pile: [card("9", "pile-9a"), card("9", "pile-9b")] }
+  );
+  const publicState = createPublicEgyptianWarState(state) as Record<string, unknown>;
+
+  assert.equal("isSlappable" in publicState, false);
+  assert.equal("isSlapWindow" in publicState, false);
 });

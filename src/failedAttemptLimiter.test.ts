@@ -21,3 +21,13 @@ test("expired and successful attempt windows can be cleared", () => {
   limiter.clear("successful");
   assert.equal(limiter.isBlocked("successful", 301), false);
 });
+
+test("never tracks more keys than the cap", () => {
+  const limiter = new FailedAttemptLimiter(1, 1_000, 3);
+
+  for (let index = 0; index < 50; index += 1) {
+    limiter.recordFailure(`key-${index}`, index);
+  }
+  assert.equal(limiter.isBlocked("key-0", 60), false, "oldest keys were evicted");
+  assert.equal(limiter.isBlocked("key-49", 60), true);
+});

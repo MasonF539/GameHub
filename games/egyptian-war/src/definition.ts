@@ -57,14 +57,14 @@ export const egyptianWar: GameDefinition = {
     "The next player must respond with another face card, Ace, or Joker. A Jack allows 1 attempt, a Queen 2 attempts, a King 3 attempts, an Ace 4 attempts, and a Joker 5 attempts.",
     "If the challenged player reveals another face card, Ace, or Joker, the challenge passes to the next player with the new number of attempts.",
     "If the challenged player uses every attempt without revealing a face card, Ace, or Joker, the player who most recently played a challenge card wins the pile unless the final card creates a valid slap combination.",
-    "When the final failed challenge card creates a valid slap combination, players may slap until the turn timer expires; if nobody slaps, the most recent challenge card player wins the pile.",
+    "When the final failed challenge card creates a valid slap combination, players get a short window of about four seconds to slap; if nobody slaps, the most recent challenge card player wins the pile.",
     "If the challenged player runs out of cards before completing their attempts, the next player with cards inherits the challenge with the remaining attempts.",
     "A player who runs out of cards is skipped until they reenter by winning a valid slap.",
     "A player who wins the pile places all of its cards at the bottom of their deck without shuffling and begins the next pile.",
     "When a valid slap combination appears, the first player to slap wins the central pile.",
-    "Slapping without a valid combination forfeits the configured number of cards face down to the bottom of the pile, or all remaining cards if fewer remain. Penalty cards do not create slap combinations.",
+    "Slapping without a valid combination forfeits the configured number of cards face down to the bottom of the pile, or all remaining cards if fewer remain. Penalty cards do not create slap combinations. A player with no cards loses nothing, but their slap does not count.",
     "When only one player still has cards, that player wins unless the current face-up pile has a valid slap that allows an eliminated player to reenter.",
-    "If multiple slaps have no clear winner, nobody takes the pile and play continues.",
+    "If several players slap at nearly the same moment, the pile goes to one of them by weighted chance that favors the earlier slap. The others forfeit nothing.",
     "The winner is the player who collects every card."
   ],
 

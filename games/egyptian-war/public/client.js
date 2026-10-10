@@ -20,6 +20,7 @@ const egyptianWarPlayCardButton = findEgyptianWarElement("#egyptian-war-play-car
 const egyptianWarSlapButton = findEgyptianWarElement("#egyptian-war-slap");
 const egyptianWarPauseButton = findEgyptianWarElement("#egyptian-war-pause");
 const egyptianWarExitButton = findEgyptianWarElement("#egyptian-war-exit-game");
+const egyptianWarLeaveButton = findEgyptianWarElement("#egyptian-war-leave-game");
 const egyptianWarHostControls = findEgyptianWarElement("#egyptian-war-host-controls");
 const egyptianWarSlapRulesList = findEgyptianWarElement("#egyptian-war-slap-rules-list");
 const toggleSlapRulesButton = findEgyptianWarElement("#toggle-slap-rules");
@@ -179,6 +180,7 @@ function showEgyptianWarGame(game) {
     "d-none",
     !currentContext.isHost
   );
+  egyptianWarLeaveButton.classList.toggle("d-none", currentContext.isHost);
   egyptianWarPauseButton.textContent =
     game.isPaused ? "Resume" : "Pause";
   egyptianWarPauseButton.setAttribute(
@@ -707,15 +709,17 @@ function animateEgyptianWarOutcome(animation) {
     egyptianWarVictory.replaceChildren(winnerAvatar, winnerDetails);
   }
 
-  const duration = animation.isFinalWin
-    ? 3600
-    : animation.transferCardCount > 0
-      ? 2400
-      : animation.action === "slap"
-        ? 1050
-        : animation.playedCard
-          ? 650
-          : 450;
+  const duration = Number.isFinite(animation.durationMs)
+    ? animation.durationMs
+    : animation.isFinalWin
+      ? 3600
+      : animation.transferCardCount > 0
+        ? 2400
+        : animation.action === "slap"
+          ? 1050
+          : animation.playedCard
+            ? 650
+            : 450;
   const presentationDuration = prefersReducedMotion
     ? 100
     : duration;
@@ -969,13 +973,12 @@ function renderEgyptianWarState(state) {
     state.status !== "playing" ||
     state.isPaused ||
     state.isAnimating ||
-    state.isSlapWindow ||
     state.currentPlayerId !== currentContext.memberId;
   egyptianWarSlapButton.disabled =
     (currentContext.role === "spectator") ||
     state.status !== "playing" ||
     state.isPaused ||
-    state.isAnimating ||
+    (state.isAnimating && animation?.allowsSlaps !== true) ||
     !state.hasFaceUpCards;
   egyptianWarHostControls.classList.toggle(
     "d-none",
@@ -1050,7 +1053,10 @@ egyptianWarPlayCardButton.addEventListener("click", async () => {
   if (response && !response.success) currentContext.notify(response.message);
 });
 egyptianWarSlapButton.addEventListener("click", async () => {
-  const response = await currentContext?.submitAction({ type: "slap" });
+  const response = await currentContext?.submitAction({
+    type: "slap",
+    payload: { pileVersion: previousEgyptianWarState?.pileVersion }
+  });
   if (response && !response.success) currentContext.notify(response.message);
 });
 egyptianWarPauseButton.addEventListener("click", async () => {
@@ -1060,6 +1066,17 @@ egyptianWarPauseButton.addEventListener("click", async () => {
   if (!response.success) currentContext.notify(response.message);
 });
 egyptianWarExitButton.addEventListener("click", () => currentContext?.requestExit());
+egyptianWarLeaveButton.addEventListener("click", async () => {
+  if (!currentContext) return;
+  const warning = currentContext.role === "spectator"
+    ? "Leave this room?"
+    : "Leave this room? Your cards will be added to the next pile.";
+  if (!window.confirm(warning)) return;
+  const response = await currentContext.requestLeave();
+  if (!response?.success) {
+    currentContext.notify(response?.message ?? "Unable to leave the room.");
+  }
+});
 egyptianWarChatForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   const message = egyptianWarChatInput.value.trim();

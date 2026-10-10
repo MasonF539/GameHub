@@ -31,7 +31,8 @@ export function getSlapComparisonWindow(
 }
 
 export type TimedSlapCandidate = {
-  adjustedArrivalTime: number;
+  /** When the server received the slap (a monotonic clock, in milliseconds). */
+  receivedAtMs: number;
   jitterMs: number;
 };
 
@@ -43,7 +44,7 @@ export function selectWeightedSlapWinner<
 ): T | undefined {
   const validCandidates = candidates.filter(
     (candidate) =>
-      Number.isFinite(candidate.adjustedArrivalTime) &&
+      Number.isFinite(candidate.receivedAtMs) &&
       Number.isFinite(candidate.jitterMs)
   );
 
@@ -53,7 +54,7 @@ export function selectWeightedSlapWinner<
 
   const orderedCandidates = [...validCandidates].sort(
     (first, second) =>
-      first.adjustedArrivalTime - second.adjustedArrivalTime
+      first.receivedAtMs - second.receivedAtMs
   );
 
   const earliestCandidate = orderedCandidates[0];
@@ -65,8 +66,8 @@ export function selectWeightedSlapWinner<
   const weightedCandidates = orderedCandidates
     .map((candidate) => {
       const difference =
-        candidate.adjustedArrivalTime -
-        earliestCandidate.adjustedArrivalTime;
+        candidate.receivedAtMs -
+        earliestCandidate.receivedAtMs;
 
       const comparisonWindow = getSlapComparisonWindow(
         earliestCandidate.jitterMs,

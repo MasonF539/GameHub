@@ -13,7 +13,7 @@ import {
   createEgyptianWarState,
   createPublicEgyptianWarState,
   EgyptianWarRuleError,
-  isEgyptianWarPileSlappable,
+  isEgyptianWarStateSlappable,
   removeEgyptianWarPlayer,
   resolveEgyptianWarTurnTimeout,
   type EgyptianWarAction,
@@ -28,7 +28,7 @@ import {
 
 type SlapCandidate = {
   playerId: string;
-  adjustedArrivalTime: number;
+  receivedAtMs: number;
   jitterMs: number;
 };
 
@@ -38,7 +38,33 @@ type SlapAttempt = {
   isWinner: boolean;
 };
 
+type ApplyActionOptions = {
+  isTurnTimeout?: boolean;
+  isResolvedSlap?: boolean;
+  slapAttempts?: SlapAttempt[];
+  // The pile version the player's screen showed when they slapped.
+  clientPileVersion?: number | null;
+};
+
 const reconnectTurnGraceMs = 5_000;
+
+// After the last card of a failed challenge opens a slap window, slaps are
+// accepted for this long (not for a whole turn timer) before the pile is awarded.
+const finalSlapWindowMs = 4_000;
+
+// A slap that raced a card play and carries the previous pile version is
+// forgiven (no penalty) if it arrives within this long of the change.
+const staleSlapGraceMs = 350;
+
+// Server-side animation locks. They are also sent to clients in the
+// animation payload so both sides use the same numbers.
+const animationDurationsMs = {
+  finalWin: 3600,
+  pileTransfer: 2400,
+  falseSlap: 1050,
+  cardPlay: 650,
+  quick: 450
+} as const;
 
 class EgyptianWarSession implements GameSession {
   private readonly state: EgyptianWarState;
@@ -46,6 +72,14 @@ class EgyptianWarSession implements GameSession {
   private isPaused = false;
   private isAnimating = false;
   private animationId = 0;
+  // True only while a plain card-play animation runs. The card is already on
+  // the pile then, so slaps are still accepted; every other animation locks input.
+  private animationAllowsSlaps = false;
+  private lastPileChange: {
+    fromVersion: number;
+    at: number;
+    wasSlappable: boolean;
+  } | null = null;
   private turnTimer: ReturnType<typeof setTimeout> | null = null;
   private turnDeadlineAt: number | null = null;
   private turnTimeRemainingMs: number | null = null;
@@ -112,7 +146,7 @@ class EgyptianWarSession implements GameSession {
       this.state,
       this.isPaused,
       this.isAnimating,
-      this.turnTimerSeconds,
+      this.turnDurationMs / 1000,
       this.getTurnTimeRemainingMs(),
       this.disconnectPausedPlayerId !== null
         ? "A player disconnected; the host may resume the game."
@@ -128,8 +162,14 @@ class EgyptianWarSession implements GameSession {
       return { success: false, message: "That game action is not supported." };
     }
     const actionType = action.type as EgyptianWarAction;
+    const rawVersion = (action.payload as { pileVersion?: unknown } | undefined)
+      ?.pileVersion;
+    const clientPileVersion =
+      typeof rawVersion === "number" && Number.isInteger(rawVersion)
+        ? rawVersion
+        : null;
     return new Promise<GameActionResult>((resolve) => {
-      this.applyAction(memberId, actionType, resolve);
+      this.applyAction(memberId, actionType, resolve, { clientPileVersion });
     });
   }
 
@@ -172,6 +212,7 @@ class EgyptianWarSession implements GameSession {
     }
     this.isPaused = true;
     this.isAnimating = false;
+    this.animationAllowsSlaps = false;
     this.animationId += 1;
     const player = this.state.players.find((candidate) => candidate.id === memberId);
     this.state.activityMessage =
@@ -220,7 +261,10 @@ class EgyptianWarSession implements GameSession {
     this.context.broadcastState();
   }
 
-  memberRemoved(memberId: string): GameActionResult {
+  memberRemoved(
+    memberId: string,
+    options?: { voluntary?: boolean }
+  ): GameActionResult {
     if (this.isAnimating) {
       return { success: false, message: "Wait for the current game animation to finish." };
     }
@@ -228,13 +272,17 @@ class EgyptianWarSession implements GameSession {
       return { success: false, message: "Wait for the slap decision to finish." };
     }
     const member = this.context.members().find((candidate) => candidate.id === memberId);
-    if (member?.isConnected) {
+    if (member?.isConnected && !options?.voluntary) {
       return { success: false, message: "Only disconnected players can be kicked during a game." };
     }
     const currentBefore = this.state.players[this.state.currentPlayerIndex]?.id ?? null;
     if (this.turnTimer !== null) this.suspendTurnTimer();
     try {
-      removeEgyptianWarPlayer(this.state, memberId);
+      removeEgyptianWarPlayer(
+        this.state,
+        memberId,
+        options?.voluntary ? "left" : "removed"
+      );
     } catch (error) {
       return {
         success: false,
@@ -302,8 +350,14 @@ class EgyptianWarSession implements GameSession {
     this.clearTurnTimer(false);
   }
 
+  private get turnDurationMs(): number {
+    return this.state.pendingPileWinnerId !== null
+      ? finalSlapWindowMs
+      : this.turnTimerSeconds * 1000;
+  }
+
   private startTurnTimer(
-    remainingMs = this.turnTimeRemainingMs ?? this.turnTimerSeconds * 1000
+    remainingMs = this.turnTimeRemainingMs ?? this.turnDurationMs
   ): void {
     if (
       this.disposed ||
@@ -313,7 +367,7 @@ class EgyptianWarSession implements GameSession {
       this.pendingSlaps !== null
     ) return;
     this.clearTurnTimer();
-    const duration = this.turnTimerSeconds * 1000;
+    const duration = this.turnDurationMs;
     const currentId = this.state.players[this.state.currentPlayerIndex]?.id ?? null;
     if (this.reconnectGracePlayerId !== null && this.reconnectGracePlayerId !== currentId) {
       this.reconnectGracePlayerId = null;
@@ -335,7 +389,7 @@ class EgyptianWarSession implements GameSession {
           this.startTurnTimer();
           this.context.broadcastState();
         }
-      }, true);
+      }, { isTurnTimeout: true });
     }, delay);
   }
 
@@ -350,7 +404,10 @@ class EgyptianWarSession implements GameSession {
     if (!this.pendingSlaps.candidates.has(memberId)) {
       this.pendingSlaps.candidates.set(memberId, {
         playerId: memberId,
-        adjustedArrivalTime: performance.now(),
+        // Server receipt time, never a client-reported one. Every candidate
+        // gets the same fixed uncertainty on purpose, so a client cannot
+        // improve its odds by claiming a better connection.
+        receivedAtMs: performance.now(),
         jitterMs: defaultSlapJitterMs
       });
     }
@@ -366,7 +423,7 @@ class EgyptianWarSession implements GameSession {
   private resolveSlaps(): void {
     const resolution = this.pendingSlaps;
     this.pendingSlaps = null;
-    if (!resolution || this.disposed || this.state.status !== "playing" || this.isAnimating) return;
+    if (!resolution || this.disposed || this.state.status !== "playing") return;
     const candidates = [...resolution.candidates.values()];
     if (candidates.length === 0) {
       if (!this.isPaused) this.startTurnTimer();
@@ -378,11 +435,11 @@ class EgyptianWarSession implements GameSession {
       winner,
       ...candidates
         .filter((candidate) => candidate.playerId !== winner.playerId)
-        .sort((first, second) => first.adjustedArrivalTime - second.adjustedArrivalTime)
+        .sort((first, second) => first.receivedAtMs - second.receivedAtMs)
     ];
     let capped = 0;
     const attempts = ordered.map((candidate) => {
-      const difference = Math.max(0, candidate.adjustedArrivalTime - winner.adjustedArrivalTime);
+      const difference = Math.max(0, candidate.receivedAtMs - winner.receivedAtMs);
       const scaled = difference * 1.5;
       let delayMs = Math.round(Math.min(scaled, slapCollectionWindowMs));
       if (scaled >= slapCollectionWindowMs) delayMs += capped++ * 8;
@@ -397,17 +454,36 @@ class EgyptianWarSession implements GameSession {
         this.startTurnTimer();
         this.context.broadcastState();
       }
-    }, false, true, attempts);
+    }, { isResolvedSlap: true, slapAttempts: attempts });
+  }
+
+  // True when a slap that lost a race with a card play should be ignored
+  // instead of punished as a false slap.
+  private isForgivenStaleSlap(clientPileVersion: number | null): boolean {
+    const change = this.lastPileChange;
+    return (
+      clientPileVersion !== null &&
+      change !== null &&
+      change.wasSlappable &&
+      change.fromVersion === clientPileVersion &&
+      this.state.pileVersion === clientPileVersion + 1 &&
+      this.context.now() - change.at <= staleSlapGraceMs
+    );
   }
 
   private applyAction(
     memberId: string,
     action: EgyptianWarAction,
     respond: (result: GameActionResult) => void,
-    isTurnTimeout = false,
-    isResolvedSlap = false,
-    slapAttempts: SlapAttempt[] = []
+    options: ApplyActionOptions = {}
   ): void {
+    const {
+      isTurnTimeout = false,
+      isResolvedSlap = false,
+      slapAttempts = [],
+      clientPileVersion = null
+    } = options;
+
     if (this.disposed || this.state.status !== "playing") {
       respond({ success: false, message: "Egyptian War is not active." });
       return;
@@ -420,23 +496,40 @@ class EgyptianWarSession implements GameSession {
       respond({ success: false, message: "The host has paused the game." });
       return;
     }
-    if (this.isAnimating) {
+
+    const isLiveSlap = action === "slap" && !isTurnTimeout && !isResolvedSlap;
+
+    if (
+      this.isAnimating &&
+      !isResolvedSlap &&
+      !(isLiveSlap && this.animationAllowsSlaps)
+    ) {
       respond({ success: false, message: "Wait for the current action to finish." });
       return;
     }
-    if (
-      action === "slap" &&
-      !isTurnTimeout &&
-      !isResolvedSlap &&
-      this.state.pile.length > this.state.penaltyPileCardCount &&
-      isEgyptianWarPileSlappable(
-        this.state.pile.slice(this.state.penaltyPileCardCount),
-        this.state.settings
-      )
-    ) {
-      this.collectSlap(memberId, respond);
-      return;
+
+    if (isLiveSlap) {
+      if (isEgyptianWarStateSlappable(this.state)) {
+        this.collectSlap(memberId, respond);
+        return;
+      }
+
+      if (this.isForgivenStaleSlap(clientPileVersion)) {
+        respond({
+          success: false,
+          message: "The pile changed just before your slap arrived, so there was no penalty."
+        });
+        return;
+      }
+
+      if (this.isAnimating) {
+        // A slap on an unslappable pile in the middle of an animation is
+        // ignored instead of punished: the table is mid-update.
+        respond({ success: false, message: "Wait for the current action to finish." });
+        return;
+      }
     }
+
     if (this.pendingSlaps !== null && !isResolvedSlap) {
       respond({ success: false, message: "A slap is being resolved. Please wait." });
       return;
@@ -448,10 +541,9 @@ class EgyptianWarSession implements GameSession {
       !resolvingWindow && action === "play-card" && current?.id === memberId && current.cards.length > 0
         ? current.cards[0]
         : null;
-    const wasSlappable = action === "slap" && isEgyptianWarPileSlappable(
-      this.state.pile.slice(this.state.penaltyPileCardCount),
-      this.state.settings
-    );
+    const slappableBefore = isEgyptianWarStateSlappable(this.state);
+    const wasSlappable = action === "slap" && slappableBefore;
+    const versionBefore = this.state.pileVersion;
     const previousPileCount = this.state.pile.length;
     const previousCounts = new Map(
       this.state.players.map((player) => [player.id, player.cards.length])
@@ -467,6 +559,13 @@ class EgyptianWarSession implements GameSession {
           : "Unable to process that game action."
       });
       return;
+    }
+    if (this.state.pileVersion !== versionBefore) {
+      this.lastPileChange = {
+        fromVersion: versionBefore,
+        at: this.context.now(),
+        wasSlappable: slappableBefore
+      };
     }
     this.suspendTurnTimer();
     const currentAfter = this.state.players[this.state.currentPlayerIndex]?.id ?? null;
@@ -488,6 +587,17 @@ class EgyptianWarSession implements GameSession {
       ? previousPileCount + (playedCard === null ? 0 : 1) + penaltyCount
       : 0;
     const isFinalWin = status === "finished";
+    const isCardPlay =
+      !isFinalWin && transferCount === 0 && action !== "slap" && playedCard !== null;
+    const duration = isFinalWin
+      ? animationDurationsMs.finalWin
+      : transferCount > 0
+        ? animationDurationsMs.pileTransfer
+        : action === "slap"
+          ? animationDurationsMs.falseSlap
+          : isCardPlay
+            ? animationDurationsMs.cardPlay
+            : animationDurationsMs.quick;
     const animation = {
       id: ++this.animationId,
       action: resolvingWindow ? "timeout" : action,
@@ -499,24 +609,19 @@ class EgyptianWarSession implements GameSession {
       transferCardCount: transferCount,
       pileCardCountBeforeTransfer: transferCount,
       penaltyCardCount: penaltyCount,
-      isFinalWin
+      isFinalWin,
+      durationMs: duration,
+      allowsSlaps: isCardPlay
     };
     this.isAnimating = true;
+    this.animationAllowsSlaps = isCardPlay;
     this.context.emitEvent({ type: "animation", payload: animation });
     this.context.broadcastState();
     respond({ success: true });
-    const duration = isFinalWin
-      ? 3600
-      : transferCount > 0
-        ? 2400
-        : action === "slap"
-          ? 1050
-          : playedCard
-            ? 650
-            : 450;
     setTimeout(() => {
       if (this.disposed || this.animationId !== animation.id) return;
       this.isAnimating = false;
+      this.animationAllowsSlaps = false;
       if (this.state.status === "finished") {
         this.finish();
         return;
@@ -538,14 +643,16 @@ class EgyptianWarSession implements GameSession {
       transferCardCount: this.state.totalCardCount,
       pileCardCountBeforeTransfer: this.state.totalCardCount,
       penaltyCardCount: 0,
-      isFinalWin: winner !== undefined
+      isFinalWin: winner !== undefined,
+      durationMs: animationDurationsMs.finalWin
     };
     this.isAnimating = true;
+    this.animationAllowsSlaps = false;
     this.context.emitEvent({ type: "animation", payload: animation });
     this.context.broadcastState();
     setTimeout(() => {
       if (!this.disposed && this.animationId === animation.id) this.finish();
-    }, 3600);
+    }, animationDurationsMs.finalWin);
   }
 
   private finish(): void {

@@ -16,6 +16,8 @@ import type {
   GameViewer
 } from "@gamehub/game-sdk";
 import { FailedAttemptLimiter } from "./failedAttemptLimiter.js";
+import { resolveClientAddress } from "./clientAddress.js";
+import { RateLimiter } from "./rateLimiter.js";
 
 type GameSettingValue = boolean | number;
 
@@ -139,7 +141,8 @@ function replaceRequiredMarker(
   if (!html.includes(marker)) {
     throw new Error(`GameHub index is missing required marker: ${marker}`);
   }
-  return html.replace(marker, replacement);
+  // A function replacer keeps "$&" and friends in plugin markup literal.
+  return html.replace(marker, () => replacement);
 }
 
 function gamePublicUrl(gameId: string, resourcePath: string): string {
@@ -197,7 +200,14 @@ renderedIndex = replaceRequiredMarker(
   gameHubConfigMarker,
   JSON.stringify({ avatars: availableAvatars }).replace(/</g, "\\u003c")
 );
-const reconnectGracePeriodMs = 120_000;
+// Tests may shorten the recovery period; production always uses two minutes.
+const testReconnectGracePeriodMs = Number(
+  process.env.GAMEHUB_TEST_RECONNECT_GRACE_MS
+);
+const reconnectGracePeriodMs =
+  process.env.NODE_ENV === "test" && testReconnectGracePeriodMs > 0
+    ? testReconnectGracePeriodMs
+    : 120_000;
 const io = new Server(server, {
   connectionStateRecovery: {
     maxDisconnectionDuration: reconnectGracePeriodMs,
@@ -222,11 +232,51 @@ const rooms = new Map<string, Room>();
 const socketRoomCodes = new Map<string, string>();
 const disconnectedPlayerTimers =
   new Map<string, ReturnType<typeof setTimeout>>();
-const playerResumeTokens =
-  new Map<string, { roomCode: string; playerId: string }>();
+const playerResumeTokens = new Map<
+  string,
+  { roomCode: string; playerId: string; createdAt: number }
+>();
 const revokedResumeTokenMessages = new Map<string, string>();
 const revokedSocketMessages = new Map<string, string>();
 const invalidJoinLimiter = new FailedAttemptLimiter(10, 60_000);
+// Only believe Cloudflare's client-address header when the operator says
+// GameHub really is behind Cloudflare. Otherwise anyone can forge it.
+const trustCloudflareHeader =
+  process.env.GAMEHUB_TRUST_CLOUDFLARE_IP === "true";
+const configuredMaxRooms = Number(process.env.GAMEHUB_MAX_ROOMS);
+const maxRooms =
+  Number.isInteger(configuredMaxRooms) && configuredMaxRooms > 0
+    ? configuredMaxRooms
+    : 200;
+const resumeTokenMaxAgeMs = 24 * 60 * 60 * 1000;
+const roomCreationLimiter = new RateLimiter(6, 10 * 60_000);
+const socketRequestLimiter = new RateLimiter(120, 10_000);
+const contentSecurityPolicy = [
+  "default-src 'self'",
+  "script-src 'self'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data:",
+  "media-src 'self'",
+  "font-src 'self'",
+  "connect-src 'self' ws: wss:",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "frame-ancestors 'none'"
+].join("; ");
+
+app.disable("x-powered-by");
+app.use((_request, response, next) => {
+  response.setHeader("Content-Security-Policy", contentSecurityPolicy);
+  response.setHeader("X-Content-Type-Options", "nosniff");
+  response.setHeader("X-Frame-Options", "DENY");
+  response.setHeader("Referrer-Policy", "no-referrer");
+  response.setHeader(
+    "Permissions-Policy",
+    "camera=(), microphone=(), geolocation=()"
+  );
+  next();
+});
 
 app.use(
   "/vendor/bootstrap",
@@ -330,7 +380,11 @@ function createPlayerResumeToken(
   playerId: string
 ): string {
   const token = randomBytes(32).toString("base64url");
-  playerResumeTokens.set(token, { roomCode, playerId });
+  playerResumeTokens.set(token, {
+    roomCode,
+    playerId,
+    createdAt: Date.now()
+  });
   return token;
 }
 
@@ -351,17 +405,25 @@ function removePlayerResumeTokens(
   }
 }
 
+function normalizeRoomCode(value: unknown): string {
+  return String(value ?? "").trim().toUpperCase();
+}
+
+function clearDisconnectTimer(memberId: string): void {
+  const timer = disconnectedPlayerTimers.get(memberId);
+
+  if (timer !== undefined) {
+    clearTimeout(timer);
+    disconnectedPlayerTimers.delete(memberId);
+  }
+}
+
 function markPlayerReconnected(
   roomCode: string,
   playerId: string,
   room: Room
 ): void {
-  const reconnectTimer = disconnectedPlayerTimers.get(playerId);
-
-  if (reconnectTimer !== undefined) {
-    clearTimeout(reconnectTimer);
-    disconnectedPlayerTimers.delete(playerId);
-  }
+  clearDisconnectTimer(playerId);
 
   const player = room.players.get(playerId);
 
@@ -371,10 +433,23 @@ function markPlayerReconnected(
   room.gameSession?.memberReconnected?.(playerId);
 }
 
+// Names may not contain control characters, invisible characters or bidi
+// overrides, which could be used to impersonate other players.
+const disallowedNameCharacters =
+  /[\u0000-\u001F\u007F\u061C\u200B\u200E\u200F\u2028\u2029\u202A-\u202E\u2060\u2066-\u2069\uFEFF]/;
+
 function isValidPlayerName(playerName: string): boolean {
   return playerName.length >= 1 &&
     playerName.length <= 20 &&
-    !/[\u0000-\u001F\u007F]/.test(playerName);
+    !disallowedNameCharacters.test(playerName);
+}
+
+function isPlayerNameTaken(room: Room, playerName: string): boolean {
+  const wanted = playerName.toLocaleLowerCase();
+
+  return [...room.players.values(), ...room.spectators.values()].some(
+    (member) => member.name.toLocaleLowerCase() === wanted
+  );
 }
 
 type SocketResponse = (response: unknown) => void;
@@ -388,6 +463,15 @@ function onSocketRequest(
     const respond: SocketResponse = typeof candidateResponse === "function"
       ? candidateResponse as SocketResponse
       : () => undefined;
+
+    if (!socketRequestLimiter.consume(socket.id)) {
+      respond({
+        success: false,
+        message: "You are sending requests too quickly. Please slow down."
+      });
+      return;
+    }
+
     try {
       handler(data, respond);
     } catch (error) {
@@ -401,15 +485,11 @@ function onSocketRequest(
 }
 
 function getSocketClientAddress(socket: Socket): string {
-  const cloudflareAddress = socket.handshake.headers["cf-connecting-ip"];
-  if (
-    typeof cloudflareAddress === "string" &&
-    cloudflareAddress.length > 0 &&
-    cloudflareAddress.length <= 64
-  ) {
-    return cloudflareAddress;
-  }
-  return socket.handshake.address;
+  return resolveClientAddress(
+    socket.handshake.headers,
+    socket.handshake.address,
+    trustCloudflareHeader
+  );
 }
 
 function sendRoomResumed(
@@ -433,6 +513,136 @@ function sendRoomResumed(
   if (room.activeGameId !== null) {
     sendActiveGameState(roomCode, room, socket);
   }
+}
+
+// Lock state, selected game and member lists: what a (re)joining browser needs.
+function sendLobbyState(socket: Socket, roomCode: string, room: Room): void {
+  socket.emit("room-lock-changed", { isLocked: room.isLocked });
+
+  if (room.selectedGameId !== null) {
+    socket.emit("game-selected", {
+      gameId: room.selectedGameId,
+      settings: room.gameSettings
+    });
+  }
+
+  sendRoomMemberLists(roomCode, room);
+}
+
+function sendRoomSnapshot(
+  socket: Socket,
+  roomCode: string,
+  room: Room,
+  rotatedResumeToken?: string
+): void {
+  sendRoomResumed(socket, roomCode, room);
+
+  if (rotatedResumeToken !== undefined) {
+    socket.emit("room-resume-token", rotatedResumeToken);
+  }
+
+  sendLobbyState(socket, roomCode, room);
+}
+
+function closeRoom(roomCode: string, room: Room, logMessage: string): void {
+  disposeGameSession(room);
+  io.to(roomCode).emit("room-closed");
+
+  const memberIds = new Set([
+    ...room.players.keys(),
+    ...room.spectators.keys()
+  ]);
+
+  for (const memberId of memberIds) {
+    socketRoomCodes.delete(memberId);
+    removePlayerResumeTokens(memberId);
+    clearDisconnectTimer(memberId);
+    socketRequestLimiter.forget(memberId);
+  }
+
+  io.in(roomCode).socketsLeave(roomCode);
+  rooms.delete(roomCode);
+  console.log(logMessage);
+}
+
+// Takes a member out of a room. Pass `kickedMessage` when the host removed
+// them: they are told why, and a reconnecting browser sees the same message.
+function removeMemberFromRoom(
+  roomCode: string,
+  room: Room,
+  memberId: string,
+  role: "player" | "spectator",
+  kickedMessage?: string
+): void {
+  (role === "player" ? room.players : room.spectators).delete(memberId);
+  socketRoomCodes.delete(memberId);
+  removePlayerResumeTokens(memberId, kickedMessage);
+  clearDisconnectTimer(memberId);
+
+  if (kickedMessage !== undefined) {
+    revokedSocketMessages.set(memberId, kickedMessage);
+    setTimeout(
+      () => revokedSocketMessages.delete(memberId),
+      reconnectGracePeriodMs
+    );
+  }
+
+  const memberSocket = io.sockets.sockets.get(memberId);
+
+  if (memberSocket) {
+    if (kickedMessage !== undefined) {
+      memberSocket.emit("kicked-from-room", { message: kickedMessage });
+    }
+    memberSocket.leave(roomCode);
+  }
+
+  sendRoomMemberLists(roomCode, room);
+}
+
+// Starts the recovery countdown for a disconnected member. When it ends:
+// a missing host closes the room (even mid-game, since only the host can
+// resume or remove players), a lobby player or spectator is removed, and a
+// player in an active game is left for the host to deal with.
+function scheduleDisconnectExpiry(
+  roomCode: string,
+  room: Room,
+  memberId: string
+): void {
+  clearDisconnectTimer(memberId);
+
+  const timer = setTimeout(() => {
+    disconnectedPlayerTimers.delete(memberId);
+
+    if (rooms.get(roomCode) !== room) {
+      return;
+    }
+
+    const found = getRoomMember(room, memberId);
+
+    if (!found || found.member.isConnected) {
+      return;
+    }
+
+    if (found.role === "player" && room.hostId === memberId) {
+      closeRoom(
+        roomCode,
+        room,
+        `Room ${roomCode} closed after host recovery expired`
+      );
+      return;
+    }
+
+    if (found.role === "player" && room.gameSession !== null) {
+      return;
+    }
+
+    removeMemberFromRoom(roomCode, room, memberId, found.role);
+    console.log(
+      `Removed disconnected ${found.role} ${found.member.name} from room ${roomCode}`
+    );
+  }, reconnectGracePeriodMs);
+
+  disconnectedPlayerTimers.set(memberId, timer);
 }
 
 function createDefaultSettings(
@@ -519,6 +729,14 @@ function finishActiveGame(
   disposeGameSession(room);
   room.activeGameId = null;
   promoteSpectatorsToPlayers(roomCode, room);
+
+  // Players who dropped during the game never got an expiry timer.
+  for (const member of [...room.players.values(), ...room.spectators.values()]) {
+    if (!member.isConnected && !disconnectedPlayerTimers.has(member.id)) {
+      scheduleDisconnectExpiry(roomCode, room, member.id);
+    }
+  }
+
   io.to(roomCode).emit("game-ended", { winnerId, message });
 }
 
@@ -536,27 +754,11 @@ io.on("connection", (socket) => {
       if (roomMember.role === "player") {
         markPlayerReconnected(roomCode, socket.id, room);
       } else {
-        const reconnectTimer = disconnectedPlayerTimers.get(socket.id);
-        if (reconnectTimer !== undefined) {
-          clearTimeout(reconnectTimer);
-          disconnectedPlayerTimers.delete(socket.id);
-        }
+        clearDisconnectTimer(socket.id);
         roomMember.member.isConnected = true;
       }
       socket.join(roomCode);
-      sendRoomResumed(socket, roomCode, room);
-      socket.emit("room-lock-changed", {
-        isLocked: room.isLocked
-      });
-
-      if (room.selectedGameId !== null) {
-        socket.emit("game-selected", {
-          gameId: room.selectedGameId,
-          settings: room.gameSettings
-        });
-      }
-
-      sendRoomMemberLists(roomCode, room);
+      sendRoomSnapshot(socket, roomCode, room);
     } else {
       const revokedMessage = revokedSocketMessages.get(socket.id);
       if (revokedMessage) {
@@ -582,6 +784,15 @@ io.on("connection", (socket) => {
         success: false,
         message: revokedMessage ??
           "That saved room session is no longer available."
+      });
+      return;
+    }
+
+    if (Date.now() - session.createdAt > resumeTokenMaxAgeMs) {
+      playerResumeTokens.delete(token);
+      respond({
+        success: false,
+        message: "That saved room session has expired."
       });
       return;
     }
@@ -622,17 +833,7 @@ io.on("connection", (socket) => {
       member.isConnected
     ) {
       socket.join(session.roomCode);
-      sendRoomResumed(socket, session.roomCode, room);
-      socket.emit("room-lock-changed", {
-        isLocked: room.isLocked
-      });
-      if (room.selectedGameId !== null) {
-        socket.emit("game-selected", {
-          gameId: room.selectedGameId,
-          settings: room.gameSettings
-        });
-      }
-      sendRoomMemberLists(session.roomCode, room);
+      sendRoomSnapshot(socket, session.roomCode, room);
       respond({ success: true, role });
       return;
     }
@@ -657,37 +858,20 @@ io.on("connection", (socket) => {
       previousSocket.leave(session.roomCode);
     }
 
-    const reconnectTimer = disconnectedPlayerTimers.get(oldPlayerId);
+    clearDisconnectTimer(oldPlayerId);
+    socketRequestLimiter.forget(oldPlayerId);
 
-    if (reconnectTimer !== undefined) {
-      clearTimeout(reconnectTimer);
-      disconnectedPlayerTimers.delete(oldPlayerId);
-    }
-
+    // Replaces every token this member held (including the one just used).
     removePlayerResumeTokens(oldPlayerId);
     const rotatedResumeToken = createPlayerResumeToken(
       session.roomCode,
       socket.id
     );
-    playerResumeTokens.delete(token);
     socket.join(session.roomCode);
     if (role === "player") {
       room.gameSession?.memberReconnected?.(socket.id, oldPlayerId);
     }
-    sendRoomResumed(socket, session.roomCode, room);
-    socket.emit("room-resume-token", rotatedResumeToken);
-    socket.emit("room-lock-changed", {
-      isLocked: room.isLocked
-    });
-
-    if (room.selectedGameId !== null) {
-      socket.emit("game-selected", {
-        gameId: room.selectedGameId,
-        settings: room.gameSettings
-      });
-    }
-
-    sendRoomMemberLists(session.roomCode, room);
+    sendRoomSnapshot(socket, session.roomCode, room, rotatedResumeToken);
     respond({ success: true, role });
   });
 
@@ -715,6 +899,22 @@ io.on("connection", (socket) => {
       respond({
         success: false,
         message: "Select a valid avatar."
+      });
+      return;
+    }
+
+    if (rooms.size >= maxRooms) {
+      respond({
+        success: false,
+        message: "The server is busy right now. Try again later."
+      });
+      return;
+    }
+
+    if (!roomCreationLimiter.consume(getSocketClientAddress(socket))) {
+      respond({
+        success: false,
+        message: "You are creating rooms too quickly. Try again in a few minutes."
       });
       return;
     }
@@ -768,7 +968,7 @@ io.on("connection", (socket) => {
       return;
     }
 
-    const roomCode = String(data?.roomCode ?? "").trim().toUpperCase();
+    const roomCode = normalizeRoomCode(data?.roomCode);
     const playerName = String(data?.playerName ?? "").trim();
     const avatar = String(data?.avatar ?? "");
     const joinLimitKey = getSocketClientAddress(socket);
@@ -835,6 +1035,14 @@ io.on("connection", (socket) => {
       return;
     }
 
+    if (isPlayerNameTaken(room, playerName)) {
+      respond({
+        success: false,
+        message: "That name is already taken in this room. Pick another one."
+      });
+      return;
+    }
+
     const role = room.activeGameId === null
       ? "player"
       : "spectator";
@@ -851,22 +1059,11 @@ io.on("connection", (socket) => {
       room.spectators.set(socket.id, roomMember);
     }
 
-    invalidJoinLimiter.clear(joinLimitKey);
-
+    // Failures are deliberately not cleared on success: otherwise a guesser
+    // could reset their own counter by joining a room they created.
     socketRoomCodes.set(socket.id, roomCode);
     socket.join(roomCode);
-    sendRoomMemberLists(roomCode, room);
-
-    socket.emit("room-lock-changed", {
-      isLocked: room.isLocked
-    });
-
-    if (room.selectedGameId !== null) {
-      socket.emit("game-selected", {
-        gameId: room.selectedGameId,
-        settings: room.gameSettings
-      });
-    }
+    sendLobbyState(socket, roomCode, room);
 
     console.log(
       `${playerName} joined room ${roomCode} as a ${role}`
@@ -895,9 +1092,7 @@ io.on("connection", (socket) => {
   });
 
   onSocketRequest(socket, "select-game", (data, respond) => {
-    const roomCode = String(data?.roomCode ?? "")
-      .trim()
-      .toUpperCase();
+    const roomCode = normalizeRoomCode(data?.roomCode);
 
     const gameId = String(data?.gameId ?? "");
     const room = rooms.get(roomCode);
@@ -962,9 +1157,7 @@ io.on("connection", (socket) => {
   });
 
   onSocketRequest(socket, "update-game-settings", (data, respond) => {
-    const roomCode = String(data?.roomCode ?? "")
-      .trim()
-      .toUpperCase();
+    const roomCode = normalizeRoomCode(data?.roomCode);
 
     const room = rooms.get(roomCode);
 
@@ -1054,9 +1247,7 @@ io.on("connection", (socket) => {
   });
 
   onSocketRequest(socket, "set-room-locked", (data, respond) => {
-    const roomCode = String(data?.roomCode ?? "")
-      .trim()
-      .toUpperCase();
+    const roomCode = normalizeRoomCode(data?.roomCode);
 
     const room = rooms.get(roomCode);
 
@@ -1100,10 +1291,7 @@ io.on("connection", (socket) => {
   });
 
   onSocketRequest(socket, "kick-player", (data, respond) => {
-    const roomCode = String(data?.roomCode ?? "")
-      .trim()
-      .toUpperCase();
-
+    const roomCode = normalizeRoomCode(data?.roomCode);
     const playerId = String(data?.playerId ?? "");
     const room = rooms.get(roomCode);
 
@@ -1125,32 +1313,14 @@ io.on("connection", (socket) => {
 
     const spectator = room.spectators.get(playerId);
     if (spectator) {
-      room.spectators.delete(playerId);
-      socketRoomCodes.delete(playerId);
-      const kickedMessage = "You were removed from the spectators.";
-      removePlayerResumeTokens(playerId, kickedMessage);
-      revokedSocketMessages.set(playerId, kickedMessage);
-      setTimeout(() => {
-        revokedSocketMessages.delete(playerId);
-      }, reconnectGracePeriodMs);
-      const reconnectTimer = disconnectedPlayerTimers.get(playerId);
-      if (reconnectTimer !== undefined) {
-        clearTimeout(reconnectTimer);
-        disconnectedPlayerTimers.delete(playerId);
-      }
-
-      const spectatorSocket = io.sockets.sockets.get(playerId);
-      if (spectatorSocket) {
-        spectatorSocket.emit("kicked-from-room", {
-          message: kickedMessage
-        });
-        spectatorSocket.leave(roomCode);
-      }
-
-      sendRoomMemberLists(roomCode, room);
-      console.log(
-        `${spectator.name} was removed from room ${roomCode}`
+      removeMemberFromRoom(
+        roomCode,
+        room,
+        playerId,
+        "spectator",
+        "You were removed from the spectators."
       );
+      console.log(`${spectator.name} was removed from room ${roomCode}`);
       respond({
         success: true,
         message: "Spectator removed from the game."
@@ -1179,25 +1349,12 @@ io.on("connection", (socket) => {
       return;
     }
 
-    room.players.delete(playerId);
-    socketRoomCodes.delete(playerId);
     const kickedMessage = wasInActiveGame
       ? "You were kicked from the game while disconnected."
-      : "You were kicked from the lobby while disconnected.";
-    removePlayerResumeTokens(playerId, kickedMessage);
-    revokedSocketMessages.set(playerId, kickedMessage);
-    setTimeout(() => revokedSocketMessages.delete(playerId), reconnectGracePeriodMs);
-    const reconnectTimer = disconnectedPlayerTimers.get(playerId);
-    if (reconnectTimer !== undefined) {
-      clearTimeout(reconnectTimer);
-      disconnectedPlayerTimers.delete(playerId);
-    }
-    const playerSocket = io.sockets.sockets.get(playerId);
-    if (playerSocket) {
-      playerSocket.emit("kicked-from-room", { message: kickedMessage });
-      playerSocket.leave(roomCode);
-    }
-    sendRoomMemberLists(roomCode, room);
+      : player.isConnected
+        ? "You were removed from the lobby by the host."
+        : "You were kicked from the lobby while disconnected.";
+    removeMemberFromRoom(roomCode, room, playerId, "player", kickedMessage);
     console.log(`${player.name} was removed from room ${roomCode}`);
     respond({
       success: true,
@@ -1205,10 +1362,43 @@ io.on("connection", (socket) => {
     });
   });
 
+  onSocketRequest(socket, "leave-room", (_data, respond) => {
+    const roomCode = socketRoomCodes.get(socket.id);
+    const room = roomCode ? rooms.get(roomCode) : undefined;
+    const found = room ? getRoomMember(room, socket.id) : null;
+
+    if (!roomCode || !room || !found) {
+      respond({ success: false, message: "You are not in a room." });
+      return;
+    }
+
+    if (room.hostId === socket.id) {
+      respond({
+        success: false,
+        message: "The host closes the lobby instead of leaving it."
+      });
+      return;
+    }
+
+    if (found.role === "player" && room.gameSession !== null) {
+      const result = room.gameSession.memberRemoved?.(
+        socket.id,
+        { voluntary: true }
+      ) ?? { success: false, message: "You cannot leave during this game." };
+
+      if (!result.success) {
+        respond(result);
+        return;
+      }
+    }
+
+    removeMemberFromRoom(roomCode, room, socket.id, found.role);
+    console.log(`${found.member.name} left room ${roomCode}`);
+    respond({ success: true });
+  });
+
   onSocketRequest(socket, "start-game", (data, respond) => {
-    const roomCode = String(data?.roomCode ?? "")
-      .trim()
-      .toUpperCase();
+    const roomCode = normalizeRoomCode(data?.roomCode);
 
     const room = rooms.get(roomCode);
 
@@ -1368,9 +1558,7 @@ io.on("connection", (socket) => {
   });
 
   onSocketRequest(socket, "toggle-game-pause", (data, respond) => {
-    const roomCode = String(data?.roomCode ?? "")
-      .trim()
-      .toUpperCase();
+    const roomCode = normalizeRoomCode(data?.roomCode);
     const room = rooms.get(roomCode);
 
     if (!room || room.activeGameId === null || room.gameSession === null) {
@@ -1412,9 +1600,7 @@ io.on("connection", (socket) => {
   });
 
   onSocketRequest(socket, "close-room", (data, respond) => {
-    const roomCode = String(data?.roomCode ?? "")
-      .trim()
-      .toUpperCase();
+    const roomCode = normalizeRoomCode(data?.roomCode);
     const room = rooms.get(roomCode);
 
     if (!room) {
@@ -1441,33 +1627,12 @@ io.on("connection", (socket) => {
       return;
     }
 
-    disposeGameSession(room);
-    const memberIds = new Set([
-      ...room.players.keys(),
-      ...room.spectators.keys()
-    ]);
-    for (const memberId of memberIds) {
-      socketRoomCodes.delete(memberId);
-      removePlayerResumeTokens(memberId);
-      const reconnectTimer = disconnectedPlayerTimers.get(memberId);
-
-      if (reconnectTimer !== undefined) {
-        clearTimeout(reconnectTimer);
-        disconnectedPlayerTimers.delete(memberId);
-      }
-    }
-
     respond({ success: true });
-    io.to(roomCode).emit("room-closed");
-    io.in(roomCode).socketsLeave(roomCode);
-    rooms.delete(roomCode);
-    console.log(`Room ${roomCode} closed by its host`);
+    closeRoom(roomCode, room, `Room ${roomCode} closed by its host`);
   });
 
   onSocketRequest(socket, "close-game-to-lobby", (data, respond) => {
-    const roomCode = String(data?.roomCode ?? "")
-      .trim()
-      .toUpperCase();
+    const roomCode = normalizeRoomCode(data?.roomCode);
     const room = rooms.get(roomCode);
 
     if (!room || room.activeGameId === null || room.gameSession === null) {
@@ -1496,9 +1661,7 @@ io.on("connection", (socket) => {
   });
 
   onSocketRequest(socket, "game-chat-send", (data, respond) => {
-    const roomCode = String(data?.roomCode ?? "")
-      .trim()
-      .toUpperCase();
+    const roomCode = normalizeRoomCode(data?.roomCode);
     const room = rooms.get(roomCode);
     const roomMember = room
       ? getRoomMember(room, socket.id)
@@ -1564,9 +1727,7 @@ io.on("connection", (socket) => {
   });
 
   onSocketRequest(socket, "game-action", (data, respond) => {
-    const roomCode = String(data?.roomCode ?? "")
-      .trim()
-      .toUpperCase();
+    const roomCode = normalizeRoomCode(data?.roomCode);
     const gameId = String(data?.gameId ?? "");
     const actionType = String(data?.action?.type ?? "");
 
@@ -1614,128 +1775,35 @@ io.on("connection", (socket) => {
 
   socket.on("disconnect", () => {
     console.log(`Browser disconnected: ${socket.id}`);
+    socketRequestLimiter.forget(socket.id);
 
     const roomCode = socketRoomCodes.get(socket.id);
     const room = roomCode ? rooms.get(roomCode) : undefined;
+    const found = room ? getRoomMember(room, socket.id) : null;
 
-    if (!roomCode || !room) {
+    if (!roomCode || !room || !found) {
       socketRoomCodes.delete(socket.id);
       return;
     }
 
-    const spectator = room.spectators.get(socket.id);
-    if (spectator) {
-      spectator.isConnected = false;
-      sendRoomMemberLists(roomCode, room);
+    found.member.isConnected = false;
 
-      const previousTimer = disconnectedPlayerTimers.get(socket.id);
-      if (previousTimer !== undefined) {
-        clearTimeout(previousTimer);
-      }
-
-      const reconnectTimer = setTimeout(() => {
-        disconnectedPlayerTimers.delete(socket.id);
-        const currentRoom = rooms.get(roomCode);
-        if (currentRoom !== room) {
-          return;
-        }
-
-        const disconnectedMember = getRoomMember(room, socket.id);
-        if (
-          !disconnectedMember ||
-          disconnectedMember.member.isConnected
-        ) {
-          return;
-        }
-
-        if (disconnectedMember.role === "spectator") {
-          room.spectators.delete(socket.id);
-        } else if (room.hostId !== socket.id && room.gameSession === null) {
-          room.players.delete(socket.id);
-        } else {
-          return;
-        }
-
-        socketRoomCodes.delete(socket.id);
-        removePlayerResumeTokens(socket.id);
-        sendRoomMemberLists(roomCode, room);
-        console.log(
-          `Removed disconnected spectator ${spectator.name} from room ${roomCode}`
-        );
-      }, reconnectGracePeriodMs);
-
-      disconnectedPlayerTimers.set(socket.id, reconnectTimer);
-      return;
+    if (found.role === "player") {
+      room.gameSession?.memberDisconnected?.(socket.id);
     }
-
-    const player = room.players.get(socket.id);
-
-    if (!player) {
-      socketRoomCodes.delete(socket.id);
-      return;
-    }
-
-    player.isConnected = false;
-
-    room.gameSession?.memberDisconnected?.(socket.id);
 
     sendRoomMemberLists(roomCode, room);
 
-    if (room.gameSession !== null) {
-      return;
+    // In an active game the host decides what happens to a missing player, so
+    // only spectators and the host (whose absence would strand the game) get
+    // an expiry countdown there. Lobby members always do.
+    if (
+      found.role === "spectator" ||
+      room.gameSession === null ||
+      room.hostId === socket.id
+    ) {
+      scheduleDisconnectExpiry(roomCode, room, socket.id);
     }
-
-    const previousTimer = disconnectedPlayerTimers.get(socket.id);
-
-    if (previousTimer !== undefined) {
-      clearTimeout(previousTimer);
-    }
-
-    const reconnectTimer = setTimeout(() => {
-      disconnectedPlayerTimers.delete(socket.id);
-
-      if (
-        rooms.get(roomCode) !== room ||
-        room.players.get(socket.id)?.isConnected !== false
-      ) {
-        return;
-      }
-
-      if (room.hostId === socket.id) {
-        disposeGameSession(room);
-        io.to(roomCode).emit("room-closed");
-
-        const memberIds = new Set([
-          ...room.players.keys(),
-          ...room.spectators.keys()
-        ]);
-        for (const memberId of memberIds) {
-          socketRoomCodes.delete(memberId);
-          removePlayerResumeTokens(memberId);
-          const timer = disconnectedPlayerTimers.get(memberId);
-
-          if (timer !== undefined) {
-            clearTimeout(timer);
-            disconnectedPlayerTimers.delete(memberId);
-          }
-        }
-
-        io.in(roomCode).socketsLeave(roomCode);
-        rooms.delete(roomCode);
-        console.log(`Room ${roomCode} closed after host recovery expired`);
-        return;
-      }
-
-      room.players.delete(socket.id);
-      socketRoomCodes.delete(socket.id);
-      removePlayerResumeTokens(socket.id);
-      sendRoomMemberLists(roomCode, room);
-      console.log(
-        `Removed disconnected player ${player.name} from room ${roomCode}`
-      );
-    }, reconnectGracePeriodMs);
-
-    disconnectedPlayerTimers.set(socket.id, reconnectTimer);
   });
 });
 

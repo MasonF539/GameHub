@@ -64,6 +64,7 @@ const gameClientHost = new window.GameHubGameClientHost({
         resolve
       );
     }),
+    requestLeave: () => leaveRoom(),
     notify: showToast,
     requestExit: () => {
       bootstrap.Modal.getOrCreateInstance(exitGameModalElement).show();
@@ -115,6 +116,7 @@ const saveGameSettingsButton =
 const startGameButton = document.querySelector("#start-game");
 const gameStatus = document.querySelector("#game-status");
 const closeLobbyButton = document.querySelector("#close-lobby");
+const leaveRoomButton = document.querySelector("#leave-room");
 
 const joinRoomButton = document.querySelector("#join-room");
 const roomCodeInput = document.querySelector("#room-code");
@@ -303,6 +305,7 @@ function showLobby(roomCode, isHost) {
   isRoomLocked = false;
 
   closeLobbyButton.classList.toggle("d-none", !isHost);
+  leaveRoomButton.classList.toggle("d-none", isHost);
   toggleRoomLockButton.classList.toggle("d-none", !isHost);
   startGameButton.classList.toggle("d-none", !isHost);
   updateGamePicker();
@@ -1116,6 +1119,34 @@ socket.on("kicked-from-room", ({ message }) => {
   resetRoomState();
   showEntry();
   showToast(message);
+});
+
+function leaveRoom() {
+  return new Promise((resolve) => {
+    if (currentRoomCode === null) {
+      resolve({ success: false, message: "You are not in a room." });
+      return;
+    }
+
+    socket.emit("leave-room", { roomCode: currentRoomCode }, (response) => {
+      if (response?.success) {
+        clearResumeSession();
+        resetRoomState();
+        showEntry();
+        showToast("You left the room.");
+      }
+
+      resolve(response ?? { success: false, message: "Unable to leave." });
+    });
+  });
+}
+
+leaveRoomButton.addEventListener("click", async () => {
+  const response = await leaveRoom();
+
+  if (!response.success) {
+    showToast(response.message);
+  }
 });
 
 socket.on("room-closed", () => {

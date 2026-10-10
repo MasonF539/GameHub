@@ -96,13 +96,29 @@ async function connect(url: string): Promise<Socket> {
   return socket;
 }
 
+async function connectWithHeaders(
+  url: string,
+  extraHeaders: Record<string, string>
+): Promise<Socket> {
+  const socket = createClient(url, {
+    transports: ["websocket"],
+    reconnection: false,
+    extraHeaders
+  });
+  if (socket.connected) return socket;
+  await waitForEvent(socket, "connect");
+  return socket;
+}
+
 async function stopServer(server: ChildProcess): Promise<void> {
   if (server.exitCode !== null) return;
   server.kill();
   await new Promise<void>((resolve) => server.once("exit", () => resolve()));
 }
 
-async function startServer(): Promise<{ server: ChildProcess; url: string }> {
+async function startServer(
+  extraEnv: Record<string, string> = {}
+): Promise<{ server: ChildProcess; url: string }> {
   const fixturePackage = path.join(
     process.cwd(),
     "test",
@@ -115,7 +131,8 @@ async function startServer(): Promise<{ server: ChildProcess; url: string }> {
       ...process.env,
       PORT: "0",
       NODE_ENV: "test",
-      GAMEHUB_GAME_PACKAGES: fixturePackage
+      GAMEHUB_GAME_PACKAGES: fixturePackage,
+      ...extraEnv
     },
     stdio: ["ignore", "pipe", "pipe", "ipc"]
   });
@@ -340,3 +357,319 @@ test(
     }
   }
 );
+
+const catAvatar = "\u{1F431}";
+const dogAvatar = "\u{1F436}";
+
+test("responses carry security headers and hide the framework", async () => {
+  const { server, url } = await startServer();
+
+  try {
+    const response = await fetch(url);
+
+    assert.equal(response.headers.get("x-powered-by"), null);
+    assert.equal(response.headers.get("x-content-type-options"), "nosniff");
+    assert.equal(response.headers.get("x-frame-options"), "DENY");
+    assert.equal(response.headers.get("referrer-policy"), "no-referrer");
+    const policy = response.headers.get("content-security-policy") ?? "";
+    assert.match(policy, /default-src 'self'/);
+    assert.match(policy, /frame-ancestors 'none'/);
+    assert.match(policy, /object-src 'none'/);
+  } finally {
+    await stopServer(server);
+  }
+});
+
+test("names must be unique in a room and cannot hide characters", { timeout: 20_000 }, async () => {
+  const { server, url } = await startServer();
+  const host = await connect(url);
+  const guest = await connect(url);
+
+  try {
+    const created = await emitAck(host, "create-room", { playerName: "Host", avatar: catAvatar });
+    const roomCode = created.roomCode;
+    assert.ok(roomCode);
+
+    for (const name of ["host", "HOST", "Gu\u200Best", "Gu\u202Eest"]) {
+      const result = await emitAck(guest, "join-room", { roomCode, playerName: name, avatar: dogAvatar });
+      assert.equal(result.success, false, `name ${JSON.stringify(name)} should be rejected`);
+    }
+
+    const joined = await emitAck(guest, "join-room", { roomCode, playerName: "Guest", avatar: dogAvatar });
+    assert.equal(joined.success, true);
+  } finally {
+    host.close();
+    guest.close();
+    await stopServer(server);
+  }
+});
+
+test("a guest can leave a room, but the host cannot leave it", { timeout: 20_000 }, async () => {
+  const { server, url } = await startServer();
+  const host = await connect(url);
+  const guest = await connect(url);
+
+  try {
+    const created = await emitAck(host, "create-room", { playerName: "Host", avatar: catAvatar });
+    const roomCode = created.roomCode;
+    assert.ok(roomCode);
+    assert.equal((await emitAck(guest, "join-room", { roomCode, playerName: "Guest", avatar: dogAvatar })).success, true);
+
+    const hostLeave = await emitAck(host, "leave-room", { roomCode });
+    assert.equal(hostLeave.success, false);
+
+    const listAfterLeave = waitForEvent<Array<{ name: string }>>(
+      host,
+      "player-list",
+      (players) => players.length === 1
+    );
+    assert.equal((await emitAck(guest, "leave-room", { roomCode })).success, true);
+    assert.deepEqual((await listAfterLeave).map((player) => player.name), ["Host"]);
+
+    // A member who left is no longer in any room.
+    assert.equal((await emitAck(guest, "leave-room", { roomCode })).success, false);
+    const rejoin = await emitAck(guest, "join-room", { roomCode, playerName: "Guest", avatar: dogAvatar });
+    assert.equal(rejoin.success, true);
+  } finally {
+    host.close();
+    guest.close();
+    await stopServer(server);
+  }
+});
+
+test("a guest can leave an active game and the host keeps playing", { timeout: 25_000 }, async () => {
+  const { server, url } = await startServer();
+  const host = await connect(url);
+  const guest = await connect(url);
+
+  try {
+    const created = await emitAck(host, "create-room", { playerName: "Host", avatar: catAvatar });
+    const roomCode = created.roomCode;
+    assert.ok(roomCode);
+    assert.equal((await emitAck(guest, "join-room", { roomCode, playerName: "Guest", avatar: dogAvatar })).success, true);
+    assert.equal((await emitAck(host, "select-game", { roomCode, gameId: fixtureGameId })).success, true);
+    assert.equal((await emitAck(host, "start-game", { roomCode })).success, true);
+
+    assert.equal((await emitAck(guest, "leave-room", { roomCode })).success, true);
+    // The room and its game are still there for the host.
+    assert.equal((await emitGameAction(host, roomCode, "advance")).success, true);
+  } finally {
+    host.close();
+    guest.close();
+    await stopServer(server);
+  }
+});
+
+test("kicking a connected lobby player does not claim they were disconnected", { timeout: 20_000 }, async () => {
+  const { server, url } = await startServer();
+  const host = await connect(url);
+  const guest = await connect(url);
+
+  try {
+    const created = await emitAck(host, "create-room", { playerName: "Host", avatar: catAvatar });
+    const roomCode = created.roomCode;
+    assert.ok(roomCode);
+    assert.equal((await emitAck(guest, "join-room", { roomCode, playerName: "Guest", avatar: dogAvatar })).success, true);
+
+    const kicked = waitForEvent<{ message: string }>(guest, "kicked-from-room");
+    assert.equal((await emitAck(host, "kick-player", { roomCode, playerId: guest.id })).success, true);
+    assert.doesNotMatch((await kicked).message, /disconnected/i);
+  } finally {
+    host.close();
+    guest.close();
+    await stopServer(server);
+  }
+});
+
+test("forged Cloudflare headers do not dodge the join limit unless trusted", { timeout: 40_000 }, async () => {
+  const { server, url } = await startServer();
+  const sockets: Socket[] = [];
+
+  try {
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      const socket = await connectWithHeaders(url, { "cf-connecting-ip": `203.0.113.${attempt + 1}` });
+      sockets.push(socket);
+      const result = await emitAck(socket, "join-room", { roomCode: "ZZZZZZ", playerName: "Guesser", avatar: catAvatar });
+      assert.equal(result.success, false);
+      assert.doesNotMatch(result.message ?? "", /too many/i);
+    }
+
+    const eleventh = await connectWithHeaders(url, { "cf-connecting-ip": "198.51.100.77" });
+    sockets.push(eleventh);
+    const blocked = await emitAck(eleventh, "join-room", { roomCode: "ZZZZZZ", playerName: "Guesser", avatar: catAvatar });
+    assert.match(blocked.message ?? "", /too many/i);
+  } finally {
+    sockets.forEach((socket) => socket.close());
+    await stopServer(server);
+  }
+});
+
+test("a successful join does not reset the failed-join counter", { timeout: 40_000 }, async () => {
+  const { server, url } = await startServer();
+  const sockets: Socket[] = [];
+
+  try {
+    const owner = await connect(url);
+    sockets.push(owner);
+    const created = await emitAck(owner, "create-room", { playerName: "Owner", avatar: catAvatar });
+    const roomCode = created.roomCode;
+    assert.ok(roomCode);
+
+    const guesser = await connect(url);
+    sockets.push(guesser);
+    for (let attempt = 0; attempt < 9; attempt += 1) {
+      const result = await emitAck(guesser, "join-room", { roomCode: "ZZZZZZ", playerName: "Guesser", avatar: dogAvatar });
+      assert.equal(result.success, false);
+    }
+    // One legitimate join in between used to wipe the nine failures.
+    assert.equal((await emitAck(guesser, "join-room", { roomCode, playerName: "Guesser", avatar: dogAvatar })).success, true);
+
+    const another = await connect(url);
+    sockets.push(another);
+    await emitAck(another, "join-room", { roomCode: "ZZZZZZ", playerName: "Guesser2", avatar: dogAvatar });
+    const blocked = await emitAck(another, "join-room", { roomCode, playerName: "Guesser2", avatar: dogAvatar });
+    assert.equal(blocked.success, false);
+    assert.match(blocked.message ?? "", /too many/i);
+  } finally {
+    sockets.forEach((socket) => socket.close());
+    await stopServer(server);
+  }
+});
+
+test("room creation is limited per address", { timeout: 40_000 }, async () => {
+  const { server, url } = await startServer();
+  const sockets: Socket[] = [];
+
+  try {
+    for (let attempt = 0; attempt < 6; attempt += 1) {
+      const socket = await connect(url);
+      sockets.push(socket);
+      const created = await emitAck(socket, "create-room", { playerName: `Host${attempt}`, avatar: catAvatar });
+      assert.equal(created.success, true);
+    }
+
+    const extra = await connect(url);
+    sockets.push(extra);
+    const refused = await emitAck(extra, "create-room", { playerName: "TooMany", avatar: catAvatar });
+    assert.equal(refused.success, false);
+    assert.match(refused.message ?? "", /too quickly/i);
+  } finally {
+    sockets.forEach((socket) => socket.close());
+    await stopServer(server);
+  }
+});
+
+test("the room cap refuses new rooms when the server is full", { timeout: 20_000 }, async () => {
+  const { server, url } = await startServer({ GAMEHUB_MAX_ROOMS: "1" });
+  const first = await connect(url);
+  const second = await connect(url);
+
+  try {
+    assert.equal((await emitAck(first, "create-room", { playerName: "One", avatar: catAvatar })).success, true);
+    const refused = await emitAck(second, "create-room", { playerName: "Two", avatar: catAvatar });
+    assert.equal(refused.success, false);
+    assert.match(refused.message ?? "", /busy/i);
+  } finally {
+    first.close();
+    second.close();
+    await stopServer(server);
+  }
+});
+
+async function startFixtureGame(
+  url: string,
+  playerCount = 2
+): Promise<{ roomCode: string; host: Socket; guests: Socket[] }> {
+  const host = await connect(url);
+  const created = await emitAck(host, "create-room", { playerName: "Host", avatar: catAvatar });
+  const roomCode = created.roomCode;
+  assert.ok(roomCode);
+  const guests: Socket[] = [];
+
+  for (let index = 1; index < playerCount; index += 1) {
+    const guest = await connect(url);
+    guests.push(guest);
+    assert.equal((await emitAck(guest, "join-room", {
+      roomCode,
+      playerName: index === 1 ? "Guest" : `Guest${index}`,
+      avatar: dogAvatar
+    })).success, true);
+  }
+
+  assert.equal((await emitAck(host, "select-game", { roomCode, gameId: fixtureGameId })).success, true);
+  assert.equal((await emitAck(host, "start-game", { roomCode })).success, true);
+  return { roomCode, host, guests };
+}
+
+test("a host who stays away mid-game closes the room instead of stranding it", { timeout: 25_000 }, async () => {
+  const { server, url } = await startServer({ GAMEHUB_TEST_RECONNECT_GRACE_MS: "500" });
+  const { host, guests } = await startFixtureGame(url);
+  const [guest] = guests;
+
+  try {
+    const closed = waitForEvent(guest, "room-closed", () => true, 8_000);
+    host.close();
+    await closed;
+  } finally {
+    host.close();
+    guest.close();
+    await stopServer(server);
+  }
+});
+
+test("a player who drops mid-game is left for the host to handle", { timeout: 25_000 }, async () => {
+  const { server, url } = await startServer({ GAMEHUB_TEST_RECONNECT_GRACE_MS: "500" });
+  const { host, guests } = await startFixtureGame(url);
+  const [guest] = guests;
+  const lists: Array<Array<{ name: string; isConnected: boolean }>> = [];
+  host.on("player-list", (players) => lists.push(players));
+
+  try {
+    const dropped = waitForEvent<Array<{ name: string; isConnected: boolean }>>(
+      host,
+      "player-list",
+      (players) => players.some((player) => player.name === "Guest" && !player.isConnected)
+    );
+    guest.close();
+    await dropped;
+    await new Promise((resolve) => setTimeout(resolve, 1_500));
+
+    assert.ok(
+      lists.every((players) => players.some((player) => player.name === "Guest")),
+      "the dropped player must still be listed after the recovery period"
+    );
+  } finally {
+    host.close();
+    guest.close();
+    await stopServer(server);
+  }
+});
+
+test("players who dropped during a game expire once the game is over", { timeout: 25_000 }, async () => {
+  const { server, url, } = await startServer({ GAMEHUB_TEST_RECONNECT_GRACE_MS: "500" });
+  const { roomCode, host, guests } = await startFixtureGame(url);
+  const [guest] = guests;
+
+  try {
+    const dropped = waitForEvent<Array<{ name: string; isConnected: boolean }>>(
+      host,
+      "player-list",
+      (players) => players.some((player) => player.name === "Guest" && !player.isConnected)
+    );
+    guest.close();
+    await dropped;
+
+    const expired = waitForEvent<Array<{ name: string }>>(
+      host,
+      "player-list",
+      (players) => players.length === 1,
+      8_000
+    );
+    assert.equal((await emitAck(host, "close-game-to-lobby", { roomCode })).success, true);
+    assert.deepEqual((await expired).map((player) => player.name), ["Host"]);
+  } finally {
+    host.close();
+    guest.close();
+    await stopServer(server);
+  }
+});

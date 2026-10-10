@@ -55,15 +55,20 @@ Checked implementation items do not imply that every multiplayer interaction has
 - [x] Let the host kick a disconnected player during a game; hold their cards face-down until the current pile is awarded, then add them to the next pile.
 - [x] Tell a kicked player they were removed after disconnecting if they later try to reconnect, and notify the table when their cards are deferred.
 - [x] Play the game-winner animation when kicking opponents leaves the host as the last player.
-- [x] Keep slap actions available throughout active play, including for players out of cards, while rejecting actions during server-controlled animations and pauses.
+- [x] Keep slap actions available throughout active play, including for players out of cards, while rejecting actions during pile-transfer, penalty, and win animations and during pauses. Slaps are still collected during the short card-play animation, because the card is already on the pile.
 - [x] Penalize an invalid slap by moving the configured number of the player's cards to the bottom of the pile; forfeit any remaining cards if fewer than the configured penalty remain.
 - [x] Keep face-down false-slap penalty cards out of slap-pattern validation so repeated penalties cannot manufacture a valid slap.
 - [x] End the game when only one player has cards and the face-up pile offers no valid slap for an eliminated player to reenter.
+- [x] Never let a challenger answer their own challenge: when nobody but the challenger can continue, the challenger wins the pile (or the slap window opens).
+- [x] Ignore a slap from a player with no cards when the pile is not slappable, so a player with nothing to forfeit cannot freeze the table with free false slaps.
+- [x] Keep slap-pattern information off the wire: the public state carries a `pileVersion` but no slappable flag, and messages about a pending pile are neutral.
+- [x] Have slaps carry the `pileVersion` the player last saw. A slap that lost a short race with a card play (previous version, previous pile slappable, under 350 ms) is ignored without a penalty.
+- [x] Allow a player to leave voluntarily; their cards are held face-down and added to the next pile, just like a host removal. If removing a player leaves nobody holding cards, the remaining cards go to the next player in turn order immediately.
 - [x] Allow only the host to pause and resume the game; enforce pause state on the server.
 - [x] Support per-game chat capability; validate room membership, message length, and send rate on the server.
 - [x] Preserve a final played card and winner state long enough for the win animation before returning to the lobby.
 - [x] Enforce the player timer on the server and pause it during host pauses and action animations; add a short reconnect grace period, then auto-play on timeout.
-- [x] When the final failed challenge card creates a valid slap, allow slaps until the turn timer expires before awarding the pile to the challenge owner.
+- [x] When the final failed challenge card creates a valid slap, allow slaps for a short fixed window (four seconds, not a whole turn) before awarding the pile to the challenge owner.
 - [x] Let the host end an active game and return everyone to the lobby after confirming in the browser.
 
 ### Client gameplay
@@ -95,7 +100,7 @@ Checked implementation items do not imply that every multiplayer interaction has
 - [x] Show server connection state as a colored dot with status text on the main menu, in the lobby, and beside the gameplay controls.
 - [x] Fit active gameplay into the browser viewport without page scrolling; overlay Chat and Spectators in one wide bottom-left tab panel with an explicit viewport-relative Expand/Collapse control; place the timer and same-level action buttons in the open bottom-right area; and show turn text directly above the central pile count.
 - [x] Style "Play a Card" and "Slap" buttons as prominent game-action controls, with a secondary "Bring the pain" label and fire accents on Slap.
-- [x] Keep slaps available during active play even when no pattern matches; disable them only when no face-up cards are present, the game is paused or finished, or an action animation is in progress.
+- [x] Keep slaps available during active play even when no pattern matches; disable them only when no face-up cards are present, the game is paused or finished, or a non-card-play animation is in progress.
 - [x] Restore active players from a complete reconnect snapshot.
 - [x] Reuse the limited public game-state projection for spectators so they receive the visible pile, public player state, timers, and live animations without hidden decks.
 - [x] Use game-specific background music and synchronize card, slap, pile-win, and game-win sounds with their corresponding presentation animations.

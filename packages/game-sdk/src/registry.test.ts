@@ -128,3 +128,31 @@ test("rejects malformed player limits and settings", () => {
     /preview video path cannot be empty/
   );
 });
+
+test("preview media must live inside the game's own public folder", () => {
+  const valid = createManifest();
+  valid.definition.preview = {
+    videoPath: "/games/example-game/assets/preview.mp4",
+    posterPath: "/games/example-game/assets/poster.webp"
+  };
+  assert.doesNotThrow(() => validateGamePluginManifest(valid));
+
+  for (const badPath of [
+    "https://example.com/poster.webp",
+    "/games/other-game/assets/poster.webp",
+    "/games/example-game/../other/poster.webp",
+    "/games/example-game/assets/poster.webp\")",
+    "/preview.webp"
+  ]) {
+    const invalid = createManifest();
+    invalid.definition.preview = {
+      videoPath: "/games/example-game/assets/preview.mp4",
+      posterPath: badPath
+    };
+    assert.throws(
+      () => validateGamePluginManifest(invalid),
+      /preview poster path must be a path inside/,
+      `${badPath} should be rejected`
+    );
+  }
+});

@@ -34,6 +34,28 @@ function validatePublicPath(value: string, field: string): void {
   }
 }
 
+// Preview media is addressed by absolute site path inside the game's own
+// folder, e.g. /games/<id>/assets/preview.mp4. It ends up in a CSS url(), so
+// only plain path characters are allowed.
+function validatePreviewPath(
+  value: string,
+  gameId: string,
+  field: string
+): void {
+  requireNonEmpty(value, field);
+  const prefix = `/games/${gameId}/`;
+
+  if (
+    !value.startsWith(prefix) ||
+    !/^[A-Za-z0-9][A-Za-z0-9._/-]*$/.test(value.slice(prefix.length)) ||
+    value.split("/").includes("..")
+  ) {
+    throw new GamePluginValidationError(
+      `${field} must be a path inside ${prefix}.`
+    );
+  }
+}
+
 function validateSetting(setting: GameSetting, gameId: string): void {
   const settingKey = setting.key;
   const defaultValue: unknown = setting.defaultValue;
@@ -122,8 +144,16 @@ export function validateGamePluginManifest(manifest: GamePluginManifest): void {
   }
 
   if (game.preview) {
-    requireNonEmpty(game.preview.videoPath, `${game.id} preview video path`);
-    requireNonEmpty(game.preview.posterPath, `${game.id} preview poster path`);
+    validatePreviewPath(
+      game.preview.videoPath,
+      game.id,
+      `${game.id} preview video path`
+    );
+    validatePreviewPath(
+      game.preview.posterPath,
+      game.id,
+      `${game.id} preview poster path`
+    );
   }
 
   const settingKeys = new Set<string>();

@@ -90,7 +90,15 @@ function Start-PublicGameHub {
     Write-Host
     Write-Host "Building GameHub and requesting a public tunnel..." -ForegroundColor Cyan
 
-    docker compose --profile public up --build --detach
+    # Behind the tunnel, rate limits should use each visitor's real address.
+    $env:GAMEHUB_TRUST_CLOUDFLARE_IP = "true"
+
+    try {
+        docker compose --profile public up --build --detach
+    }
+    finally {
+        Remove-Item Env:\GAMEHUB_TRUST_CLOUDFLARE_IP -ErrorAction SilentlyContinue
+    }
 
     if ($LASTEXITCODE -ne 0) {
         Write-Host
