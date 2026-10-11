@@ -656,19 +656,15 @@ export function isEgyptianWarPileSlappable(
     const lastValue = cardRankValue(last);
 
     if (lastValue !== null && lastValue <= 10) {
-      for (const previousIndex of [pile.length - 2, pile.length - 3]) {
+      for (const previousIndex of [pile.length - 2]) {
         if (previousIndex < 0) {
           continue;
         }
 
         const previousCard = pile[previousIndex];
         const previousValue = cardRankValue(previousCard.rank);
-        const hasAllowedGap =
-          previousIndex === pile.length - 2 ||
-          isFaceCard(pile[pile.length - 2].rank);
-
+        
         if (
-          hasAllowedGap &&
           previousValue !== null &&
           previousValue <= 10 &&
           previousValue + lastValue === 10
