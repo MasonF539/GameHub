@@ -22,7 +22,7 @@ Checked implementation items do not imply that every multiplayer interaction has
 - [x] Support 2–6 players in the game definition.
 - [x] Define standard cards and optional Jokers.
 - [x] Configure one, two, or three complete decks, defaulting to one; include two Jokers per deck when Jokers are enabled.
-- [x] Configure Jokers, doubles, sandwiches, three in a row, top-bottom, tens, and marriage as lobby settings.
+- [x] Configure Jokers, doubles, sandwiches, three in a row, top-bottom, adjacent-card tens, and marriage as lobby settings.
 - [x] Apply the saved settings to server-side slap validation.
 - [x] Configure the false-slap penalty to 1, 2, or 3 cards, defaulting to 2.
 - [x] Configure a 5–120 second player timer with a default of 15 seconds using synchronized slider and number controls.
@@ -60,7 +60,7 @@ Checked implementation items do not imply that every multiplayer interaction has
 - [x] Keep face-down false-slap penalty cards out of slap-pattern validation so repeated penalties cannot manufacture a valid slap.
 - [x] End the game when only one player has cards and the face-up pile offers no valid slap for an eliminated player to reenter.
 - [x] Never let a challenger answer their own challenge: when nobody but the challenger can continue, the challenger wins the pile (or the slap window opens).
-- [x] Ignore a slap from a player with no cards when the pile is not slappable, so a player with nothing to forfeit cannot freeze the table with free false slaps.
+- [x] Give an eliminated player who false-slaps a one-card cooldown: they cannot win on the next card's slap opportunity, and they forfeit no cards, since they have none.
 - [x] Keep slap-pattern information off the wire: the public state carries a `pileVersion` but no slappable flag, and messages about a pending pile are neutral.
 - [x] Have slaps carry the `pileVersion` the player last saw. A slap that lost a short race with a card play (previous version, previous pile slappable, under 350 ms) is ignored without a penalty.
 - [x] Allow a player to leave voluntarily; their cards are held face-down and added to the next pile, just like a host removal. If removing a player leaves nobody holding cards, the remaining cards go to the next player in turn order immediately.

@@ -77,7 +77,7 @@ function renderEgyptianWarSlapRules(settings) {
     settings.allowSandwiches && "Sandwich: matching ranks with one between",
     settings.allowThreeInARow && "Three in a row: ascending/descending sequence",
     settings.allowTopBottom && "Top-bottom: newest matches the first card",
-    settings.allowTens && "Tens: number cards total 10",
+    settings.allowTens && "Tens: adjacent number cards total 10",
     settings.allowMarriage && "Marriage: King and Queen consecutively"
   ].filter(Boolean);
 
@@ -101,6 +101,11 @@ function renderEgyptianWarSlapRules(settings) {
     `False slap: forfeit up to ${penalty} ` +
     `${penalty === 1 ? "card" : "cards"}.`;
   egyptianWarSlapRulesList.appendChild(penaltyItem);
+
+  const eliminatedCooldownItem = document.createElement("li");
+  eliminatedCooldownItem.textContent =
+    "Eliminated player false slap: miss the next card's slap opportunity.";
+  egyptianWarSlapRulesList.appendChild(eliminatedCooldownItem);
 }
 
 function setEgyptianWarTimerHidden(isHidden) {

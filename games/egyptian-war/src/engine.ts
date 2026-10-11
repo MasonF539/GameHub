@@ -22,6 +22,8 @@ export type EgyptianWarPlayerInput = {
 export type EgyptianWarPlayerState = EgyptianWarPlayerInput & {
   cards: Card[];
   isEliminated: boolean;
+  /** Card-play count at which this eliminated player may slap again. */
+  slapCooldownUntilCardPlayCount?: number | null;
 };
 
 export type EgyptianWarState = {
@@ -30,6 +32,8 @@ export type EgyptianWarState = {
   deferredCards: Card[];
   penaltyPileCardCount: number;
   pileVersion: number;
+  /** Total cards played from players' hands during this game. */
+  cardsPlayedCount?: number;
   currentPlayerIndex: number;
   settings: EgyptianWarSettings;
   challenge: {
@@ -191,7 +195,8 @@ export function createEgyptianWarState(
   const players = playerInputs.map((player) => ({
     ...player,
     cards: [] as Card[],
-    isEliminated: false
+    isEliminated: false,
+    slapCooldownUntilCardPlayCount: null
   }));
 
   const deck = shuffleDeck(
@@ -221,6 +226,7 @@ export function createEgyptianWarState(
     deferredCards: [],
     penaltyPileCardCount: 0,
     pileVersion: 0,
+    cardsPlayedCount: 0,
     currentPlayerIndex,
     settings: { ...settings },
     challenge: null,
@@ -746,6 +752,37 @@ function trackPileVersion<T>(state: EgyptianWarState, run: () => T): T {
   }
 }
 
+export type EgyptianWarSlapCooldownStatus = "none" | "waiting" | "blocked";
+
+/** Start a cooldown that lasts until one more card has been played. */
+export function startEgyptianWarSlapCooldown(
+  state: EgyptianWarState,
+  playerId: string
+): void {
+  const player = state.players.find((candidate) => candidate.id === playerId);
+  if (!player) return;
+  player.slapCooldownUntilCardPlayCount = (state.cardsPlayedCount ?? 0) + 1;
+}
+
+/**
+ * Returns the status of an eliminated player's one-card slap cooldown.
+ * The next card's opportunity is consumed the first time they try to slap on it.
+ */
+export function checkEgyptianWarSlapCooldown(
+  state: EgyptianWarState,
+  playerId: string
+): EgyptianWarSlapCooldownStatus {
+  const player = state.players.find((candidate) => candidate.id === playerId);
+  const cooldownTarget = player?.slapCooldownUntilCardPlayCount;
+  if (!player || cooldownTarget == null) return "none";
+
+  const cardsPlayedCount = state.cardsPlayedCount ?? 0;
+  if (cardsPlayedCount < cooldownTarget) return "waiting";
+
+  player.slapCooldownUntilCardPlayCount = null;
+  return cardsPlayedCount === cooldownTarget ? "blocked" : "none";
+}
+
 export function applyEgyptianWarAction(
   state: EgyptianWarState,
   playerId: string,
@@ -782,6 +819,18 @@ function applyAction(
   const player = state.players[playerIndex];
 
   if (action === "slap") {
+    const slapCooldown = checkEgyptianWarSlapCooldown(state, playerId);
+    if (slapCooldown === "waiting") {
+      throw new EgyptianWarRuleError(
+        "You must wait until the next card is played before slapping again."
+      );
+    }
+    if (slapCooldown === "blocked") {
+      throw new EgyptianWarRuleError(
+        "Your one-card slap cooldown blocked that slap."
+      );
+    }
+
     const faceUpPile = state.pile.slice(state.penaltyPileCardCount);
     if (faceUpPile.length === 0) {
       throw new EgyptianWarRuleError("There are no face-up cards to slap.");
@@ -789,10 +838,10 @@ function applyAction(
 
     if (!isEgyptianWarPileSlappable(faceUpPile, state.settings)) {
       if (player.cards.length === 0) {
-        // Nothing to forfeit, so a wrong slap does nothing at all. Rejecting
-        // it (instead of announcing and animating it) means a player with no
-        // cards cannot lock the table by spamming slaps for free.
-        throw new EgyptianWarRuleError("Your slap did not count.");
+        startEgyptianWarSlapCooldown(state, playerId);
+        state.activityMessage =
+          `${player.name} slapped too early and must wait until the next card is played before slapping again.`;
+        return state.activityMessage;
       }
 
       const cardsForfeited = player.cards.splice(
@@ -879,6 +928,7 @@ function applyAction(
   }
 
   state.pile.push(card);
+  state.cardsPlayedCount = (state.cardsPlayedCount ?? 0) + 1;
 
   if (player.cards.length === 0) {
     player.isEliminated = true;

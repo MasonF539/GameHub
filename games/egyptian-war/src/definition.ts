@@ -36,7 +36,7 @@ export const egyptianWar: GameDefinition = {
   id: "egyptian-war",
   name: "Egyptian War",
   description:
-    "Play cards into a central pile, survive face-card challenges, and race to slap special combinations. The last player holding all the cards wins.",
+    "Play cards into a central pile, survive face-card challenges, and race to slap enabled patterns. False slaps carry penalties, and eliminated players must skip the next card's slap opportunity after a false slap. The last player holding all the cards wins.",
   isPlayable: true,
   chatEnabled: true,
 
@@ -59,10 +59,10 @@ export const egyptianWar: GameDefinition = {
     "If the challenged player uses every attempt without revealing a face card, Ace, or Joker, the player who most recently played a challenge card wins the pile unless the final card creates a valid slap combination.",
     "When the final failed challenge card creates a valid slap combination, players get a short window of about four seconds to slap; if nobody slaps, the most recent challenge card player wins the pile.",
     "If the challenged player runs out of cards before completing their attempts, the next player with cards inherits the challenge with the remaining attempts.",
-    "A player who runs out of cards is skipped until they reenter by winning a valid slap.",
+    "A player who runs out of cards is skipped until they reenter by winning a valid slap. An eliminated player who false-slaps must miss the next card's slap opportunity before trying again.",
     "A player who wins the pile places all of its cards at the bottom of their deck without shuffling and begins the next pile.",
     "When a valid slap combination appears, the first player to slap wins the central pile.",
-    "Slapping without a valid combination forfeits the configured number of cards face down to the bottom of the pile, or all remaining cards if fewer remain. Penalty cards do not create slap combinations. A player with no cards loses nothing, but their slap does not count.",
+    "Slapping without a valid combination forfeits the configured number of cards face down to the bottom of the pile, or all remaining cards if fewer remain. Penalty cards do not create slap combinations. A player with no cards forfeits no cards for a false slap, but will miss the next card's slap opportunity before being able to try again.",
     "When only one player still has cards, that player wins unless the current face-up pile has a valid slap that allows an eliminated player to reenter.",
     "If several players slap at nearly the same moment, the pile goes to one of them by weighted chance that favors the earlier slap. The others forfeit nothing.",
     "The winner is the player who collects every card."
@@ -118,7 +118,7 @@ export const egyptianWar: GameDefinition = {
       key: "allowTens",
       label: "Tens",
       description:
-        "Allow a slap when two number cards total ten, either consecutively or with one face card between them. An Ace counts as one.",
+        "Allow a slap when the two most recent cards are adjacent number cards that total ten. An Ace counts as one.",
       defaultValue: false
     },
     {
@@ -133,7 +133,7 @@ export const egyptianWar: GameDefinition = {
       key: "falseSlapPenaltyCards",
       label: "False Slap Penalty",
       description:
-        "Cards forfeited to the bottom of the pile when a player slaps an invalid combination.",
+        "Cards forfeited to the bottom of the pile for an invalid slap. An eliminated player forfeits no cards, but must miss the next card's slap opportunity.",
       defaultValue: 2,
       options: [1, 2, 3],
       unit: "card"

@@ -10,7 +10,9 @@ import type {
 import { egyptianWarManifest } from "./definition.js";
 import {
   applyEgyptianWarAction,
+  checkEgyptianWarSlapCooldown,
   createEgyptianWarState,
+  startEgyptianWarSlapCooldown,
   createPublicEgyptianWarState,
   EgyptianWarRuleError,
   isEgyptianWarStateSlappable,
@@ -509,6 +511,23 @@ class EgyptianWarSession implements GameSession {
     }
 
     if (isLiveSlap) {
+      const slapCooldown = checkEgyptianWarSlapCooldown(this.state, memberId);
+      if (slapCooldown === "waiting") {
+        respond({
+          success: false,
+          message: "You must wait until the next card is played before slapping again."
+        });
+        return;
+      }
+      if (slapCooldown === "blocked") {
+        respond({
+          success: false,
+          message: "Your one-card slap cooldown blocked that slap."
+        });
+        this.context.broadcastState();
+        return;
+      }
+
       if (isEgyptianWarStateSlappable(this.state)) {
         this.collectSlap(memberId, respond);
         return;
@@ -526,6 +545,20 @@ class EgyptianWarSession implements GameSession {
         // A slap on an unslappable pile in the middle of an animation is
         // ignored instead of punished: the table is mid-update.
         respond({ success: false, message: "Wait for the current action to finish." });
+        return;
+      }
+
+      const eliminatedPlayer = this.state.players.find(
+        (player) => player.id === memberId
+      );
+      const faceUpCardCount =
+        this.state.pile.length - this.state.penaltyPileCardCount;
+      if (faceUpCardCount > 0 && eliminatedPlayer?.cards.length === 0) {
+        startEgyptianWarSlapCooldown(this.state, memberId);
+        respond({
+          success: false,
+          message: "You are out of cards and must wait until the next card is played before slapping again."
+        });
         return;
       }
     }

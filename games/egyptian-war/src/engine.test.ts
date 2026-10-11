@@ -60,6 +60,7 @@ function makeState(
     deferredCards: [],
     penaltyPileCardCount: 0,
     pileVersion: 0,
+    cardsPlayedCount: 0,
     currentPlayerIndex: 0,
     settings,
     challenge: null,
@@ -1040,7 +1041,7 @@ test("a challenger never has to answer their own challenge", () => {
   assert.equal(state.winnerId, players[0].id);
 });
 
-test("a slap from a player with no cards is ignored when the pile is not slappable", () => {
+test("an eliminated player's false slap starts a one-card cooldown", () => {
   const state = makeState(
     [
       [card("4", "p1-4"), card("5", "p1-5")],
@@ -1050,16 +1051,55 @@ test("a slap from a player with no cards is ignored when the pile is not slappab
     { pile: [card("2", "pile-2"), card("9", "pile-9")] }
   );
   state.players[2].isEliminated = true;
-  const message = state.activityMessage;
   const version = state.pileVersion;
+
+  const message = applyEgyptianWarAction(state, players[2].id, "slap");
+  assert.match(message, /wait until the next card is played/i);
+  assert.equal(state.players[2].cards.length, 0);
+  assert.equal(state.players[2].slapCooldownUntilCardPlayCount, 1);
+  assert.equal(state.pile.length, 2);
+  assert.equal(state.pileVersion, version);
+  assert.throws(
+    () => applyEgyptianWarAction(state, players[2].id, "slap"),
+    /wait until the next card is played/i
+  );
+});
+
+test("an eliminated player's cooldown blocks the next card only, then allows reentry", () => {
+  const state = makeState(
+    [
+      [card("2", "p1-2"), card("8", "p1-8")],
+      [card("2", "p2-2"), card("9", "p2-9")],
+      []
+    ],
+    {
+      pile: [card("2", "pile-2"), card("3", "pile-3")],
+      players: [
+        { ...players[0], cards: [card("2", "p1-2"), card("8", "p1-8")], isEliminated: false },
+        { ...players[1], cards: [card("2", "p2-2"), card("9", "p2-9")], isEliminated: false },
+        { ...players[2], cards: [], isEliminated: true }
+      ]
+    }
+  );
+
+  applyEgyptianWarAction(state, players[2].id, "slap");
+  applyEgyptianWarAction(state, players[0].id, "play-card");
+  assert.equal(state.cardsPlayedCount, 1);
 
   assert.throws(
     () => applyEgyptianWarAction(state, players[2].id, "slap"),
-    /did not count/
+    /one-card slap cooldown/i
   );
-  assert.equal(state.pile.length, 2);
-  assert.equal(state.activityMessage, message);
-  assert.equal(state.pileVersion, version);
+  assert.equal(state.players[2].slapCooldownUntilCardPlayCount, null);
+  assert.equal(state.players[2].cards.length, 0);
+
+  applyEgyptianWarAction(state, players[1].id, "play-card");
+  assert.equal(state.cardsPlayedCount, 2);
+  applyEgyptianWarAction(state, players[2].id, "slap");
+
+  assert.equal(state.players[2].isEliminated, false);
+  assert.equal(state.players[2].cards.length, 4);
+  assert.equal(state.pile.length, 0);
 });
 
 test("messages about a pending final pile do not reveal that it is slappable", () => {

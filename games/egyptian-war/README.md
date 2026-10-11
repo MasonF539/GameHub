@@ -34,6 +34,9 @@ Before the split, GameHub's `npm run verify:packages` command packs the SDK and
 this game, installs both archives into a clean temporary project, and confirms
 that the installed plugin and public directory work without monorepo source.
 
+## Slap rules and penalties
+
+Slap patterns are validated by the server. The enabled patterns are configured in the lobby. The â€œThree in a Rowâ€ pattern checks the latest three cards for an ascending or descending rank sequence (including Ace-low and Ace-high sequences). The â€œTensâ€ pattern checks only two directly adjacent number cards that total ten; an Ace counts as one. An active player who false-slaps forfeits the configured number of cards, up to the number they hold. An eliminated player has no cards to forfeit, so a false slap instead makes them miss the next card's slap opportunity. A valid slap can still let an eliminated player re-enter when their cooldown is clear.
 ## Standalone repository preparation
 
 The package directory includes its own README, license, TypeScript settings,
