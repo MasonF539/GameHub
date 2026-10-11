@@ -24,7 +24,7 @@ const settings: EgyptianWarSettings = {
   includeJokers: true,
   allowDoubles: true,
   allowSandwiches: true,
-  allowFourInARow: true,
+  allowThreeInARow: true,
   allowTopBottom: false,
   allowTens: false,
   allowMarriage: false,
@@ -902,7 +902,7 @@ test("validates configured slap patterns", () => {
     ...settings,
     allowDoubles: false,
     allowSandwiches: false,
-    allowFourInARow: true,
+    allowThreeInARow: true,
     allowTopBottom: false,
     allowTens: false,
     allowMarriage: false
@@ -910,28 +910,35 @@ test("validates configured slap patterns", () => {
 
   assert.equal(
     isEgyptianWarPileSlappable(
-      [card("2"), card("3"), card("4"), card("5")],
+      [card("2"), card("3"), card("4")],
       enabledSettings
     ),
     true
   );
   assert.equal(
     isEgyptianWarPileSlappable(
-      [card("ace"), card("2"), card("3"), card("4")],
+      [card("ace"), card("2"), card("3")],
       enabledSettings
     ),
     true
   );
   assert.equal(
     isEgyptianWarPileSlappable(
-      [card("jack"), card("queen"), card("king"), card("ace")],
+      [card("jack"), card("queen"), card("king")],
       enabledSettings
     ),
     true
   );
   assert.equal(
     isEgyptianWarPileSlappable(
-      [card("10"), card("jack"), card("king"), card("queen")],
+      [card("2"), card("4"), card("6")],
+      enabledSettings
+    ),
+   false
+  );
+  assert.equal(
+    isEgyptianWarPileSlappable(
+      [card("10"), card("jack"), card("king")],
       enabledSettings
     ),
     false
@@ -949,7 +956,7 @@ test("validates configured slap patterns", () => {
       [card("7"), card("jack"), card("3")],
       { ...settings, allowTens: true, allowDoubles: false }
     ),
-    true
+    false
   );
   assert.equal(
     isEgyptianWarPileSlappable(

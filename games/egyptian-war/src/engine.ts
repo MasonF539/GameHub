@@ -6,7 +6,7 @@ export type EgyptianWarSettings = {
   includeJokers: boolean;
   allowDoubles: boolean;
   allowSandwiches: boolean;
-  allowFourInARow: boolean;
+  allowThreeInARow: boolean;
   allowTopBottom: boolean;
   allowTens: boolean;
   allowMarriage: boolean;
@@ -624,8 +624,8 @@ export function isEgyptianWarPileSlappable(
     }
   }
 
-  if (settings.allowFourInARow && pile.length >= 4) {
-    const cards = pile.slice(-4);
+  if (settings.allowThreeInARow && pile.length >= 3) {
+    const cards = pile.slice(-3);
     const aceLowValues = cards.map((card) => cardRankValue(card.rank));
     const aceHighValues = cards.map((card) =>
       card.rank === "ace" ? 14 : cardRankValue(card.rank)
@@ -634,11 +634,9 @@ export function isEgyptianWarPileSlappable(
       values.every((value) => value !== null) &&
       (
         values[1] === values[0] + 1 &&
-        values[2] === values[1] + 1 &&
-        values[3] === values[2] + 1 ||
+        values[2] === values[1] + 1 ||
         values[1] === values[0] - 1 &&
-        values[2] === values[1] - 1 &&
-        values[3] === values[2] - 1
+        values[2] === values[1] - 1
       );
 
     if (isSequence(aceLowValues) || isSequence(aceHighValues)) {

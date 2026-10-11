@@ -18,7 +18,7 @@ const settings = {
   includeJokers: true,
   allowDoubles: true,
   allowSandwiches: true,
-  allowFourInARow: true,
+  allowThreeInARow: true,
   allowTopBottom: true,
   allowTens: true,
   allowMarriage: true,

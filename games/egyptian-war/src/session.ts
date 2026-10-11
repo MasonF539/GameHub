@@ -102,7 +102,7 @@ class EgyptianWarSession implements GameSession {
       includeJokers: settings.includeJokers === true,
       allowDoubles: settings.allowDoubles === true,
       allowSandwiches: settings.allowSandwiches === true,
-      allowFourInARow: settings.allowFourInARow === true,
+      allowThreeInARow: settings.allowThreeInARow === true,
       allowTopBottom: settings.allowTopBottom === true,
       allowTens: settings.allowTens === true,
       allowMarriage: settings.allowMarriage === true,

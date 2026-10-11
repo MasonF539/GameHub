@@ -75,7 +75,7 @@ function renderEgyptianWarSlapRules(settings) {
     settings.includeJokers && "Joker: always slappable",
     settings.allowDoubles && "Doubles: matching consecutive ranks",
     settings.allowSandwiches && "Sandwich: matching ranks with one between",
-    settings.allowFourInARow && "Four in a row: ascending/descending sequence",
+    settings.allowThreeInARow && "Three in a row: ascending/descending sequence",
     settings.allowTopBottom && "Top-bottom: newest matches the first card",
     settings.allowTens && "Tens: number cards total 10",
     settings.allowMarriage && "Marriage: King and Queen consecutively"

@@ -101,10 +101,10 @@ export const egyptianWar: GameDefinition = {
       defaultValue: true
     },
     {
-      key: "allowFourInARow",
-      label: "Four in a Row",
+      key: "allowThreeInARow",
+      label: "Three in a Row",
       description:
-        "Allow a slap when four cards form an ascending or descending sequence.",
+        "Allow a slap when three cards form an ascending or descending sequence.",
       defaultValue: true
     },
     {
