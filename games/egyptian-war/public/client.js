@@ -37,6 +37,15 @@ const showGameChatButton = findEgyptianWarElement("#show-game-chat");
 const showGameSpectatorsButton = findEgyptianWarElement("#show-game-spectators");
 const toggleGameSidePanelButton = findEgyptianWarElement("#toggle-game-side-panel");
 const egyptianWarSidePanel = findEgyptianWarElement(".egyptian-war-side-panel");
+const openGameSidePanelButton = findEgyptianWarElement("#open-game-side-panel");
+const minimizeGameSidePanelButton = findEgyptianWarElement("#minimize-game-side-panel");
+const egyptianWarChatBadge = findEgyptianWarElement("#egyptian-war-chat-badge");
+
+// The side panel is a circle button ("closed"), a medium panel (the default)
+// or a large panel. Minimizing remembers which open size to come back to.
+let egyptianWarSidePanelMode = "medium";
+let egyptianWarSidePanelReopenMode = "medium";
+let egyptianWarUnreadChatCount = 0;
 
 let previousEgyptianWarState = null;
 let visibleEgyptianWarCards = [];
@@ -191,7 +200,7 @@ function showEgyptianWarGame(game) {
   );
   currentSettings = game.settings ?? currentSettings;
   renderEgyptianWarSlapRules(currentSettings);
-  setEgyptianWarSidePanelExpanded(false);
+  setEgyptianWarSidePanelMode("medium");
   configureEgyptianWarSidePanel(game.chatEnabled === true);
   egyptianWarChatMessages.replaceChildren();
 }
@@ -236,7 +245,21 @@ function configureEgyptianWarSidePanel(chatEnabled) {
   showEgyptianWarSidePanel(chatEnabled ? "chat" : "spectators");
 }
 
-function setEgyptianWarSidePanelExpanded(isExpanded) {
+// mode is "closed" (just the circle button), "medium" or "large".
+function setEgyptianWarSidePanelMode(mode) {
+  const isClosed = mode === "closed";
+  const isExpanded = mode === "large";
+
+  egyptianWarSidePanelMode = mode;
+  if (!isClosed) {
+    egyptianWarSidePanelReopenMode = mode;
+    egyptianWarUnreadChatCount = 0;
+    renderEgyptianWarChatBadge();
+  }
+
+  egyptianWarSidePanel.hidden = isClosed;
+  openGameSidePanelButton.hidden = !isClosed;
+  openGameSidePanelButton.setAttribute("aria-expanded", String(!isClosed));
   egyptianWarSidePanel.classList.toggle("is-expanded", isExpanded);
   toggleGameSidePanelButton.setAttribute(
     "aria-expanded",
@@ -252,6 +275,34 @@ function setEgyptianWarSidePanelExpanded(isExpanded) {
     return line;
   });
   toggleGameSidePanelButton.replaceChildren(...chevrons);
+}
+
+function setEgyptianWarSidePanelExpanded(isExpanded) {
+  setEgyptianWarSidePanelMode(isExpanded ? "large" : "medium");
+}
+
+function renderEgyptianWarChatBadge() {
+  const count = egyptianWarUnreadChatCount;
+  egyptianWarChatBadge.hidden = count === 0;
+  egyptianWarChatBadge.textContent = count > 9 ? "9+" : String(count);
+  const label = count === 0
+    ? "Open chat"
+    : `Open chat, ${count} new ${count === 1 ? "message" : "messages"}`;
+  openGameSidePanelButton.setAttribute("aria-label", label);
+  openGameSidePanelButton.title = label;
+}
+
+function minimizeEgyptianWarSidePanel() {
+  setEgyptianWarSidePanelMode("closed");
+  openGameSidePanelButton.focus();
+}
+
+function reopenEgyptianWarSidePanel() {
+  setEgyptianWarSidePanelMode(egyptianWarSidePanelReopenMode);
+  const selectedTab = showGameChatButton.getAttribute("aria-selected") === "true"
+    ? showGameChatButton
+    : showGameSpectatorsButton;
+  selectedTab.focus();
 }
 
 function updateEgyptianWarTurnTimer(state) {
@@ -1042,6 +1093,14 @@ function renderChatMessage(chatMessage) {
   item.append(name, message);
   egyptianWarChatMessages.appendChild(item);
   egyptianWarChatMessages.scrollTop = egyptianWarChatMessages.scrollHeight;
+
+  if (
+    egyptianWarSidePanelMode === "closed" &&
+    chatMessage.senderId !== currentContext?.memberId
+  ) {
+    egyptianWarUnreadChatCount += 1;
+    renderEgyptianWarChatBadge();
+  }
 }
 
 toggleSlapRulesButton.addEventListener("click", () => {
@@ -1079,8 +1138,10 @@ egyptianWarChatForm.addEventListener("submit", async (event) => {
 showGameChatButton.addEventListener("click", () => showEgyptianWarSidePanel("chat"));
 showGameSpectatorsButton.addEventListener("click", () => showEgyptianWarSidePanel("spectators"));
 toggleGameSidePanelButton.addEventListener("click", () => {
-  setEgyptianWarSidePanelExpanded(!egyptianWarSidePanel.classList.contains("is-expanded"));
+  setEgyptianWarSidePanelMode(egyptianWarSidePanelMode === "large" ? "medium" : "large");
 });
+minimizeGameSidePanelButton.addEventListener("click", minimizeEgyptianWarSidePanel);
+openGameSidePanelButton.addEventListener("click", reopenEgyptianWarSidePanel);
 
 const egyptianWarClientModule = {
   mount(context) {

@@ -936,7 +936,9 @@ body:has([data-game-plugin-root="egyptian-war"]:not([hidden])) #gameplay-view {
   max-width: calc(100% - 2rem);
   max-height: calc(100% - 2.75rem);
   flex-direction: column;
-  overflow: hidden;
+  /* Visible, so the minimize button can sit on the panel's corner. The
+     heading and the two tab panels clip their own content instead. */
+  overflow: visible;
   background: rgba(25, 29, 38, 0.96);
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 0.85rem;
@@ -946,6 +948,90 @@ body:has([data-game-plugin-root="egyptian-war"]:not([hidden])) #gameplay-view {
 
 .egyptian-war-side-panel.is-expanded {
   height: min(72vh, calc(100% - 2.75rem));
+}
+
+.egyptian-war-side-panel[hidden],
+.egyptian-war-chat-bubble[hidden] {
+  display: none;
+}
+
+/* The collapsed state: a small round chat button in the panel's corner. */
+.egyptian-war-chat-bubble {
+  position: absolute;
+  bottom: 0;
+  left: 0.5rem;
+  z-index: 6;
+  display: flex;
+  width: 3.25rem;
+  height: 3.25rem;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  color: #f8f9fa;
+  font-size: 1.5rem;
+  line-height: 1;
+  background: rgba(25, 29, 38, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 50%;
+  box-shadow: 0 0.6rem 1.4rem rgba(0, 0, 0, 0.4);
+  cursor: pointer;
+}
+
+.egyptian-war-chat-bubble:hover {
+  background: rgba(44, 51, 66, 0.98);
+}
+
+.egyptian-war-chat-bubble:focus-visible,
+.egyptian-war-side-minimize:focus-visible {
+  outline: 2px solid #8bb9fe;
+  outline-offset: 2px;
+}
+
+.egyptian-war-chat-badge {
+  position: absolute;
+  top: -0.3rem;
+  right: -0.3rem;
+  display: flex;
+  min-width: 1.3rem;
+  height: 1.3rem;
+  align-items: center;
+  justify-content: center;
+  padding: 0 0.3rem;
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1;
+  background: #dc3545;
+  border-radius: 999px;
+  box-shadow: 0 0.15rem 0.4rem rgba(0, 0, 0, 0.4);
+}
+
+.egyptian-war-chat-badge[hidden] {
+  display: none;
+}
+
+/* A small diagonal-arrow button on the panel's top-right corner; it
+   collapses the panel back to the round chat button. */
+
+.egyptian-war-side-minimize {
+  position: static;
+  flex: 0 0 1.75rem;
+  display: flex;
+  width: 1.75rem;
+  min-width: 1.75rem;
+  height: 1.75rem;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  color: #f8f9fa;
+  background: #232a37;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.egyptian-war-side-minimize:hover {
+  background: #333c4d;
 }
 
 .egyptian-war-action-area {
@@ -1096,11 +1182,12 @@ body:has([data-game-plugin-root="egyptian-war"]:not([hidden])) #gameplay-view {
 }
 
 .egyptian-war-side-panel-heading {
-  display: grid;
+  display: flex;
   flex: 0 0 auto;
-  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
   gap: 0.35rem;
   padding: 0.5rem;
+  border-radius: calc(0.85rem - 1px) calc(0.85rem - 1px) 0 0;
   background: rgba(7, 10, 15, 0.7);
   border-bottom: 1px solid rgba(255, 255, 255, 0.12);
   box-shadow: inset 0 -0.35rem 0.7rem rgba(0, 0, 0, 0.22);
@@ -1115,12 +1202,17 @@ body:has([data-game-plugin-root="egyptian-war"]:not([hidden])) #gameplay-view {
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 0.65rem;
   box-shadow: inset 0 0.2rem 0.45rem rgba(0, 0, 0, 0.4);
+
+  /* Add these */
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .egyptian-war-spectators,
 .egyptian-war-chat {
   min-height: 0;
   flex: 1 1 auto;
+  overflow: hidden;
   padding: 0.65rem;
 }
 
