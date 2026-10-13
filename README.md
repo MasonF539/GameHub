@@ -114,14 +114,15 @@ docker compose --profile public down
 
 ## Project structure
 
-GameHub uses npm workspaces so the plugin boundary is exercised before the
-packages are moved into separate repositories. `packages/game-sdk` contains
+GameHub currently uses npm workspaces so the plugin boundary remains testable
+until published packages replace the local game workspace. `packages/game-sdk` contains
 the shared contracts that connect GameHub to every game plugin. It is reusable
 GameHub platform code—not a playable game—and therefore lives under
 `packages/` rather than `games/`. It will remain owned and versioned by
-GameHub after Egyptian War moves to its own repository.
+GameHub while Egyptian War is developed in its own repository.
 
-`games/egyptian-war` owns the independently buildable game engine, tests,
+`games/egyptian-war` is the temporary workspace copy of the independently
+maintained Egyptian War repository. It owns the game engine, tests,
 documentation, package metadata, preview media, game-specific audio, HTML
 fragment, stylesheet, browser controller, and authoritative server session.
 GameHub loads enabled game packages from

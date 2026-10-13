@@ -51,17 +51,17 @@ to an independently versioned GameHub plugin.
 - Generated and updated the `egyptian-war-standalone` subtree branch so the
   package sits at repository root with its relevant commit history, standalone
   ignore/attribute files, current rules, UI, assets, tests, and license.
+- Replaced the generated README commit in
+  `github.com/MasonF539/Egyptian-War` with that prepared history and updated
+  the package repository, issue-tracker, and homepage metadata.
 
 ## In progress
 
-- Create the external Egyptian War GitHub repository and push the prepared
-  `egyptian-war-standalone` branch as its initial `main` branch.
 - Publish Egyptian War to npm and reinstall its exact version in GameHub as an
   external dependency.
 - Publish the SDK first so the independent Egyptian War repository can create
   its own lockfile against the real exact SDK release.
-- Confirm an npm scope owned by the project and the destination GitHub
-  repository name/visibility before changing repository metadata or publishing.
+- Confirm an npm scope owned by the project before publishing either package.
 
 ## Verification
 
@@ -77,10 +77,11 @@ to an independently versioned GameHub plugin.
 
 ## Final repository split
 
-Once the in-repository boundary is complete, `games/egyptian-war` can become
-its own repository and return to GameHub as a pinned package dependency. The
-GameHub repository keeps the SDK, platform, room system, transport, picker,
-chat, spectators, settings, and generic game host.
+Egyptian War now has its own repository. Its workspace copy remains here only
+until the SDK and game are published and GameHub can replace that workspace
+with a pinned registry dependency. The GameHub repository keeps the SDK,
+platform, room system, transport, picker, chat, spectators, settings, and
+generic game host.
 
 `packages/game-sdk` stays in GameHub because it is the platform-owned contract
 used by every game, not a playable game itself. Egyptian War and future game
