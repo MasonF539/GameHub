@@ -48,19 +48,24 @@ to an independently versioned GameHub plugin.
 - Added publish-safe package exports, package-local licenses, and an artifact
   verification step that packs both packages, installs their tarballs into a
   clean temporary consumer, and loads Egyptian War without workspace source.
+- Generated and updated the `egyptian-war-standalone` subtree branch so the
+  package sits at repository root with its relevant commit history, standalone
+  ignore/attribute files, current rules, UI, assets, tests, and license.
 
 ## In progress
 
-- Move `games/egyptian-war` into its independent repository, publish it to npm,
-  and reinstall an exact version in GameHub as an external dependency.
+- Create the external Egyptian War GitHub repository and push the prepared
+  `egyptian-war-standalone` branch as its initial `main` branch.
+- Publish Egyptian War to npm and reinstall its exact version in GameHub as an
+  external dependency.
 - Publish the SDK first so the independent Egyptian War repository can create
   its own lockfile against the real exact SDK release.
-- Confirm the npm scope and destination GitHub repository name before changing
-  the package's repository metadata or publishing either package.
+- Confirm an npm scope owned by the project and the destination GitHub
+  repository name/visibility before changing repository metadata or publishing.
 
 ## Verification
 
-- The full production Docker build compiles both workspaces and passes all 58
+- The full production Docker build compiles both workspaces and passes all 104
   automated tests.
 - The production container serves injected package markup and the
   package-owned browser module from its declared public route.
