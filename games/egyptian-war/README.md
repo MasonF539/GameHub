@@ -4,7 +4,7 @@ This directory contains the server-authoritative Egyptian War game plugin for
 GameHub and is exported to the `egyptian-war-standalone` branch for release.
 
 Egyptian War is designed to be installed and run by GameHub through the
-`@gamehub/game-sdk` contracts. It is independently versioned, but it is not a
+`@masonf539/game-sdk` contracts. It is independently versioned, but it is not a
 standalone web application and depends on GameHub for rooms, networking, the
 lobby, shared settings, and browser hosting.
 
@@ -25,7 +25,7 @@ The game board lives in `public/template.html`, and its presentation lives in
 `public/style.css`. GameHub injects the fragment into a package-specific root;
 the browser controller scopes its element lookups to that root.
 
-The package consumes an exact `@gamehub/game-sdk` release. Once both packages
+The package consumes an exact `@masonf539/game-sdk` release. Once both packages
 are published, GameHub installs an exact Egyptian War version and enables it
 through `gamehub.config.json`. GameHub's `npm run verify:packages` command
 currently verifies that both packed artifacts work without monorepo source.
@@ -46,6 +46,6 @@ their cooldown is clear.
 
 The package directory includes its own README, license, TypeScript settings,
 tests, public assets, and package metadata. Its only GameHub code dependency is
-the exact `@gamehub/game-sdk` version declared in `package.json`. A standalone
+the exact `@masonf539/game-sdk` version declared in `package.json`. A standalone
 lockfile will be generated after that SDK version is published so it records
 the registry artifact rather than the monorepo workspace link.

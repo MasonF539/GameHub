@@ -41,8 +41,8 @@
 - [x] Move Egyptian War preview media and game-specific audio into its package-owned public directory.
 - [x] Move Egyptian War markup, styles, previews, and game audio into its package boundary.
 - [x] Load installed game packages and their browser resources from explicit administrator-controlled configuration.
-- [ ] Publish `@gamehub/game-sdk` to the public npm registry, extract Egyptian
-  War into its own repository, make it consume an exact SDK release, and
+- [ ] Publish `@masonf539/game-sdk` to the public npm registry, publish the
+  extracted Egyptian War repository against that exact SDK release, and
   reinstall the game as a pinned package dependency.
 - [x] Add a minimal test plugin to prove that GameHub's host lifecycle contains
   no Egyptian War assumptions.

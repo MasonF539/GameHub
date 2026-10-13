@@ -6,7 +6,7 @@ import type {
   GameSessionContext,
   GameSettingValue,
   GameViewer
-} from "@gamehub/game-sdk";
+} from "@masonf539/game-sdk";
 import { egyptianWarManifest } from "./definition.js";
 import {
   applyEgyptianWarAction,

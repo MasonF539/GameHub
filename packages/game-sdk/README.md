@@ -20,8 +20,8 @@ The package is configured for public npm publication. From the repository
 root, first update its semantic version and verify the full suite, then run:
 
 ```powershell
-npm publish --workspace @gamehub/game-sdk
+npm publish --workspace @masonf539/game-sdk
 ```
 
-Publishing requires npm access to the `@gamehub` scope. Game packages should
+Publishing requires npm access to the `@masonf539` scope. Game packages should
 pin a released SDK version so their supported GameHub API is reproducible.

@@ -2,7 +2,7 @@ import {
   gameHubGameApiVersion,
   type GameDefinition,
   type GamePluginManifest
-} from "@gamehub/game-sdk";
+} from "@masonf539/game-sdk";
 
 export type CardSuit =
   | "clubs"

@@ -4,7 +4,7 @@ import type {
   GameEvent,
   GameMember,
   GameSessionContext
-} from "@gamehub/game-sdk";
+} from "@masonf539/game-sdk";
 import type { Card } from "./definition.js";
 import {
   isEgyptianWarStateSlappable,

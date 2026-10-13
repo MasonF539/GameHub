@@ -5,8 +5,8 @@ to an independently versioned GameHub plugin.
 
 ## Completed
 
-- Created independently buildable `@gamehub/game-sdk` and
-  `@gamehub/egyptian-war` npm workspaces.
+- Created independently buildable `@masonf539/game-sdk` and
+  `@masonf539/egyptian-war` npm workspaces.
 - Replaced private source imports with package-name imports.
 - Moved Egyptian War engine code, tests, design notes, preview media, music,
   effects, HTML markup, and CSS into `games/egyptian-war`.
@@ -54,6 +54,8 @@ to an independently versioned GameHub plugin.
 - Replaced the generated README commit in
   `github.com/MasonF539/Egyptian-War` with that prepared history and updated
   the package repository, issue-tracker, and homepage metadata.
+- Selected the account-owned `@masonf539` npm scope and renamed the SDK, game,
+  imports, configuration, verification script, and lockfile consistently.
 
 ## In progress
 
@@ -61,7 +63,6 @@ to an independently versioned GameHub plugin.
   external dependency.
 - Publish the SDK first so the independent Egyptian War repository can create
   its own lockfile against the real exact SDK release.
-- Confirm an npm scope owned by the project before publishing either package.
 
 ## Verification
 

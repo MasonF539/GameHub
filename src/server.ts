@@ -8,13 +8,13 @@ import {
   GamePluginRegistry,
   type GamePluginPackage,
   type GameSetting
-} from "@gamehub/game-sdk";
+} from "@masonf539/game-sdk";
 import type {
   GameActionEnvelope,
   GameEvent,
   GameSession,
   GameViewer
-} from "@gamehub/game-sdk";
+} from "@masonf539/game-sdk";
 import { FailedAttemptLimiter } from "./failedAttemptLimiter.js";
 import { resolveClientAddress } from "./clientAddress.js";
 import { RateLimiter } from "./rateLimiter.js";

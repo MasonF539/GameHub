@@ -1,5 +1,5 @@
 import path from "node:path";
-import type { GamePluginPackage } from "@gamehub/game-sdk";
+import type { GamePluginPackage } from "@masonf539/game-sdk";
 import { egyptianWarManifest as manifest } from "./definition.js";
 import { egyptianWarServer as server } from "./session.js";
 

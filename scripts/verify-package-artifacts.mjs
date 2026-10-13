@@ -88,7 +88,7 @@ try {
   const requireFromConsumer = createRequire(
     path.join(consumerDirectory, "package.json")
   );
-  const installedGame = requireFromConsumer("@gamehub/egyptian-war");
+  const installedGame = requireFromConsumer("@masonf539/egyptian-war");
   assert.equal(installedGame.gameHubPlugin.manifest.definition.id, "egyptian-war");
   assert.equal(
     installedGame.gameHubPlugin.server.manifest.definition.id,

@@ -20,7 +20,7 @@ Game packages execute trusted server code. They are not a sandbox for packages s
 
 ## Versioned contracts
 
-The independently buildable `@gamehub/game-sdk` workspace under
+The independently buildable `@masonf539/game-sdk` workspace under
 `packages/game-sdk` contains the initial GameHub game API:
 
 - `GamePluginManifest` identifies the API version, package version, public game definition, and client delivery method.
@@ -41,7 +41,7 @@ package dependencies.
 
 ## Current in-repository boundary
 
-Egyptian War is an independently buildable `@gamehub/egyptian-war` workspace
+Egyptian War is an independently buildable `@masonf539/egyptian-war` workspace
 under `games/egyptian-war`. Its package export supplies the manifest, public
 directory, and `GameServerPlugin`. The package-owned `GameSession` contains
 authoritative state, timers, slap arbitration, animation sequencing, pause and

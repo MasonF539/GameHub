@@ -1,5 +1,5 @@
 {
-  "name": "@gamehub/egyptian-war",
+  "name": "@masonf539/egyptian-war",
   "version": "1.0.0",
   "description": "Egyptian War game plugin for GameHub.",
   "main": "dist/index.js",
@@ -42,7 +42,7 @@
   },
   "homepage": "https://github.com/MasonF539/Egyptian-War#readme",
   "dependencies": {
-    "@gamehub/game-sdk": "1.0.0"
+    "@masonf539/game-sdk": "1.0.0"
   },
   "devDependencies": {
     "@types/node": "^26.6.4",
