@@ -451,7 +451,61 @@ test("a guest can leave an active game and the host keeps playing", { timeout: 2
     assert.equal((await emitAck(host, "start-game", { roomCode })).success, true);
 
     assert.equal((await emitAck(guest, "leave-game", { roomCode })).success, true);
-    // The room and its game are still there for the host.
+    assert.equal((await emitGameAction(guest, roomCode, "advance")).success, false);
+    assert.equal((await emitAck(guest, "game-chat-send", {
+      roomCode,
+      message: "I should no longer be in game chat."
+    })).success, false);
+
+    // The room and its game are still there for the host, but the lobby waiter
+    // is no longer exposed to the plugin as a player.
+    const hostState = waitForFixtureState(
+      host,
+      (state) => state.actionCount === 1
+    );
+    assert.equal((await emitGameAction(host, roomCode, "advance")).success, true);
+    assert.deepEqual(
+      (await hostState).members.map((member) => member.name),
+      ["Host"]
+    );
+
+    // Disconnecting after leaving the game must not pause it.
+    guest.disconnect();
+    const secondHostState = waitForFixtureState(
+      host,
+      (state) => state.actionCount === 2
+    );
+    assert.equal((await emitGameAction(host, roomCode, "advance")).success, true);
+    assert.equal((await secondHostState).isPaused, false);
+  } finally {
+    host.close();
+    guest.close();
+    await stopServer(server);
+  }
+});
+
+test("the host can remove a lobby waiter while a game remains active", { timeout: 25_000 }, async () => {
+  const { server, url } = await startServer();
+  const { roomCode, host, guests } = await startFixtureGame(url);
+  const [guest] = guests;
+
+  try {
+    assert.equal((await emitAck(guest, "leave-game", { roomCode })).success, true);
+    const playerList = waitForEvent<Array<{ name: string }>>(
+      host,
+      "player-list",
+      (players) => players.length === 1
+    );
+    const kicked = waitForEvent<{ message: string }>(guest, "kicked-from-room");
+
+    const result = await emitAck(host, "kick-player", {
+      roomCode,
+      playerId: guest.id
+    });
+
+    assert.equal(result.success, true);
+    assert.match((await kicked).message, /removed from the lobby/i);
+    assert.deepEqual((await playerList).map((player) => player.name), ["Host"]);
     assert.equal((await emitGameAction(host, roomCode, "advance")).success, true);
   } finally {
     host.close();

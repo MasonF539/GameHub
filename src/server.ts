@@ -32,6 +32,8 @@ type Room = {
   hostId: string;
   players: Map<string, Player>;
   spectators: Map<string, Player>;
+  /** Lobby players who are still participating in the current game. */
+  activeGamePlayerIds: Set<string>;
   selectedGameId: string | null;
   gameSettings: Record<string, GameSettingValue>;
   isLocked: boolean;
@@ -340,6 +342,11 @@ function getRoomMember(
     : null;
 }
 
+function isActiveGameViewer(room: Room, memberId: string): boolean {
+  return room.spectators.has(memberId) ||
+    room.activeGamePlayerIds.has(memberId);
+}
+
 function promoteSpectatorsToPlayers(
   roomCode: string,
   room: Room
@@ -430,7 +437,9 @@ function markPlayerReconnected(
   if (player) {
     player.isConnected = true;
   }
-  room.gameSession?.memberReconnected?.(playerId);
+  if (room.activeGamePlayerIds.has(playerId)) {
+    room.gameSession?.memberReconnected?.(playerId);
+  }
 }
 
 // Names may not contain control characters, invisible characters or bidi
@@ -497,6 +506,7 @@ function sendRoomResumed(
   roomCode: string,
   room: Room
 ): void {
+  const canViewActiveGame = isActiveGameViewer(room, socket.id);
   socket.emit("room-resumed", {
     roomCode,
     isHost: room.hostId === socket.id,
@@ -504,13 +514,14 @@ function sendRoomResumed(
     isLocked: room.isLocked,
     selectedGameId: room.selectedGameId,
     gameSettings: room.gameSettings,
-    activeGameId: room.activeGameId,
+    activeGameId: canViewActiveGame ? room.activeGameId : null,
     isPaused: room.gameSession?.getLifecycleState().isPaused ?? false,
-    chatEnabled:
-      getGameDefinition(room.activeGameId)?.chatEnabled ?? false
+    chatEnabled: canViewActiveGame
+      ? getGameDefinition(room.activeGameId)?.chatEnabled ?? false
+      : false
   });
 
-  if (room.activeGameId !== null) {
+  if (room.activeGameId !== null && canViewActiveGame) {
     sendActiveGameState(roomCode, room, socket);
   }
 }
@@ -574,6 +585,7 @@ function removeMemberFromRoom(
   role: "player" | "spectator",
   kickedMessage?: string
 ): void {
+  room.activeGamePlayerIds.delete(memberId);
   (role === "player" ? room.players : room.spectators).delete(memberId);
   socketRoomCodes.delete(memberId);
   removePlayerResumeTokens(memberId, kickedMessage);
@@ -632,7 +644,11 @@ function scheduleDisconnectExpiry(
       return;
     }
 
-    if (found.role === "player" && room.gameSession !== null) {
+    if (
+      found.role === "player" &&
+      room.gameSession !== null &&
+      room.activeGamePlayerIds.has(memberId)
+    ) {
       return;
     }
 
@@ -689,7 +705,9 @@ function disposeGameSession(room: Room): void {
 }
 
 function getGameViewer(room: Room, memberId: string): GameViewer | null {
-  if (room.players.has(memberId)) return { memberId, role: "player" };
+  if (room.activeGamePlayerIds.has(memberId)) {
+    return { memberId, role: "player" };
+  }
   if (room.spectators.has(memberId)) return { memberId, role: "spectator" };
   return null;
 }
@@ -728,6 +746,7 @@ function finishActiveGame(
   if (rooms.get(roomCode) !== room || room.activeGameId === null) return;
   disposeGameSession(room);
   room.activeGameId = null;
+  room.activeGamePlayerIds.clear();
   promoteSpectatorsToPlayers(roomCode, room);
 
   // Players who dropped during the game never got an expiry timer.
@@ -853,6 +872,10 @@ io.on("connection", (socket) => {
       room.hostId = socket.id;
     }
 
+    if (room.activeGamePlayerIds.delete(oldPlayerId)) {
+      room.activeGamePlayerIds.add(socket.id);
+    }
+
     if (previousSocket && oldPlayerId !== socket.id) {
       previousSocket.emit("room-session-replaced");
       previousSocket.leave(session.roomCode);
@@ -868,7 +891,7 @@ io.on("connection", (socket) => {
       socket.id
     );
     socket.join(session.roomCode);
-    if (role === "player") {
+    if (role === "player" && room.activeGamePlayerIds.has(socket.id)) {
       room.gameSession?.memberReconnected?.(socket.id, oldPlayerId);
     }
     sendRoomSnapshot(socket, session.roomCode, room, rotatedResumeToken);
@@ -925,6 +948,7 @@ io.on("connection", (socket) => {
       hostId: socket.id,
       players: new Map(),
       spectators: new Map(),
+      activeGamePlayerIds: new Set(),
       selectedGameId: null,
       gameSettings: {},
       isLocked: false,
@@ -1339,15 +1363,21 @@ io.on("connection", (socket) => {
       return;
     }
 
-    const wasInActiveGame = room.gameSession !== null;
-    const removalResult = room.gameSession?.memberRemoved?.(playerId) ??
-      (wasInActiveGame
-        ? { success: false, message: "Players cannot be removed during this game." }
-        : { success: true, message: "Player removed from the lobby." });
+    const wasInActiveGame =
+      room.gameSession !== null &&
+      room.activeGamePlayerIds.has(playerId);
+    const removalResult = wasInActiveGame
+      ? room.gameSession?.memberRemoved?.(playerId) ?? {
+        success: false,
+        message: "Players cannot be removed during this game."
+      }
+      : { success: true, message: "Player removed from the lobby." };
     if (!removalResult.success) {
       respond(removalResult);
       return;
     }
+
+    room.activeGamePlayerIds.delete(playerId);
 
     const kickedMessage = wasInActiveGame
       ? "You were kicked from the game while disconnected."
@@ -1424,6 +1454,8 @@ io.on("connection", (socket) => {
       respond(result);
       return;
     }
+
+    room.activeGamePlayerIds.delete(socket.id);
 
     // IMPORTANT: do NOT call removeMemberFromRoom().
     // The player is leaving the game but staying in the lobby.
@@ -1525,12 +1557,15 @@ io.on("connection", (socket) => {
       return;
     }
 
+    room.activeGamePlayerIds = new Set(room.players.keys());
     let createdSession: GameSession | null = null;
     try {
       createdSession = gamePackage.server.createSession({
         roomCode,
         members: () => [
-          ...Array.from(room.players.values(), (member) => ({
+          ...Array.from(room.players.values())
+            .filter((member) => room.activeGamePlayerIds.has(member.id))
+            .map((member) => ({
             ...member,
             role: "player" as const
           })),
@@ -1552,6 +1587,7 @@ io.on("connection", (socket) => {
         randomInteger: deterministicTestRandomInteger
       }, room.gameSettings);
     } catch (error) {
+      room.activeGamePlayerIds.clear();
       console.error(`Unable to initialize ${game.name} in room ${roomCode}:`, error);
       respond({
         success: false,
@@ -1569,6 +1605,7 @@ io.on("connection", (socket) => {
       console.error(`Unable to start ${game.name} in room ${roomCode}:`, error);
       disposeGameSession(room);
       room.activeGameId = null;
+      room.activeGamePlayerIds.clear();
       respond({
         success: false,
         message: "Unable to start the game. Please try again."
@@ -1704,7 +1741,8 @@ io.on("connection", (socket) => {
     if (
       !room ||
       !roomMember ||
-      room.activeGameId === null
+      room.activeGameId === null ||
+      !isActiveGameViewer(room, socket.id)
     ) {
       respond({
         success: false,
@@ -1778,10 +1816,10 @@ io.on("connection", (socket) => {
       return;
     }
 
-    if (!getRoomMember(room, socket.id)) {
+    if (!isActiveGameViewer(room, socket.id)) {
       respond({
         success: false,
-        message: "Join this room before submitting game actions."
+        message: "Join this room as an active game participant before submitting actions."
       });
       return;
     }
@@ -1822,7 +1860,10 @@ io.on("connection", (socket) => {
 
     found.member.isConnected = false;
 
-    if (found.role === "player") {
+    if (
+      found.role === "player" &&
+      room.activeGamePlayerIds.has(socket.id)
+    ) {
       room.gameSession?.memberDisconnected?.(socket.id);
     }
 
@@ -1834,7 +1875,8 @@ io.on("connection", (socket) => {
     if (
       found.role === "spectator" ||
       room.gameSession === null ||
-      room.hostId === socket.id
+      room.hostId === socket.id ||
+      !room.activeGamePlayerIds.has(socket.id)
     ) {
       scheduleDisconnectExpiry(roomCode, room, socket.id);
     }

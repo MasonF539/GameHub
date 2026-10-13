@@ -28,7 +28,7 @@ export class FailedAttemptLimiter {
 
   recordFailure(key: string, now = Date.now()): void {
     const window = this.#attempts.get(key);
-    if (!window) {
+    if (!window || window.expiresAt <= now) {
       this.#makeRoom(now);
       this.#attempts.set(key, {
         failures: 1,

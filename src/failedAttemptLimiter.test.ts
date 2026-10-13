@@ -22,6 +22,17 @@ test("expired and successful attempt windows can be cleared", () => {
   assert.equal(limiter.isBlocked("successful", 301), false);
 });
 
+test("recording after expiry starts a fresh failure window", () => {
+  const limiter = new FailedAttemptLimiter(2, 100);
+
+  limiter.recordFailure("client", 100);
+  limiter.recordFailure("client", 200);
+
+  assert.equal(limiter.isBlocked("client", 201), false);
+  limiter.recordFailure("client", 202);
+  assert.equal(limiter.isBlocked("client", 203), true);
+});
+
 test("never tracks more keys than the cap", () => {
   const limiter = new FailedAttemptLimiter(1, 1_000, 3);
 

@@ -115,8 +115,8 @@ export type GameClientContext = {
   requestPause(isPaused: boolean): Promise<GameActionResult>;
   sendChat(message: string): Promise<GameActionResult>;
   removeMember(memberId: string): Promise<GameActionResult>;
-  /** Leaves the room (not available to the host, who closes the lobby). */
-  requestLeave(): Promise<GameActionResult>;
+  /** Opens the confirmation flow for leaving the active game but staying in its room. */
+  requestLeave(): void;
   notify(message: string): void;
   requestExit(): void;
 };

@@ -660,24 +660,19 @@ export function isEgyptianWarPileSlappable(
 
   if (settings.allowTens) {
     const lastValue = cardRankValue(last);
+    const previous = pile[pile.length - 2];
+    const previousValue = previous === undefined
+      ? null
+      : cardRankValue(previous.rank);
 
-    if (lastValue !== null && lastValue <= 10) {
-      for (const previousIndex of [pile.length - 2]) {
-        if (previousIndex < 0) {
-          continue;
-        }
-
-        const previousCard = pile[previousIndex];
-        const previousValue = cardRankValue(previousCard.rank);
-        
-        if (
-          previousValue !== null &&
-          previousValue <= 10 &&
-          previousValue + lastValue === 10
-        ) {
-          return true;
-        }
-      }
+    if (
+      lastValue !== null &&
+      lastValue <= 10 &&
+      previousValue !== null &&
+      previousValue <= 10 &&
+      previousValue + lastValue === 10
+    ) {
+      return true;
     }
   }
 
