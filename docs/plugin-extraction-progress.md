@@ -59,6 +59,12 @@ to an independently versioned GameHub plugin.
 - Kept the Settings interface and its reusable Game actions in GameHub while
   making the Egyptian War viewport stable, safe-area-aware, and
   non-overlapping on small screens.
+- Kept platform audio semantics separate from game audio: lobby waiters receive
+  a GameHub completion chime when a match ends, while returning participants do
+  not trigger the new-player sound.
+- Hardened the Windows public launcher by resolving the tunnel before opening
+  the browser and verifying that the complete Quick Tunnel URL reached the
+  clipboard.
 
 ## In progress
 
@@ -88,6 +94,13 @@ until the SDK and game are published and GameHub can replace that workspace
 with a pinned registry dependency. The GameHub repository keeps the SDK,
 platform, room system, transport, picker, chat, spectators, settings, and
 generic game host.
+
+The generic host now keeps gameplay events scoped to current board viewers.
+Spectators can return to the lobby, lobby waiters can rejoin an active board
+as spectators, and the client retains spectator-list updates that arrive
+before a package finishes mounting. Lobby waiters hear a distinct completion
+chime when a game finishes, while returning participants are excluded from
+normal player-join notification detection.
 
 `packages/game-sdk` stays in GameHub because it is the platform-owned contract
 used by every game, not a playable game itself. Egyptian War and future game

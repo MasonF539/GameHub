@@ -1023,6 +1023,7 @@ function renderEgyptianWarState(state) {
     state.status !== "playing" ||
     state.isPaused ||
     state.isAnimating ||
+    state.canPlayCard !== true ||
     state.currentPlayerId !== currentContext.memberId;
   egyptianWarSlapButton.disabled =
     (currentContext.role === "spectator") ||
@@ -1105,6 +1106,10 @@ toggleSlapRulesButton.addEventListener("click", () => {
   toggleSlapRulesButton.setAttribute("aria-expanded", String(expanded));
   toggleSlapRulesButton.textContent = expanded ? "Hide" : "Show";
   egyptianWarSlapRulesList.hidden = !expanded;
+  egyptianWarSlapRulesList.parentElement.classList.toggle(
+    "is-collapsed",
+    !expanded
+  );
 });
 egyptianWarPlayCardButton.addEventListener("click", async () => {
   const response = await currentContext?.submitAction({ type: "play-card" });

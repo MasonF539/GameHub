@@ -263,6 +263,7 @@ test("public state exposes card counts but not hidden decks", () => {
   assert.equal(publicState.isPaused, false);
   assert.equal(publicState.isAnimating, false);
   assert.equal(publicState.hasFaceUpCards, false);
+  assert.equal(publicState.canPlayCard, true);
   assert.equal(
     publicState.players.reduce(
       (total, player) => total + player.cardCount,
@@ -544,6 +545,7 @@ test("a final failed challenge that creates a slap waits for a slap or timer", (
   assert.equal(state.pile.length, 3);
   assert.equal(state.challenge, null);
   assert.equal(state.status, "playing");
+  assert.equal(createPublicEgyptianWarState(state).canPlayCard, false);
   assert.throws(
     () => applyEgyptianWarAction(state, players[0].id, "play-card"),
     /pile is being resolved/

@@ -98,6 +98,10 @@ test("switches music scenes and independently adjusts persisted audio categories
   assert.match(audioInstances.at(-1).src, /test-game\/action\.mp3$/);
   assert.equal(audioInstances.at(-1).playCount, 1);
 
+  audio.playEffect("game-finished");
+  assert.match(audioInstances.at(-1).src, /game-finished\.mp3$/);
+  assert.equal(audioInstances.at(-1).playCount, 1);
+
   musicVolume.value = "50";
   musicVolume.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
   assert.equal(music.volume, 0.21);

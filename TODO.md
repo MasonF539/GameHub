@@ -6,6 +6,7 @@
 
 - [x] Keep a compact GameHub Settings shortcut aligned above package-owned controls and place reusable Full Screen, Pause/Resume, and Exit/Leave actions in its Game tab.
 - [x] Prevent mobile browser viewport changes from pushing active Egyptian War gameplay off-screen.
+- [x] Move the GameHub Settings tabs above their content at medium and small breakpoints.
 
 ### Spectator mode for games in progress
 
@@ -16,6 +17,8 @@
 - [x] Prevent spectators from submitting game actions.
 - [x] Enforce spectator restrictions on the server, not only in the browser.
 - [x] Allow spectators to become players when the room returns to the lobby.
+- [x] Let spectators leave the board for the lobby and let lobby waiters spectate the still-active game again.
+- [x] Deliver game events only to active board viewers and use a distinct GameHub completion chime for lobby waiters instead of treating returning participants as new joins.
 - [ ] Let each additional game define the information included in its spectator snapshot before that game becomes playable.
 
 ### Visual game selection

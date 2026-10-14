@@ -68,9 +68,7 @@ const gameClientHost = new window.GameHubGameClientHost({
         resolve
       );
     }),
-    requestLeave: () => {
-      bootstrap.Modal.getOrCreateInstance(leaveGameModalElement).show();
-    },
+    requestLeave: showLeaveGameConfirmation,
     notify: showToast,
     requestExit: () => {
       bootstrap.Modal.getOrCreateInstance(exitGameModalElement).show();
@@ -85,12 +83,16 @@ const confirmExitGameButton =
   document.querySelector("#confirm-exit-game");
 const confirmLeaveGameButton =
   document.querySelector("#confirm-leave-game");
+const confirmLeaveSpectatorButton =
+  document.querySelector("#confirm-leave-spectator");
 const closeLobbyModalElement =
   document.querySelector("#close-lobby-modal");
 const exitGameModalElement =
   document.querySelector("#exit-game-modal");
 const leaveGameModalElement =
   document.querySelector("#leave-game-modal");
+const leaveSpectatorModalElement =
+  document.querySelector("#leave-spectator-modal");
 const createRoomButton = document.querySelector("#create-room");
 const createdRoom = document.querySelector("#created-room");
 const toggleRoomCodeButton =
@@ -124,6 +126,7 @@ const settingsModalBody =
 const saveGameSettingsButton =
   document.querySelector("#save-game-settings");
 const startGameButton = document.querySelector("#start-game");
+const spectateGameButton = document.querySelector("#spectate-game");
 const gameStatus = document.querySelector("#game-status");
 const closeLobbyButton = document.querySelector("#close-lobby");
 const leaveLobbyButton = document.querySelector("#leave-lobby");
@@ -166,6 +169,9 @@ let isGameSelectionPending = false;
 let currentActiveGameId = null;
 let activeGameIsPaused = false;
 let activeGameIsBusy = false;
+let roomHasActiveGame = false;
+let currentSpectators = [];
+let returningGameMemberIds = new Set();
 
 const lastRoomStorageKey = "gamehub:last-room";
 
@@ -290,15 +296,36 @@ function updateGameSettingsControls() {
 
   const exitLabel = !hasActiveGame || isCurrentUserHost
     ? "Exit Game"
-    : "Leave Game";
+    : isCurrentUserSpectator
+      ? "Stop Spectating"
+      : "Leave Game";
   appGameExitLabel.textContent = exitLabel;
   appGameExitButton.textContent = !hasActiveGame || isCurrentUserHost
     ? "Exit"
     : "Leave";
-  appGameExitButton.disabled = !hasActiveGame || isCurrentUserSpectator;
+  appGameExitButton.disabled = !hasActiveGame;
 }
 
-function placeAppUtilityControls(inGameplay) {
+function showLeaveGameConfirmation() {
+  const modalElement = isCurrentUserSpectator
+    ? leaveSpectatorModalElement
+    : leaveGameModalElement;
+  bootstrap.Modal.getOrCreateInstance(modalElement).show();
+}
+
+function updateLobbyGameAction() {
+  const canSpectate =
+    currentRoomCode !== null &&
+    !isCurrentUserHost &&
+    !isCurrentUserSpectator &&
+    roomHasActiveGame &&
+    currentActiveGameId === null;
+
+  spectateGameButton.classList.toggle("d-none", !canSpectate);
+  spectateGameButton.disabled = !canSpectate;
+}
+
+function placeAppUtilityControls(inGameplay = false) {
   if (inGameplay) {
     gameplayView.append(appUtilityControls);
     return;
@@ -346,7 +373,9 @@ appGameExitButton.addEventListener("click", () => {
   bootstrap.Modal.getOrCreateInstance(appSettingsModalElement).hide();
   const confirmationModal = isCurrentUserHost
     ? exitGameModalElement
-    : leaveGameModalElement;
+    : isCurrentUserSpectator
+      ? leaveSpectatorModalElement
+      : leaveGameModalElement;
   bootstrap.Modal.getOrCreateInstance(confirmationModal).show();
 });
 
@@ -441,6 +470,7 @@ function showLobby(roomCode, isHost) {
   leaveLobbyButton.classList.toggle("d-none", isHost);
   toggleRoomLockButton.classList.toggle("d-none", !isHost);
   startGameButton.classList.toggle("d-none", !isHost);
+  updateLobbyGameAction();
   updateGamePicker();
 
   updateRoomLockDisplay();
@@ -460,6 +490,9 @@ function showEntry() {
   currentActiveGameId = null;
   activeGameIsPaused = false;
   activeGameIsBusy = false;
+  roomHasActiveGame = false;
+  currentSpectators = [];
+  returningGameMemberIds.clear();
   updateGameSettingsControls();
   gameHubAudio.setScene("menu");
   gameplayView.classList.add("d-none");
@@ -467,7 +500,7 @@ function showEntry() {
   entryView.classList.remove("d-none");
 }
 
-function showLobbyAfterLeavingGame() {
+function showLobbyAfterLeavingGame(hasActiveGame = true, wasSpectator = false) {
   placeAppUtilityControls(false);
   currentActiveGameId = null;
   activeGameIsPaused = false;
@@ -479,7 +512,11 @@ function showLobbyAfterLeavingGame() {
   lobbyView.classList.remove("d-none");
   gameHubAudio.setScene("menu");
   isCurrentUserSpectator = false;
-  gameStatus.textContent = "You left the game and returned to the lobby.";
+  roomHasActiveGame = hasActiveGame;
+  updateLobbyGameAction();
+  gameStatus.textContent = wasSpectator
+    ? "You stopped spectating and returned to the lobby."
+    : "You left the game and returned to the lobby.";
 }
 
 function resetRoomState() {
@@ -498,10 +535,15 @@ function resetRoomState() {
   currentActiveGameId = null;
   activeGameIsPaused = false;
   activeGameIsBusy = false;
+  roomHasActiveGame = false;
+  currentSpectators = [];
+  returningGameMemberIds.clear();
   updateGameSettingsControls();
 
   createRoomButton.disabled = false;
   startGameButton.disabled = true;
+  spectateGameButton.classList.add("d-none");
+  spectateGameButton.disabled = true;
   joinRoomButton.disabled = false;
   roomCodeInput.disabled = false;
   playerNameInput.disabled = false;
@@ -1028,10 +1070,12 @@ socket.on("disconnect", () => {
 
 socket.on("room-resumed", (room) => {
   hasReceivedPlayerList = false;
+  returningGameMemberIds.clear();
   selectedGameId = room.selectedGameId;
   currentGameSettings = room.gameSettings ?? {};
   isRoomLocked = room.isLocked;
   isCurrentUserSpectator = room.role === "spectator";
+  roomHasActiveGame = room.hasActiveGame === true || room.activeGameId !== null;
   showLobby(room.roomCode, room.isHost);
   updateRoomLockDisplay();
   if (room.activeGameId !== null) {
@@ -1108,6 +1152,7 @@ socket.on("player-list", (players) => {
   const hasNewLobbyPlayer =
     hasReceivedPlayerList &&
     players.some((player) =>
+      !returningGameMemberIds.has(player.id) &&
       !previousPlayerIds.has(player.id) &&
       !previousPlayerSignatures.has(
         `${player.name}\u0000${player.avatar}`
@@ -1116,6 +1161,11 @@ socket.on("player-list", (players) => {
 
   currentPlayers = players;
   hasReceivedPlayerList = true;
+  returningGameMemberIds = new Set(
+    [...returningGameMemberIds].filter(
+      (memberId) => !players.some((player) => player.id === memberId)
+    )
+  );
 
   if (hasNewLobbyPlayer) {
     gameHubAudio.playEffect("player-join");
@@ -1236,10 +1286,16 @@ function mountGameClient(game) {
   gameplayView.classList.remove("d-none");
   placeAppUtilityControls(true);
   currentActiveGameId = game.gameId;
+  roomHasActiveGame = true;
   activeGameIsPaused = game.isPaused === true;
   activeGameIsBusy = false;
   updateGameSettingsControls();
   gameClientHost.mount(game.gameId, game);
+  gameClientHost.receivePlatformEvent({
+    type: "spectators",
+    payload: currentSpectators
+  });
+  updateLobbyGameAction();
 }
 
 socket.on("game-started", (game) => {
@@ -1262,6 +1318,7 @@ socket.on("game-lifecycle", ({ gameId, isPaused, isBusy }) => {
 });
 
 socket.on("spectator-list", (spectators) => {
+  currentSpectators = spectators;
   gameClientHost.receivePlatformEvent({
     type: "spectators",
     payload: spectators
@@ -1275,17 +1332,27 @@ socket.on("game-chat-message", (chatMessage) => {
   });
 });
 
-socket.on("game-ended", ({ message }) => {
+socket.on("game-ended", ({ message, returningMemberIds = [] }) => {
+  const wasWaitingInLobby = currentActiveGameId === null;
+  returningGameMemberIds = new Set(
+    Array.isArray(returningMemberIds) ? returningMemberIds : []
+  );
+  if (wasWaitingInLobby) {
+    gameHubAudio.playEffect("game-finished");
+  }
   placeAppUtilityControls(false);
   currentActiveGameId = null;
   activeGameIsPaused = false;
   activeGameIsBusy = false;
+  roomHasActiveGame = false;
+  currentSpectators = [];
   updateGameSettingsControls();
   gameClientHost.unmount();
   gameplayView.classList.add("d-none");
   lobbyView.classList.remove("d-none");
   gameHubAudio.setScene("menu");
   isCurrentUserSpectator = false;
+  updateLobbyGameAction();
   updateStartGameAvailability();
   gameStatus.textContent = message;
 });
@@ -1297,28 +1364,40 @@ socket.on("kicked-from-room", ({ message }) => {
   showToast(message);
 });
 
-confirmLeaveGameButton.addEventListener("click", () => {
+function leaveActiveGame(confirmButton, modalElement) {
   if (currentRoomCode === null || isCurrentUserHost) {
     return;
   }
 
-  confirmLeaveGameButton.disabled = true;
+  const wasSpectator = isCurrentUserSpectator;
+  confirmButton.disabled = true;
   socket.emit(
     "leave-game",
     { roomCode: currentRoomCode },
     (response) => {
-      confirmLeaveGameButton.disabled = false;
+      confirmButton.disabled = false;
       if (!response.success) {
         showToast(response.message);
         return;
       }
 
       bootstrap.Modal
-        .getOrCreateInstance(leaveGameModalElement)
+        .getOrCreateInstance(modalElement)
         .hide();
-      showLobbyAfterLeavingGame();
+      showLobbyAfterLeavingGame(
+        response.hasActiveGame !== false,
+        wasSpectator
+      );
     }
   );
+}
+
+confirmLeaveGameButton.addEventListener("click", () => {
+  leaveActiveGame(confirmLeaveGameButton, leaveGameModalElement);
+});
+
+confirmLeaveSpectatorButton.addEventListener("click", () => {
+  leaveActiveGame(confirmLeaveSpectatorButton, leaveSpectatorModalElement);
 });
 
 leaveLobbyButton.addEventListener("click", () => {
@@ -1510,6 +1589,34 @@ startGameButton.addEventListener("click", () => {
   );
 });
 
+spectateGameButton.addEventListener("click", () => {
+  if (
+    currentRoomCode === null ||
+    isCurrentUserHost ||
+    !roomHasActiveGame ||
+    currentActiveGameId !== null
+  ) {
+    return;
+  }
+
+  spectateGameButton.disabled = true;
+  socket.emit(
+    "spectate-game",
+    { roomCode: currentRoomCode },
+    (response) => {
+      if (!response.success) {
+        spectateGameButton.disabled = false;
+        showToast(response.message);
+        return;
+      }
+
+      isCurrentUserSpectator = true;
+      updateLobbyGameAction();
+      showToast("You joined the game as a spectator.");
+    }
+  );
+});
+
 joinRoomButton.addEventListener("click", () => {
   if (isRoomRequestPending || currentRoomCode !== null) {
     return;
@@ -1538,6 +1645,7 @@ joinRoomButton.addEventListener("click", () => {
 
       isRoomRequestPending = false;
       isCurrentUserSpectator = response.role === "spectator";
+      roomHasActiveGame = response.activeGameId !== null;
       showLobby(response.roomCode, false);
       saveResumeSession(response.roomCode, response.resumeToken);
 

@@ -339,9 +339,14 @@ test(
         "player-list",
         (players) => players.some((player) => player.name === "Viewer")
       );
+      const gameEndedPromise = waitForEvent<{
+        returningMemberIds: string[];
+      }>(host, "game-ended");
       assert.equal((await emitAck(host, "close-game-to-lobby", {
         roomCode
       })).success, true);
+      const gameEnded = await gameEndedPromise;
+      assert.equal(gameEnded.returningMemberIds.length, 1);
       const promotedPlayers = await promotedPlayersPromise;
       assert.equal(
         promotedPlayers.find((player) => player.name === "Viewer")?.isConnected,
@@ -457,6 +462,12 @@ test("a guest can leave an active game and the host keeps playing", { timeout: 2
       message: "I should no longer be in game chat."
     })).success, false);
 
+    let lobbyGameEventCount = 0;
+    const countLobbyGameEvent = (): void => {
+      lobbyGameEventCount += 1;
+    };
+    guest.on("game-event", countLobbyGameEvent);
+
     // The room and its game are still there for the host, but the lobby waiter
     // is no longer exposed to the plugin as a player.
     const hostState = waitForFixtureState(
@@ -468,6 +479,18 @@ test("a guest can leave an active game and the host keeps playing", { timeout: 2
       (await hostState).members.map((member) => member.name),
       ["Host"]
     );
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.equal(lobbyGameEventCount, 0);
+    guest.off("game-event", countLobbyGameEvent);
+
+    const spectatorState = waitForFixtureState(
+      guest,
+      (state) => state.viewerRole === "spectator"
+    );
+    assert.equal((await emitAck(guest, "spectate-game", { roomCode })).success, true);
+    assert.equal((await spectatorState).viewerRole, "spectator");
+    assert.equal((await emitAck(guest, "leave-game", { roomCode })).success, true);
+    assert.equal((await emitGameAction(guest, roomCode, "advance")).success, false);
 
     // Disconnecting after leaving the game must not pause it.
     guest.disconnect();

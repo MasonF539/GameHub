@@ -27,7 +27,14 @@ the browser controller scopes its element lookups to that root.
 During active play, the stylesheet fixes the board to the available viewport,
 accounts for mobile safe areas, and keeps its compact Pause/connection row
 below GameHub's Settings shortcut. Full Screen and confirmed Exit/Leave
-actions remain platform-owned controls in GameHub's reusable Game tab.
+actions remain platform-owned controls in GameHub's reusable Game tab. The
+shortcut is mounted inside the active game viewport, while the Settings tabs
+move into one horizontal row at medium and small widths.
+The package's public state also states whether the current player may legally
+play a card, keeping the action disabled during the final slap window after a
+failed challenge. Its numeric countdown stays fixed at the right edge inside
+the full-width timer track while the yellow fill passes beneath it, and the
+complete timer scales with the action controls on narrow screens.
 
 The package consumes an exact `@masonf539/game-sdk` release. Once both packages
 are published, GameHub installs an exact Egyptian War version and enables it

@@ -51,6 +51,7 @@ export type EgyptianWarState = {
 export type PublicEgyptianWarState = {
   status: EgyptianWarState["status"];
   currentPlayerId: string | null;
+  canPlayCard: boolean;
   winnerId: string | null;
   pileCardCount: number;
   hasFaceUpCards: boolean;
@@ -1069,6 +1070,10 @@ export function createPublicEgyptianWarState(
   return {
     status: state.status,
     currentPlayerId: currentPlayer?.id ?? null,
+    canPlayCard:
+      state.status === "playing" &&
+      state.pendingPileWinnerId === null &&
+      (currentPlayer?.cards.length ?? 0) > 0,
     winnerId: state.winnerId,
     pileCardCount: state.pile.length,
     hasFaceUpCards: faceUpCards.length > 0,

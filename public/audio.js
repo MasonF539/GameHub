@@ -11,13 +11,16 @@
     menu: "/assets/audio/music/menu-lobby.mp3"
   };
   const effectSources = {
-    "player-join": "/assets/audio/effects/player-join.mp3"
+    "player-join": "/assets/audio/effects/player-join.mp3",
+    "game-finished": "/assets/audio/effects/game-finished.mp3"
   };
   const effectVolumes = {
-    "player-join": 0.8
+    "player-join": 0.8,
+    "game-finished": 0.8
   };
   const effectCategories = {
-    "player-join": "join"
+    "player-join": "join",
+    "game-finished": "join"
   };
   const musicBaseVolume = 0.42;
   const music = new Audio();

@@ -70,9 +70,10 @@ Game tab exposes full-screen, lifecycle pause/resume, and confirmed exit/leave
 actions without querying package-specific controls. Game packages remain
 responsible for fitting their mounted panels to the supplied viewport;
 Egyptian War fixes its active panel to that viewport and accounts for mobile
-safe areas.
+safe areas. The settings categories are vertical on large screens and move
+above the selected panel horizontally at medium and small breakpoints.
 
-The platform owns menu/lobby audio and player-join notifications. Individual game packages own game music and action effects and register them through the shared audio service.
+The platform owns menu/lobby audio and the adjustable lobby alert category, which includes player-join notifications and the replaceable `public/assets/audio/effects/game-finished.mp3` alert heard by members already waiting in the lobby. Individual game packages own game music and action effects and register them through the shared audio service. The server routes package events only to active players and spectators, preventing lobby waiters from receiving delayed gameplay audio. GameHub identifies members returning from a finished game so their promotion back into the player list does not trigger the new-player sound.
 
 The server remains authoritative across the boundary. Browser modules may request actions but cannot supply trusted state, winners, clocks, scores, or arbitration results.
 

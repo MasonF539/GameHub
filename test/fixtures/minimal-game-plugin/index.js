@@ -59,6 +59,10 @@ class FixtureSession {
       return { success: false, message: "The fixture game is paused." };
     }
     this.actionCount += 1;
+    this.context.emitEvent({
+      type: "advanced",
+      payload: { actionCount: this.actionCount }
+    });
     this.context.broadcastState();
     return { success: true };
   }

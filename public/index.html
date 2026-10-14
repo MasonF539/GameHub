@@ -177,6 +177,10 @@
           Start Game
         </button>
 
+        <button id="spectate-game" class="btn btn-info btn-lg w-100 d-none" type="button" disabled>
+          Spectate Game
+        </button>
+
         <p id="game-status" class="status-message mt-3 mb-0"></p>
       </div>
     </section>
@@ -294,13 +298,13 @@
                 <div class="audio-setting" data-audio-category="join">
                   <div class="audio-setting-header">
                     <div>
-                      <label class="audio-setting-title" for="audio-join-volume">Player joins</label>
-                      <p class="audio-setting-description mb-0">The notification when a player joins your lobby.</p>
+                      <label class="audio-setting-title" for="audio-join-volume">Lobby alerts</label>
+                      <p class="audio-setting-description mb-0">Player-join notifications and game-finished alerts.</p>
                     </div>
                   </div>
                   <div class="audio-volume-row">
                     <input id="audio-join-volume" class="form-range" type="range" min="0" max="100" step="1"
-                      value="100" aria-label="Player join sound volume">
+                      value="100" aria-label="Lobby alert sound volume">
                     <output id="audio-join-volume-value" for="audio-join-volume">100%</output>
                   </div>
                 </div>
@@ -449,6 +453,27 @@
         <div class="modal-footer">
           <button class="btn btn-secondary" type="button" data-bs-dismiss="modal">Stay</button>
           <button id="confirm-leave-game" class="btn btn-danger" type="button">
+            Leave Game
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="leave-spectator-modal" class="modal fade" tabindex="-1"
+    aria-labelledby="leave-spectator-modal-title" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2 id="leave-spectator-modal-title" class="modal-title fs-5">Leave Game</h2>
+          <button class="btn-close" type="button" data-bs-dismiss="modal" aria-label="Cancel"></button>
+        </div>
+        <div class="modal-body">
+          Leave the game and return to the lobby?
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" type="button" data-bs-dismiss="modal">Stay</button>
+          <button id="confirm-leave-spectator" class="btn btn-danger" type="button">
             Leave Game
           </button>
         </div>

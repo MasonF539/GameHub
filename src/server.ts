@@ -515,6 +515,7 @@ function sendRoomResumed(
     isLocked: room.isLocked,
     selectedGameId: room.selectedGameId,
     gameSettings: room.gameSettings,
+    hasActiveGame: room.activeGameId !== null,
     activeGameId: canViewActiveGame ? room.activeGameId : null,
     isPaused: room.gameSession?.getLifecycleState().isPaused ?? false,
     chatEnabled: canViewActiveGame
@@ -713,6 +714,26 @@ function getGameViewer(room: Room, memberId: string): GameViewer | null {
   return null;
 }
 
+function emitToActiveGameViewers(
+  room: Room,
+  eventName: string,
+  payload: unknown
+): void {
+  const viewerIds = new Set([
+    ...room.activeGamePlayerIds,
+    ...room.spectators.keys()
+  ]);
+
+  for (const viewerId of viewerIds) {
+    const viewer = getRoomMember(room, viewerId);
+    if (!viewer?.member.isConnected || !isActiveGameViewer(room, viewerId)) {
+      continue;
+    }
+
+    io.sockets.sockets.get(viewerId)?.emit(eventName, payload);
+  }
+}
+
 function sendActiveGameState(
   roomCode: string,
   room: Room,
@@ -749,9 +770,16 @@ function finishActiveGame(
   message: string
 ): void {
   if (rooms.get(roomCode) !== room || room.activeGameId === null) return;
+  const returningMemberIds = Array.from(room.spectators.keys());
   disposeGameSession(room);
   room.activeGameId = null;
   room.activeGamePlayerIds.clear();
+
+  io.to(roomCode).emit("game-ended", {
+    winnerId,
+    message,
+    returningMemberIds
+  });
   promoteSpectatorsToPlayers(roomCode, room);
 
   // Players who dropped during the game never got an expiry timer.
@@ -760,8 +788,6 @@ function finishActiveGame(
       scheduleDisconnectExpiry(roomCode, room, member.id);
     }
   }
-
-  io.to(roomCode).emit("game-ended", { winnerId, message });
 }
 
 io.on("connection", (socket) => {
@@ -1438,7 +1464,20 @@ io.on("connection", (socket) => {
       return;
     }
 
-    if (found.role !== "player" || room.gameSession === null) {
+    if (found.role === "spectator") {
+      room.spectators.delete(socket.id);
+      room.players.set(socket.id, found.member);
+      sendRoomMemberLists(roomCode, room);
+      console.log(`${found.member.name} stopped spectating game ${roomCode}`);
+      respond({
+        success: true,
+        role: "player",
+        hasActiveGame: room.activeGameId !== null
+      });
+      return;
+    }
+
+    if (room.gameSession === null) {
       respond({
         success: false,
         message: "You are not in an active game."
@@ -1446,6 +1485,7 @@ io.on("connection", (socket) => {
       return;
     }
 
+    room.activeGamePlayerIds.delete(socket.id);
     const result =
       room.gameSession.memberRemoved?.(
         socket.id,
@@ -1456,16 +1496,60 @@ io.on("connection", (socket) => {
       };
 
     if (!result.success) {
+      room.activeGamePlayerIds.add(socket.id);
       respond(result);
       return;
     }
 
-    room.activeGamePlayerIds.delete(socket.id);
-
     // IMPORTANT: do NOT call removeMemberFromRoom().
     // The player is leaving the game but staying in the lobby.
     console.log(`${found.member.name} left game ${roomCode}`);
-    respond({ success: true });
+    respond({
+      success: true,
+      hasActiveGame: room.activeGameId !== null
+    });
+  });
+
+  onSocketRequest(socket, "spectate-game", (_data, respond) => {
+    const roomCode = socketRoomCodes.get(socket.id);
+    const room = roomCode ? rooms.get(roomCode) : undefined;
+    const found = room ? getRoomMember(room, socket.id) : null;
+
+    if (!roomCode || !room || !found) {
+      respond({ success: false, message: "You are not in a room." });
+      return;
+    }
+
+    if (room.activeGameId === null || room.gameSession === null) {
+      respond({ success: false, message: "There is no active game to spectate." });
+      return;
+    }
+
+    if (found.role === "spectator") {
+      respond({ success: false, message: "You are already spectating this game." });
+      return;
+    }
+
+    if (room.activeGamePlayerIds.has(socket.id)) {
+      respond({ success: false, message: "You are already playing in this game." });
+      return;
+    }
+
+    room.players.delete(socket.id);
+    room.spectators.set(socket.id, found.member);
+    sendRoomMemberLists(roomCode, room);
+
+    const game = getGameDefinition(room.activeGameId);
+    respond({ success: true, role: "spectator" });
+    socket.emit("game-started", {
+      gameId: room.activeGameId,
+      name: game?.name ?? "Game",
+      chatEnabled: game?.chatEnabled ?? false,
+      settings: room.gameSettings,
+      isPaused: room.gameSession.getLifecycleState().isPaused
+    });
+    sendActiveGameState(roomCode, room, socket);
+    console.log(`${found.member.name} started spectating game ${roomCode}`);
   });
 
   onSocketRequest(socket, "start-game", (data, respond) => {
@@ -1581,7 +1665,10 @@ io.on("connection", (socket) => {
         ],
         broadcastState: () => sendActiveGameState(roomCode, room),
         emitEvent: (event) => {
-          io.to(roomCode).emit("game-event", { gameId: game.id, event });
+          emitToActiveGameViewers(room, "game-event", {
+            gameId: game.id,
+            event
+          });
         },
         finish: ({ winnerId, reason }) => {
           if (room.gameSession === createdSession) {
@@ -1618,7 +1705,7 @@ io.on("connection", (socket) => {
       return;
     }
 
-    io.to(roomCode).emit("game-started", {
+    emitToActiveGameViewers(room, "game-started", {
       gameId: game.id,
       name: game.name,
       chatEnabled: game.chatEnabled,

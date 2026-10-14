@@ -40,3 +40,21 @@ test("a game's plugin root does not add a layout box around its panel", () => {
     /display:\s*none/
   );
 });
+
+test("in-game utility controls do not apply the phone safe area twice", () => {
+  const controls = ruleBody(
+    hubCss,
+    "#gameplay-view>.app-utility-controls"
+  );
+  assert.match(controls ?? "", /top:\s*var\(--hub-toolbar-top\)/);
+  assert.match(controls ?? "", /right:\s*var\(--hub-toolbar-edge\)/);
+  assert.doesNotMatch(controls ?? "", /safe-area-inset/);
+});
+
+test("collapsed slap rules shrink at every viewport size", () => {
+  const collapsed = ruleBody(
+    gameCss,
+    ".egyptian-war-slap-rules.is-collapsed"
+  );
+  assert.match(collapsed ?? "", /width:\s*auto/);
+});

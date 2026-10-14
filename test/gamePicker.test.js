@@ -17,6 +17,7 @@ function createClient({ prefersReducedMotion = false } = {}) {
   const audioScenes = [];
   const gameClientStates = [];
   const gameClientEvents = [];
+  const gameClientPlatformEvents = [];
   const gameClientContexts = [];
   let modalHideCount = 0;
 
@@ -70,6 +71,9 @@ function createClient({ prefersReducedMotion = false } = {}) {
         receiveEvent(event) {
           gameClientEvents.push(event);
         },
+        receivePlatformEvent(event) {
+          gameClientPlatformEvents.push(event);
+        },
         destroy() {}
       };
     }
@@ -102,6 +106,7 @@ function createClient({ prefersReducedMotion = false } = {}) {
     audioScenes,
     gameClientStates,
     gameClientEvents,
+    gameClientPlatformEvents,
     gameClientContexts,
     getModalHideCount: () => modalHideCount
   };
@@ -199,6 +204,34 @@ test("sounds only subsequent player joins, not spectators", () => {
     }
   ]);
   assert.deepEqual(playedEffects, ["player-join"]);
+  close();
+});
+
+test("uses a distinct completion alert without treating returning members as joins", () => {
+  const { close, handlers, playedEffects } = createClient();
+  const host = {
+    id: "host",
+    name: "Host",
+    avatar: "host",
+    isHost: true,
+    isConnected: true
+  };
+  const returningPlayer = {
+    id: "returning-player",
+    name: "Returning Player",
+    avatar: "player",
+    isHost: false,
+    isConnected: true
+  };
+
+  handlers.get("player-list")([host]);
+  handlers.get("game-ended")({
+    message: "The game ended.",
+    returningMemberIds: [returningPlayer.id]
+  });
+  handlers.get("player-list")([host, returningPlayer]);
+
+  assert.deepEqual(playedEffects, ["game-finished"]);
   close();
 });
 
@@ -363,8 +396,8 @@ test("a guest who confirms Leave Game returns to the lobby", () => {
   assert.equal(document.querySelector("#gameplay-view").classList.contains("d-none"), false);
   assert.equal(document.querySelector("#lobby-view").classList.contains("d-none"), true);
   assert.equal(
-    document.querySelector(".app-utility-controls").parentElement.id,
-    "gameplay-view"
+    document.querySelector(".app-utility-controls").parentElement,
+    document.querySelector("#gameplay-view")
   );
   assert.equal(document.querySelector("#app-game-exit-label").textContent, "Leave Game");
   assert.equal(document.querySelector("#app-game-exit").disabled, false);
@@ -382,6 +415,100 @@ test("a guest who confirms Leave Game returns to the lobby", () => {
   assert.equal(document.querySelector("#entry-view").classList.contains("d-none"), true);
   assert.equal(document.querySelector(".app-utility-controls").parentElement, document.body);
   assert.match(document.querySelector("#game-status").textContent, /left the game and returned to the lobby/i);
+  close();
+});
+
+test("a lobby waiter can rejoin an active game as a spectator", () => {
+  const { close, emitted, handlers } = createClient();
+
+  handlers.get("room-resumed")({
+    roomCode: "ABC123",
+    isHost: false,
+    role: "player",
+    isLocked: false,
+    selectedGameId: "example-game",
+    gameSettings: {},
+    hasActiveGame: true,
+    activeGameId: null,
+    isPaused: false,
+    chatEnabled: false
+  });
+
+  const spectateButton = document.querySelector("#spectate-game");
+  assert.equal(spectateButton.classList.contains("d-none"), false);
+  assert.equal(spectateButton.disabled, false);
+  spectateButton.click();
+
+  const request = emitted.find((item) => item.event === "spectate-game");
+  assert.ok(request);
+  request.respond({ success: true, role: "spectator" });
+  handlers.get("game-started")({
+    gameId: "example-game",
+    settings: {},
+    chatEnabled: true,
+    isPaused: false
+  });
+
+  assert.equal(document.querySelector("#gameplay-view").classList.contains("d-none"), false);
+  assert.equal(document.querySelector("#app-game-exit-label").textContent, "Stop Spectating");
+  close();
+});
+
+test("a spectator can leave the board through the spectator confirmation", () => {
+  const { close, emitted, handlers } = createClient();
+
+  handlers.get("room-resumed")({
+    roomCode: "ABC123",
+    isHost: false,
+    role: "spectator",
+    isLocked: false,
+    selectedGameId: "example-game",
+    gameSettings: {},
+    hasActiveGame: true,
+    activeGameId: "example-game",
+    isPaused: false,
+    chatEnabled: true
+  });
+
+  assert.equal(document.querySelector("#app-game-exit").disabled, false);
+  document.querySelector("#confirm-leave-spectator").click();
+  const request = emitted.find((item) => item.event === "leave-game");
+  assert.ok(request);
+  request.respond({ success: true, role: "player" });
+
+  assert.equal(document.querySelector("#gameplay-view").classList.contains("d-none"), true);
+  assert.equal(document.querySelector("#lobby-view").classList.contains("d-none"), false);
+  assert.equal(document.querySelector("#spectate-game").disabled, false);
+  close();
+});
+
+test("a spectator list received before mounting is delivered to the game", () => {
+  const { close, handlers, gameClientPlatformEvents } = createClient();
+  const spectators = [{
+    id: "viewer",
+    name: "Viewer",
+    avatar: "ghost",
+    isConnected: true
+  }];
+
+  handlers.get("spectator-list")(spectators);
+  handlers.get("room-resumed")({
+    roomCode: "ABC123",
+    isHost: false,
+    role: "spectator",
+    isLocked: false,
+    selectedGameId: "example-game",
+    gameSettings: {},
+    hasActiveGame: true,
+    activeGameId: "example-game",
+    isPaused: false,
+    chatEnabled: true
+  });
+
+  assert.deepEqual(gameClientPlatformEvents.at(-1), {
+    type: "spectators",
+    payload: spectators
+  });
   close();
 });
 
