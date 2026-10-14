@@ -24,6 +24,10 @@ shared audio service.
 The game board lives in `public/template.html`, and its presentation lives in
 `public/style.css`. GameHub injects the fragment into a package-specific root;
 the browser controller scopes its element lookups to that root.
+During active play, the stylesheet fixes the board to the available viewport,
+accounts for mobile safe areas, and keeps its compact Pause/connection row
+below GameHub's Settings shortcut. Full Screen and confirmed Exit/Leave
+actions remain platform-owned controls in GameHub's reusable Game tab.
 
 The package consumes an exact `@masonf539/game-sdk` release. Once both packages
 are published, GameHub installs an exact Egyptian War version and enables it

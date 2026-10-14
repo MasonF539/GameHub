@@ -56,6 +56,9 @@ to an independently versioned GameHub plugin.
   the package repository, issue-tracker, and homepage metadata.
 - Selected the account-owned `@masonf539` npm scope and renamed the SDK, game,
   imports, configuration, verification script, and lockfile consistently.
+- Kept the Settings interface and its reusable Game actions in GameHub while
+  making the Egyptian War viewport stable, safe-area-aware, and
+  non-overlapping on small screens.
 
 ## In progress
 
@@ -68,6 +71,8 @@ to an independently versioned GameHub plugin.
 
 - The full production Docker build compiles both workspaces and passes all 104
   automated tests.
+- The current test set was reviewed after extraction; no obsolete temporary
+  preview or duplicate test remained to remove.
 - The production container serves injected package markup and the
   package-owned browser module from its declared public route.
 - `npm run verify:packages` confirms the SDK and game tarballs contain their

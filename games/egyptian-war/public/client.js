@@ -19,8 +19,6 @@ const egyptianWarPileStack = findEgyptianWarElement("#egyptian-war-pile-stack");
 const egyptianWarPlayCardButton = findEgyptianWarElement("#egyptian-war-play-card");
 const egyptianWarSlapButton = findEgyptianWarElement("#egyptian-war-slap");
 const egyptianWarPauseButton = findEgyptianWarElement("#egyptian-war-pause");
-const egyptianWarExitButton = findEgyptianWarElement("#egyptian-war-exit-game");
-const egyptianWarLeaveButton = findEgyptianWarElement("#egyptian-war-leave-game");
 const egyptianWarHostControls = findEgyptianWarElement("#egyptian-war-host-controls");
 const egyptianWarSlapRulesList = findEgyptianWarElement("#egyptian-war-slap-rules-list");
 const toggleSlapRulesButton = findEgyptianWarElement("#toggle-slap-rules");
@@ -191,7 +189,6 @@ function showEgyptianWarGame(game) {
   egyptianWarTimerRemainingMs = null;
   egyptianWarTimerDeadline = null;
   egyptianWarHostControls.classList.toggle("d-none", !currentContext.isHost);
-  egyptianWarLeaveButton.classList.toggle("d-none", currentContext.isHost);
   egyptianWarPauseButton.textContent =
     game.isPaused ? "Resume" : "Pause";
   egyptianWarPauseButton.setAttribute(
@@ -1126,8 +1123,6 @@ egyptianWarPauseButton.addEventListener("click", async () => {
   const response = await currentContext.requestPause(isPaused);
   if (!response.success) currentContext.notify(response.message);
 });
-egyptianWarExitButton.addEventListener("click", () => currentContext?.requestExit());
-egyptianWarLeaveButton.addEventListener("click", () => currentContext?.requestLeave());
 egyptianWarChatForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   const message = egyptianWarChatInput.value.trim();

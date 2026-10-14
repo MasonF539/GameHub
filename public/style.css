@@ -1,9 +1,14 @@
 :root {
+  --hub-toolbar-button-size: 2.25rem;
+  --hub-toolbar-clearance: 4.25rem;
+  --hub-toolbar-edge: 1.5rem;
+  --hub-toolbar-top: 1rem;
   color-scheme: dark;
 }
 
 body {
   min-height: 100vh;
+  min-height: 100svh;
   margin: 0;
   background:
     radial-gradient(circle at top left, #6f42c1 0, transparent 35%),
@@ -65,13 +70,24 @@ body {
   box-shadow: 0 0 0.4rem rgba(220, 53, 69, 0.7);
 }
 
-.app-settings-button {
+.app-utility-controls {
   position: fixed;
   z-index: 1040;
-  top: 1rem;
-  right: 1rem;
+  top: max(var(--hub-toolbar-top), env(safe-area-inset-top));
+  right: max(var(--hub-toolbar-edge), env(safe-area-inset-right));
+  display: flex;
+  align-items: center;
+}
+
+#gameplay-view>.app-utility-controls {
+  position: absolute;
+}
+
+.app-settings-button {
+  min-height: var(--hub-toolbar-button-size);
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 0.35rem;
   background: rgba(16, 19, 26, 0.82);
   box-shadow: 0 0.4rem 1rem rgba(0, 0, 0, 0.3);
@@ -84,8 +100,10 @@ body {
 }
 
 @media (max-width: 575.98px) {
-  .app-settings-label {
-    display: none;
+  :root {
+    --hub-toolbar-button-size: 2rem;
+    --hub-toolbar-clearance: 4rem;
+    --hub-toolbar-edge: 1rem;
   }
 }
 
@@ -116,6 +134,8 @@ body {
 }
 
 .app-settings-navigation {
+  grid-column: 1;
+  grid-row: 1;
   align-self: start;
   padding: 0.75rem 0 0.75rem 0.5rem;
   flex-direction: column;
@@ -148,6 +168,12 @@ body {
   box-shadow: -0.35rem 0.35rem 0.9rem rgba(13, 110, 253, 0.22);
 }
 
+.app-settings-content {
+  grid-column: 2;
+  grid-row: 1;
+  min-width: 0;
+}
+
 .app-settings-section {
   display: grid;
   padding: 1.1rem;
@@ -158,8 +184,81 @@ body {
   border-radius: 0 0.8rem 0.8rem 0;
 }
 
+.app-settings-content>.app-settings-section.active {
+  display: grid;
+}
+
 .app-settings-section-heading {
   display: block;
+}
+
+.game-settings-groups {
+  display: grid;
+  gap: 1rem;
+}
+
+.game-settings-group {
+  padding: 1rem;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 0.85rem;
+}
+
+.game-settings-group-title {
+  margin: 0 0 0.6rem;
+  color: #dbeafe;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.game-setting-row {
+  display: flex;
+  min-height: 2.25rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.game-setting-row .btn {
+  min-width: 5rem;
+}
+
+.game-display-setting {
+  padding: 0.85rem;
+  background: linear-gradient(135deg, rgba(13, 110, 253, 0.16), rgba(111, 66, 193, 0.14));
+  border: 1px solid rgba(139, 185, 254, 0.28);
+  border-radius: 0.7rem;
+}
+
+.game-setting-copy {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.game-setting-display-icon {
+  display: grid;
+  width: 2.5rem;
+  height: 2.5rem;
+  flex: 0 0 2.5rem;
+  place-items: center;
+  color: #dbeafe;
+  background: rgba(13, 110, 253, 0.2);
+  border: 1px solid rgba(139, 185, 254, 0.35);
+  border-radius: 0.65rem;
+}
+
+.game-display-setting .btn {
+  min-width: 6.5rem;
+}
+
+.game-setting-divider {
+  margin: 0.75rem 0;
+  border-color: rgba(255, 255, 255, 0.16);
+  opacity: 1;
 }
 
 .audio-settings-list {
@@ -217,6 +316,8 @@ body {
   }
 
   .app-settings-navigation {
+    grid-column: 1;
+    grid-row: 1;
     padding: 0.5rem 0.5rem 0;
     flex-direction: row;
     border-right: 1px solid rgba(255, 255, 255, 0.1);
@@ -230,10 +331,19 @@ body {
     border-radius: 0.7rem 0.7rem 0 0 !important;
   }
 
+  .app-settings-content {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
   .app-settings-section {
     border-top: 0.3rem solid #0d6efd;
     border-left: 1px solid rgba(100, 175, 255, 0.32);
     border-radius: 0 0 0.8rem 0.8rem;
+  }
+
+  .game-display-setting {
+    align-items: flex-start;
   }
 }
 

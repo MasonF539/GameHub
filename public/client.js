@@ -7,6 +7,20 @@ const gameHubToastElement =
   document.querySelector("#gamehub-toast");
 const gameHubToastMessage =
   document.querySelector("#gamehub-toast-message");
+const fullscreenButton =
+  document.querySelector("#app-game-fullscreen-toggle");
+const fullscreenIconPath =
+  document.querySelector("#app-game-display-icon-path");
+const appGamePauseButton =
+  document.querySelector("#app-game-pause-toggle");
+const appGameExitButton =
+  document.querySelector("#app-game-exit");
+const appGameExitLabel =
+  document.querySelector("#app-game-exit-label");
+const appSettingsModalElement =
+  document.querySelector("#app-settings-modal");
+const appUtilityControls =
+  document.querySelector(".app-utility-controls");
 
 const entryView = document.querySelector("#entry-view");
 const lobbyView = document.querySelector("#lobby-view");
@@ -35,17 +49,7 @@ const gameClientHost = new window.GameHubGameClientHost({
         resolve
       );
     }),
-    requestPause: (isPaused) => new Promise((resolve) => {
-      if (currentRoomCode === null) {
-        resolve({ success: false, message: "You are not in a room." });
-        return;
-      }
-      socket.emit(
-        "toggle-game-pause",
-        { roomCode: currentRoomCode, isPaused },
-        resolve
-      );
-    }),
+    requestPause: requestGamePause,
     sendChat: (message) => new Promise((resolve) => {
       if (currentRoomCode === null) {
         resolve({ success: false, message: "You are not in a room." });
@@ -159,6 +163,9 @@ let currentPlayers = [];
 let hasReceivedPlayerList = false;
 let isRoomRequestPending = false;
 let isGameSelectionPending = false;
+let currentActiveGameId = null;
+let activeGameIsPaused = false;
+let activeGameIsBusy = false;
 
 const lastRoomStorageKey = "gamehub:last-room";
 
@@ -184,6 +191,21 @@ function clearResumeSession(roomCode = null) {
   ) {
     localStorage.removeItem(lastRoomStorageKey);
   }
+}
+
+function requestGamePause(isPaused) {
+  return new Promise((resolve) => {
+    if (currentRoomCode === null) {
+      resolve({ success: false, message: "You are not in a room." });
+      return;
+    }
+
+    socket.emit(
+      "toggle-game-pause",
+      { roomCode: currentRoomCode, isPaused },
+      resolve
+    );
+  });
 }
 
 function setRoomRequestPending(isPending) {
@@ -232,6 +254,107 @@ function showToast(message) {
 
   toast.show();
 }
+
+function getFullscreenElement() {
+  return document.fullscreenElement ?? document.webkitFullscreenElement ?? null;
+}
+
+function updateFullscreenButton() {
+  if (!supportsFullscreen) {
+    fullscreenButton.disabled = true;
+    fullscreenButton.textContent = "Unavailable";
+    return;
+  }
+
+  const isFullscreen = getFullscreenElement() !== null;
+  const label = isFullscreen ? "Exit full screen" : "Enter full screen";
+
+  fullscreenButton.setAttribute("aria-label", label);
+  fullscreenButton.setAttribute("aria-pressed", String(isFullscreen));
+  fullscreenButton.title = label;
+  fullscreenButton.textContent = isFullscreen ? "Windowed" : "Full Screen";
+  fullscreenIconPath.setAttribute(
+    "d",
+    isFullscreen
+      ? "M8 3v3a2 2 0 0 1-2 2H3 M21 8h-3a2 2 0 0 1-2-2V3 M3 16h3a2 2 0 0 1 2 2v3 M16 21v-3a2 2 0 0 1 2-2h3"
+      : "M9 3H3v6 M15 3h6v6 M21 15v6h-6 M9 21H3v-6"
+  );
+}
+
+function updateGameSettingsControls() {
+  const hasActiveGame = currentActiveGameId !== null;
+
+  appGamePauseButton.textContent = activeGameIsPaused ? "Resume" : "Pause";
+  appGamePauseButton.disabled =
+    !hasActiveGame || !isCurrentUserHost || activeGameIsBusy;
+
+  const exitLabel = !hasActiveGame || isCurrentUserHost
+    ? "Exit Game"
+    : "Leave Game";
+  appGameExitLabel.textContent = exitLabel;
+  appGameExitButton.textContent = !hasActiveGame || isCurrentUserHost
+    ? "Exit"
+    : "Leave";
+  appGameExitButton.disabled = !hasActiveGame || isCurrentUserSpectator;
+}
+
+function placeAppUtilityControls(inGameplay) {
+  if (inGameplay) {
+    gameplayView.append(appUtilityControls);
+    return;
+  }
+
+  document.body.prepend(appUtilityControls);
+}
+
+async function toggleFullscreen() {
+  try {
+    if (getFullscreenElement() !== null) {
+      const exitFullscreen =
+        document.exitFullscreen ?? document.webkitExitFullscreen;
+      await exitFullscreen.call(document);
+    } else {
+      const requestFullscreen =
+        document.documentElement.requestFullscreen ??
+        document.documentElement.webkitRequestFullscreen;
+      await requestFullscreen.call(document.documentElement);
+    }
+  } catch {
+    showToast("Full screen could not be changed in this browser.");
+  }
+}
+
+const supportsFullscreen = Boolean(
+  document.documentElement.requestFullscreen ??
+  document.documentElement.webkitRequestFullscreen
+);
+fullscreenButton.disabled = !supportsFullscreen;
+fullscreenButton.addEventListener("click", toggleFullscreen);
+document.addEventListener("fullscreenchange", updateFullscreenButton);
+document.addEventListener("webkitfullscreenchange", updateFullscreenButton);
+updateFullscreenButton();
+
+appGamePauseButton.addEventListener("click", async () => {
+  if (appGamePauseButton.disabled) return;
+  const response = await requestGamePause(!activeGameIsPaused);
+  if (!response.success) showToast(response.message);
+});
+
+appGameExitButton.addEventListener("click", () => {
+  if (appGameExitButton.disabled) return;
+
+  bootstrap.Modal.getOrCreateInstance(appSettingsModalElement).hide();
+  const confirmationModal = isCurrentUserHost
+    ? exitGameModalElement
+    : leaveGameModalElement;
+  bootstrap.Modal.getOrCreateInstance(confirmationModal).show();
+});
+
+appSettingsModalElement.addEventListener(
+  "show.bs.modal",
+  updateGameSettingsControls
+);
+updateGameSettingsControls();
 
 function createKickPlayerButton(player, className) {
   const kickButton = document.createElement("button");
@@ -299,6 +422,10 @@ function updateRoomLockDisplay() {
 }
 
 function showLobby(roomCode, isHost) {
+  placeAppUtilityControls(false);
+  currentActiveGameId = null;
+  activeGameIsPaused = false;
+  activeGameIsBusy = false;
   gameHubAudio.setScene("menu");
   entryView.classList.add("d-none");
   lobbyView.classList.remove("d-none");
@@ -317,6 +444,7 @@ function showLobby(roomCode, isHost) {
   updateGamePicker();
 
   updateRoomLockDisplay();
+  updateGameSettingsControls();
 
   if (
     isHost &&
@@ -328,6 +456,11 @@ function showLobby(roomCode, isHost) {
 }
 
 function showEntry() {
+  placeAppUtilityControls(false);
+  currentActiveGameId = null;
+  activeGameIsPaused = false;
+  activeGameIsBusy = false;
+  updateGameSettingsControls();
   gameHubAudio.setScene("menu");
   gameplayView.classList.add("d-none");
   lobbyView.classList.add("d-none");
@@ -335,6 +468,11 @@ function showEntry() {
 }
 
 function showLobbyAfterLeavingGame() {
+  placeAppUtilityControls(false);
+  currentActiveGameId = null;
+  activeGameIsPaused = false;
+  activeGameIsBusy = false;
+  updateGameSettingsControls();
   gameClientHost.unmount();
   gameplayView.classList.add("d-none");
   entryView.classList.add("d-none");
@@ -357,6 +495,10 @@ function resetRoomState() {
   isCurrentUserSpectator = false;
   isRoomRequestPending = false;
   isGameSelectionPending = false;
+  currentActiveGameId = null;
+  activeGameIsPaused = false;
+  activeGameIsBusy = false;
+  updateGameSettingsControls();
 
   createRoomButton.disabled = false;
   startGameButton.disabled = true;
@@ -854,14 +996,14 @@ socket.on("latency-probe", (acknowledge) => {
 
 socket.on("latency-update", ({ rttMs }) => {
   if (Number.isFinite(rttMs) && rttMs >= 0) {
-    networkPing.textContent = `Ping: ${Math.round(rttMs)} ms`;
+    networkPing.textContent = `${Math.round(rttMs)} ms`;
   }
 });
 
 socket.on("disconnect", () => {
   isGameSelectionPending = false;
   gamePickerGrid.classList.remove("is-pending");
-  networkPing.textContent = "Ping: -- ms";
+  networkPing.textContent = "-- ms";
   connectionStatus.textContent = "Disconnected from server";
 
   connectionStatus.classList.remove(
@@ -1092,6 +1234,11 @@ function mountGameClient(game) {
 
   lobbyView.classList.add("d-none");
   gameplayView.classList.remove("d-none");
+  placeAppUtilityControls(true);
+  currentActiveGameId = game.gameId;
+  activeGameIsPaused = game.isPaused === true;
+  activeGameIsBusy = false;
+  updateGameSettingsControls();
   gameClientHost.mount(game.gameId, game);
 }
 
@@ -1105,6 +1252,13 @@ socket.on("game-state", (envelope) => {
 
 socket.on("game-event", (envelope) => {
   gameClientHost.receiveEvent(envelope);
+});
+
+socket.on("game-lifecycle", ({ gameId, isPaused, isBusy }) => {
+  if (gameId !== currentActiveGameId) return;
+  activeGameIsPaused = isPaused === true;
+  activeGameIsBusy = isBusy === true;
+  updateGameSettingsControls();
 });
 
 socket.on("spectator-list", (spectators) => {
@@ -1122,6 +1276,11 @@ socket.on("game-chat-message", (chatMessage) => {
 });
 
 socket.on("game-ended", ({ message }) => {
+  placeAppUtilityControls(false);
+  currentActiveGameId = null;
+  activeGameIsPaused = false;
+  activeGameIsBusy = false;
+  updateGameSettingsControls();
   gameClientHost.unmount();
   gameplayView.classList.add("d-none");
   lobbyView.classList.remove("d-none");

@@ -47,7 +47,7 @@ Checked implementation items do not imply that every multiplayer interaction has
 - [x] Return the room to the lobby after the game ends.
 - [x] Pause the active game when a player disconnects; allow the host to resume while the player is away, and restore the saved pause preference after they reconnect. Lobby-only disconnects still expire after two minutes.
 - [x] Gray out disconnected players' table seats and show a yellow disconnected alert beneath each seat.
-- [x] Provide a host-only Close Lobby control in the lobby and keep the gameplay control labeled Exit Game.
+- [x] Provide a host-only Close Lobby control in the lobby and expose confirmed Exit Game or Leave Game actions through GameHub's reusable Game settings tab.
 - [x] Hide the room code by default for non-host players while showing it by default to the host.
 - [x] Preserve a reconnecting active player's remaining turn time and allow one short grace period per turn, capped at the configured turn duration, then continue normal automatic turn play if the timer expires.
 - [x] Send recent face-up cards in reconnect snapshots so the board restores the visible pile after reconnecting.
@@ -73,6 +73,8 @@ Checked implementation items do not imply that every multiplayer interaction has
 
 ### Client gameplay
 
+- [x] Keep active gameplay fixed to the usable mobile viewport so browser chrome and the on-screen keyboard cannot push the board off-screen.
+- [x] Reserve space for GameHub's compact Settings shortcut above the package-owned Pause and connection-latency row on narrow screens.
 - [x] Render each player's public state without revealing hidden cards.
 - [x] Render the central pile and the most recently played card.
 - [x] Provide server-validated play-card and slap actions.
@@ -88,7 +90,7 @@ Checked implementation items do not imply that every multiplayer interaction has
 - [x] Animate a hand moving from the slapper's seat to the pile for valid and invalid slap attempts.
 - [x] Animate and retain the final played card while highlighting the game winner in gold.
 - [x] Place a host-only pause/resume button at the upper-right of the gameplay panel.
-- [x] Place a host-only Close Lobby control in the lobby and an Exit Game control in gameplay, each with its own in-app confirmation modal.
+- [x] Place a host-only Close Lobby control in the lobby and route the Game settings tab's Exit/Leave action through the appropriate in-app confirmation modal.
 - [x] Put a host-only Kick button beside a disconnected player's table alert.
 - [x] Make the slap-rules list collapsible.
 - [x] Show enabled slap patterns and the false-slap penalty in the upper-left of the gameplay panel.
@@ -100,6 +102,7 @@ Checked implementation items do not imply that every multiplayer interaction has
 - [x] Show server connection state as a colored dot with status text on the main menu, in the lobby, and beside the gameplay controls.
 - [x] Fit active gameplay into the browser viewport without page scrolling; overlay Chat and Spectators in one wide bottom-left tab panel with an explicit viewport-relative Expand/Collapse control; place the timer and same-level action buttons in the open bottom-right area; and show turn text directly above the central pile count.
 - [x] Let the Chat/Spectators panel collapse into a small round chat button: it opens at medium size by default, the arrow switches between medium and large, and a small diagonal-arrow button on the panel's corner collapses it to the circle. Reopening restores the size it had before it was collapsed, a new game starts at medium again, and the circle shows an unread count (capped at 9+) for messages from other players that arrived while it was collapsed.
+- [x] Give the side-panel expand and minimize controls separate, lighter utility-button surfaces so they remain visually distinct from the Chat and Spectators tabs.
 - [x] Style "Play a Card" and "Slap" buttons as prominent game-action controls, with a secondary "Bring the pain" label and fire accents on Slap.
 - [x] Keep slaps available during active play even when no pattern matches; disable them only when no face-up cards are present, the game is paused or finished, or a non-card-play animation is in progress.
 - [x] Restore active players from a complete reconnect snapshot.

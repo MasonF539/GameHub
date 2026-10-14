@@ -244,6 +244,22 @@ test("routes browser game state, events, and actions through generic envelopes",
   }]);
 
   assert.equal(gameClientContexts.length, 1);
+  const pauseButton = document.querySelector("#app-game-pause-toggle");
+  assert.equal(pauseButton.disabled, false);
+  pauseButton.click();
+  const pauseRequest = emitted.find((item) => item.event === "toggle-game-pause");
+  assert.deepEqual(pauseRequest.data, {
+    roomCode: "ABC123",
+    isPaused: true
+  });
+  pauseRequest.respond({ success: true });
+  handlers.get("game-lifecycle")({
+    gameId: "example-game",
+    isPaused: true,
+    isBusy: false
+  });
+  assert.equal(pauseButton.textContent, "Resume");
+
   const actionPromise = gameClientContexts[0].submitAction({ type: "advance" });
   const action = emitted.find((item) => item.event === "game-action");
   assert.deepEqual(action.data, {
@@ -346,6 +362,12 @@ test("a guest who confirms Leave Game returns to the lobby", () => {
   });
   assert.equal(document.querySelector("#gameplay-view").classList.contains("d-none"), false);
   assert.equal(document.querySelector("#lobby-view").classList.contains("d-none"), true);
+  assert.equal(
+    document.querySelector(".app-utility-controls").parentElement.id,
+    "gameplay-view"
+  );
+  assert.equal(document.querySelector("#app-game-exit-label").textContent, "Leave Game");
+  assert.equal(document.querySelector("#app-game-exit").disabled, false);
 
   document.querySelector("#confirm-leave-game").click();
   const leaveRequest = emitted.find((item) => item.event === "leave-game");
@@ -358,6 +380,7 @@ test("a guest who confirms Leave Game returns to the lobby", () => {
   assert.equal(document.querySelector("#gameplay-view").classList.contains("d-none"), true);
   assert.equal(document.querySelector("#lobby-view").classList.contains("d-none"), false);
   assert.equal(document.querySelector("#entry-view").classList.contains("d-none"), true);
+  assert.equal(document.querySelector(".app-utility-controls").parentElement, document.body);
   assert.match(document.querySelector("#game-status").textContent, /left the game and returned to the lobby/i);
   close();
 });

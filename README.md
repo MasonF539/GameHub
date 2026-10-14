@@ -8,7 +8,7 @@ The server runs locally in Docker and can optionally use a temporary Cloudflare 
 
 - Cryptographically generated six-character room codes with hide/reveal controls and invalid-join throttling
 - Shared lobby visible to the host and joined players
-- Player names and selectable avatars
+- Player names and a centrally validated set of broadly supported selectable avatars
 - Host identification in the player list
 - Live player joining and disconnection
 - Server-controlled room state
@@ -29,8 +29,8 @@ The server runs locally in Docker and can optionally use a temporary Cloudflare 
 - Playable, server-authoritative Egyptian War with challenges, slap arbitration, turn timers, pausing, and reconnect recovery
 - Late-game joining as a read-only spectator, with live public state, spectator reconnect support, in-game chat, and promotion into the lobby after a game ends
 - Display-only network ping indicator that does not influence gameplay arbitration
-- Viewport-fitted Egyptian War interface with a casino-style table, responsive player seats and controls, and a tabbed chat/spectator overlay
-- A tabbed personal GameHub Settings panel with persistent, independent music, player-join, and gameplay volume controls; setting a category to 0% disables it
+- Viewport-fitted Egyptian War interface with a casino-style table, responsive player seats and controls, a tabbed chat/spectator overlay, stable mobile positioning, and a compact in-game Settings shortcut
+- A tabbed GameHub Settings panel with reusable Game actions for full screen, pausing, and exiting, plus persistent, independent music, player-join, and gameplay volume controls; setting an audio category to 0% disables it
 
 Egyptian War is the first playable game. Its hidden decks, turns, challenges, slap validation, server-receipt-time arbitration, penalties, pile awards, timers, and win conditions are controlled by the server. An eliminated player who false-slaps must skip the next card's slap opportunity before trying again.
 

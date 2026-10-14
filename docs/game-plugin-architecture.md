@@ -65,6 +65,13 @@ The intended migration order is:
 
 GameHub keeps its own `index.html`, core stylesheet, and client code. A game module controls only the game root that GameHub gives it. It must clean up event listeners, timers, and DOM state when `destroy()` is called.
 
+GameHub's page shell also owns the tabbed Settings interface. Its reusable
+Game tab exposes full-screen, lifecycle pause/resume, and confirmed exit/leave
+actions without querying package-specific controls. Game packages remain
+responsible for fitting their mounted panels to the supplied viewport;
+Egyptian War fixes its active panel to that viewport and accounts for mobile
+safe areas.
+
 The platform owns menu/lobby audio and player-join notifications. Individual game packages own game music and action effects and register them through the shared audio service.
 
 The server remains authoritative across the boundary. Browser modules may request actions but cannot supply trusted state, winners, clocks, scores, or arbitration results.

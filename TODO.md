@@ -2,6 +2,11 @@
 
 ## Planned features
 
+### Shared interface
+
+- [x] Keep a compact GameHub Settings shortcut aligned above package-owned controls and place reusable Full Screen, Pause/Resume, and Exit/Leave actions in its Game tab.
+- [x] Prevent mobile browser viewport changes from pushing active Egyptian War gameplay off-screen.
+
 ### Spectator mode for games in progress
 
 - [x] Allow people to join a room after a game has started.

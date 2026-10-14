@@ -49,14 +49,15 @@ const availableAvatars = [
   "🐼",
   "🐯",
   "🐵",
-  "🐙",
-  "🦄",
-  "🐲",
-  "🤖",
   "👻",
-  "👽",
-  "🥷",
-  "🧙"
+  "🐢",
+  "🎃",
+  "🥸",
+  "🤠",
+  "🐧",
+  "🐨",
+  "🐷",
+  "🐺"
 ];
 
 const gameHubConfiguration = JSON.parse(
@@ -724,6 +725,10 @@ function sendActiveGameState(
     target.emit("game-state", {
       gameId: room.activeGameId,
       state: room.gameSession.getPublicState(viewer)
+    });
+    target.emit("game-lifecycle", {
+      gameId: room.activeGameId,
+      ...room.gameSession.getLifecycleState()
     });
   };
   if (targetSocket) {
