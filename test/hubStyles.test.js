@@ -4,10 +4,6 @@ const path = require("node:path");
 const test = require("node:test");
 
 const hubCss = readFileSync(path.join(__dirname, "../public/style.css"), "utf8");
-const gameCss = readFileSync(
-  path.join(__dirname, "../games/egyptian-war/public/style.css"),
-  "utf8"
-);
 
 // A rule block for an exact selector, e.g. ".foo::before".
 function ruleBody(css, selector) {
@@ -16,7 +12,7 @@ function ruleBody(css, selector) {
   return match ? match[1] : null;
 }
 
-test("the hub header's connection dot is styled by the hub, not by a game", () => {
+test("the hub header styles its connection dot", () => {
   // Game stylesheets stay disabled until a game starts, so anything that
   // styles hub markup must live in the hub stylesheet.
   const dot = ruleBody(hubCss, ".server-connection-status::before");
@@ -24,11 +20,6 @@ test("the hub header's connection dot is styled by the hub, not by a game", () =
   assert.match(dot, /border-radius:\s*50%/);
   assert.ok(ruleBody(hubCss, ".server-connection-status.text-bg-success::before"));
   assert.ok(ruleBody(hubCss, ".server-connection-status.text-bg-danger::before"));
-  assert.equal(
-    gameCss.includes(".server-connection-status"),
-    false,
-    "game css must not own the hub's connection indicator"
-  );
 });
 
 test("a game's plugin root does not add a layout box around its panel", () => {
@@ -49,12 +40,4 @@ test("in-game utility controls do not apply the phone safe area twice", () => {
   assert.match(controls ?? "", /top:\s*var\(--hub-toolbar-top\)/);
   assert.match(controls ?? "", /right:\s*var\(--hub-toolbar-edge\)/);
   assert.doesNotMatch(controls ?? "", /safe-area-inset/);
-});
-
-test("collapsed slap rules shrink at every viewport size", () => {
-  const collapsed = ruleBody(
-    gameCss,
-    ".egyptian-war-slap-rules.is-collapsed"
-  );
-  assert.match(collapsed ?? "", /width:\s*auto/);
 });

@@ -118,18 +118,18 @@ docker compose --profile public down
 
 ## Project structure
 
-GameHub currently uses npm workspaces so the plugin boundary remains testable
-until published packages replace the local game workspace. `packages/game-sdk` contains
-the shared contracts that connect GameHub to every game plugin. It is reusable
-GameHub platform code—not a playable game—and therefore lives under
-`packages/` rather than `games/`. It will remain owned and versioned by
-GameHub while Egyptian War is developed in its own repository.
+GameHub keeps the platform-owned `@masonf539/game-sdk` source as an npm
+workspace under `packages/game-sdk`. It contains the shared contracts that
+connect GameHub to every game plugin; it is reusable platform code, not a
+playable game.
 
-`games/egyptian-war` is the temporary workspace copy of the independently
-maintained Egyptian War repository. It owns the game engine, tests,
-documentation, package metadata, preview media, game-specific audio, HTML
-fragment, stylesheet, browser controller, and authoritative server session.
-GameHub loads enabled game packages from
+Egyptian War is maintained independently in the
+[Egyptian War repository](https://github.com/MasonF539/Egyptian-War) and
+installed here as the exact published
+`@masonf539/egyptian-war` dependency. Its repository owns the game engine,
+tests, documentation, preview media, game-specific audio, markup, styles,
+browser controller, and authoritative server session. GameHub loads enabled
+game packages from
 `gamehub.config.json` (or the `GAMEHUB_GAME_PACKAGES` environment override)
 and communicates through the SDK contracts.
 
@@ -140,16 +140,6 @@ GameHub/
 ├── docs/
 │   ├── game-plugin-architecture.md
 │   └── plugin-extraction-progress.md
-├── games/
-│   └── egyptian-war/
-│       ├── docs/
-│       ├── public/
-│       ├── src/
-│       ├── test/
-│       ├── LICENSE
-│       ├── package.json
-│       ├── tsconfig.json
-│       └── tsconfig.test.json
 ├── public/
 │   ├── assets/
 │   │   ├── audio/

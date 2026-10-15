@@ -6,10 +6,11 @@ to an independently versioned GameHub plugin.
 ## Completed
 
 - Created independently buildable `@masonf539/game-sdk` and
-  `@masonf539/egyptian-war` npm workspaces.
+  `@masonf539/egyptian-war` packages.
 - Replaced private source imports with package-name imports.
 - Moved Egyptian War engine code, tests, design notes, preview media, music,
-  effects, HTML markup, and CSS into `games/egyptian-war`.
+  effects, HTML markup, and CSS through the temporary
+  `games/egyptian-war` extraction workspace.
 - Added a generic browser game-client host and generic Socket.IO envelopes.
 - Added the generic server `GameSession` lifecycle and package factory.
 - Made picker previews manifest-driven.
@@ -46,8 +47,9 @@ to an independently versioned GameHub plugin.
   hardened room requests with optional acknowledgements, cryptographic room
   codes, and invalid-join throttling.
 - Added publish-safe package exports, package-local licenses, and an artifact
-  verification step that packs both packages, installs their tarballs into a
-  clean temporary consumer, and loads Egyptian War without workspace source.
+  verification step that packs the local SDK, downloads the pinned published
+  game, installs both tarballs into a clean temporary consumer, and loads
+  Egyptian War without repository source.
 - Generated and updated the `egyptian-war-standalone` subtree branch so the
   package sits at repository root with its relevant commit history, standalone
   ignore/attribute files, current rules, UI, assets, tests, and license.
@@ -66,22 +68,24 @@ to an independently versioned GameHub plugin.
   the browser and verifying that the complete Quick Tunnel URL reached the
   clipboard.
 
-## In progress
+## Published packages
 
-- Publish Egyptian War to npm and reinstall its exact version in GameHub as an
-  external dependency.
-- Publish the SDK first so the independent Egyptian War repository can create
-  its own lockfile against the real exact SDK release.
+- Published `@masonf539/game-sdk@1.0.0` to npm.
+- Published `@masonf539/egyptian-war@1.0.0`, depending on the exact SDK
+  release, and installed it back into GameHub as a pinned external dependency.
+- Removed the temporary Egyptian War workspace copy from GameHub; its source,
+  tests, docs, and assets now live only in its independent repository.
 
 ## Verification
 
-- The full production Docker build compiles both workspaces and passes all 104
-  automated tests.
+- The full production Docker build compiles the platform workspace and runs
+  the GameHub and SDK automated tests. Egyptian War runs its own package test
+  suite before publication.
 - The current test set was reviewed after extraction; no obsolete temporary
   preview or duplicate test remained to remove.
 - The production container serves injected package markup and the
   package-owned browser module from its declared public route.
-- `npm run verify:packages` confirms the SDK and game tarballs contain their
+- `npm run verify:packages` confirms the SDK and published game tarballs contain their
   compiled declarations/runtime and required public assets, exclude source and
   test folders, and work when installed outside the monorepo.
 - GameHub's runtime client and server contain no Egyptian War implementation
@@ -89,11 +93,9 @@ to an independently versioned GameHub plugin.
 
 ## Final repository split
 
-Egyptian War now has its own repository. Its workspace copy remains here only
-until the SDK and game are published and GameHub can replace that workspace
-with a pinned registry dependency. The GameHub repository keeps the SDK,
-platform, room system, transport, picker, chat, spectators, settings, and
-generic game host.
+Egyptian War now has its own repository and is consumed by GameHub as a pinned
+registry dependency. The GameHub repository keeps the SDK, platform, room
+system, transport, picker, chat, spectators, settings, and generic game host.
 
 The generic host now keeps gameplay events scoped to current board viewers.
 Spectators can return to the lobby, lobby waiters can rejoin an active board

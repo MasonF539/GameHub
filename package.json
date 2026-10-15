@@ -4,8 +4,7 @@
   "description": "A self-hosted real-time browser game platform.",
   "main": "dist/server.js",
   "workspaces": [
-    "packages/game-sdk",
-    "games/egyptian-war"
+    "packages/game-sdk"
   ],
   "scripts": {
     "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",

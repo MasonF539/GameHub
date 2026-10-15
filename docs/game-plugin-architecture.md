@@ -12,9 +12,10 @@ configured list. The package lock and Docker build then select an exact,
 reproducible version.
 
 The Docker build runs `npm run verify:packages` after the test suite. That
-check packs the SDK and Egyptian War using their publish manifests, installs
-both archives into an empty temporary consumer, and loads the installed game.
-It guards against imports or required files that exist only in the workspace.
+check packs the local SDK, downloads the exact published Egyptian War release,
+installs both archives into an empty temporary consumer, and loads the game.
+It guards against imports or required files that exist only in a development
+checkout.
 
 Game packages execute trusted server code. They are not a sandbox for packages supplied by room hosts or browser clients.
 
@@ -33,25 +34,22 @@ The independently buildable `@masonf539/game-sdk` workspace under
 The manifest API and package version are separate. `apiVersion` describes compatibility with GameHub, while `packageVersion` describes a release of the game itself.
 
 The SDK is part of the GameHub platform, not a game plugin. The `packages/`
-directory holds reusable platform packages, while `games/` holds playable game
-implementations being prepared for extraction. After Egyptian War moves to its
-own repository, GameHub will continue to own and version the SDK so Egyptian
-War and future games can depend on the same stable contract. The selected
-distribution path is the public npm registry, using exact SDK versions in game
-package dependencies.
+directory holds reusable platform packages. Playable games live in independent
+repositories and consume exact SDK versions from the public npm registry.
+GameHub likewise installs exact game-package versions for reproducible builds.
 
-## Current in-repository boundary
+## Current package boundary
 
-Egyptian War is an independently buildable `@masonf539/egyptian-war` workspace
-under `games/egyptian-war`. Its package export supplies the manifest, public
-directory, and `GameServerPlugin`. The package-owned `GameSession` contains
+Egyptian War is the external `@masonf539/egyptian-war` package maintained in
+the [Egyptian War repository](https://github.com/MasonF539/Egyptian-War). Its package export supplies the manifest,
+public directory, and `GameServerPlugin`. The package-owned `GameSession` contains
 authoritative state, timers, slap arbitration, animation sequencing, pause and
 disconnect recovery, member lifecycle handling, and completion. The package's
 browser module owns the board rendering, controls, animations, chat/spectator
 panel, and game audio. GameHub injects declared resources and communicates only
 through generic SDK services and state, event, and action envelopes.
 
-The intended migration order is:
+The completed migration order was:
 
 1. Route the existing game catalog through the validated registry.
 2. Route the built-in client through generic game action, state, and event envelopes.

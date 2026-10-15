@@ -33,16 +33,16 @@ function runNpm(arguments_, workingDirectory = workspaceRoot) {
   return result.stdout;
 }
 
-function pack(packageDirectory) {
+function pack(packageSpec) {
   const output = runNpm([
     "pack",
-    packageDirectory,
+    packageSpec,
     "--json",
     "--pack-destination",
     artifactDirectory
   ]);
   const [packed] = JSON.parse(output);
-  assert.ok(packed?.filename, `npm did not report an artifact for ${packageDirectory}.`);
+  assert.ok(packed?.filename, `npm did not report an artifact for ${packageSpec}.`);
   return {
     archivePath: path.join(artifactDirectory, packed.filename),
     files: packed.files.map((file) => file.path)
@@ -53,7 +53,7 @@ try {
   mkdirSync(artifactDirectory);
   mkdirSync(consumerDirectory);
   const sdk = pack(path.join(workspaceRoot, "packages", "game-sdk"));
-  const egyptianWar = pack(path.join(workspaceRoot, "games", "egyptian-war"));
+  const egyptianWar = pack("@masonf539/egyptian-war@1.0.0");
 
   assert.ok(sdk.files.includes("dist/index.js"));
   assert.ok(sdk.files.includes("dist/index.d.ts"));
@@ -100,7 +100,7 @@ try {
     )
   );
 
-  console.log("Verified standalone SDK and Egyptian War npm artifacts.");
+  console.log("Verified the GameHub SDK artifact and published Egyptian War package.");
 } finally {
   rmSync(temporaryRoot, { recursive: true, force: true });
 }
