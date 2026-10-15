@@ -10,9 +10,12 @@ individual games move into their own repositories. Egyptian War and future
 games consume an exact SDK release from the public npm registry.
 
 The SDK defines package manifests, authoritative `GameSession` lifecycle
-hooks, viewer-safe state and event envelopes, and browser-module platform
-services. GameHub treats installed packages as trusted code and does not expose
-its private room implementation through these contracts.
+hooks, viewer-safe state and event envelopes, browser-module platform
+services, and optional named keybind actions. A game declares stable action
+IDs and defaults; GameHub owns the remapping UI, local persistence, and input
+routing through `GameClientContext.input`. GameHub treats installed packages
+as trusted code and does not expose its private room implementation through
+these contracts.
 
 ## Releasing
 

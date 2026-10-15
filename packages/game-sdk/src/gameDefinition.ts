@@ -39,6 +39,15 @@ export type GamePreview = {
   posterPath: string;
 };
 
+export type GameKeybind = {
+  /** Stable action id used by the game client, such as "play-card". */
+  id: string;
+  label: string;
+  description?: string;
+  /** KeyboardEvent.code value, so defaults follow physical key positions. */
+  defaultKey: string;
+};
+
 export type GameDefinition = {
   id: string;
   name: string;
@@ -49,5 +58,6 @@ export type GameDefinition = {
   minPlayers: number;
   maxPlayers: number;
   settings: GameSetting[];
+  keybinds?: GameKeybind[];
   preview?: GamePreview;
 };

@@ -1,6 +1,6 @@
 import { randomInt } from "node:crypto";
 
-export const slapCollectionWindowMs = 200;
+export const slapCollectionWindowMs = 300;
 
 export const minimumSlapWindowMs = 20;
 export const maximumSlapWindowMs = 50;

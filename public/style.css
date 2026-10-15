@@ -268,6 +268,158 @@ body {
   gap: 0.75rem;
 }
 
+.game-keybind-sections {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.game-keybind-section {
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 0.85rem;
+}
+
+.game-keybind-section-toggle {
+  display: flex;
+  width: 100%;
+  min-height: 3.25rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.85rem 1rem;
+  color: #f8f9fa;
+  font-weight: 750;
+  text-align: left;
+  background: rgba(255, 255, 255, 0.035);
+  border: 0;
+}
+
+.game-keybind-section-toggle:hover,
+.game-keybind-section-toggle:focus-visible {
+  background: rgba(100, 175, 255, 0.11);
+}
+
+.game-keybind-section-chevron {
+  display: grid;
+  width: 1.35rem;
+  height: 1.35rem;
+  flex: 0 0 1.35rem;
+  place-items: center;
+  color: #b9d6ff;
+}
+
+.game-keybind-section-chevron::before {
+  width: 0.5rem;
+  height: 0.5rem;
+  content: "";
+  border-right: 0.13rem solid currentColor;
+  border-bottom: 0.13rem solid currentColor;
+  transform: translateY(-0.12rem) rotate(45deg);
+  transition: transform 120ms ease;
+}
+
+.game-keybind-section-chevron.is-expanded::before {
+  transform: translateY(0.12rem) rotate(225deg);
+}
+
+.game-keybind-section-body {
+  display: grid;
+  gap: 0.15rem;
+  padding: 0.35rem 1rem 1rem;
+}
+
+.game-keybind-row {
+  display: flex;
+  min-height: 3.75rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.7rem 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.game-keybind-row:last-of-type {
+  border-bottom: 0;
+}
+
+.game-keybind-copy {
+  min-width: 0;
+}
+
+.game-keybind-description {
+  display: block;
+  color: #adb5bd;
+  font-size: 0.82rem;
+}
+
+.game-keybind-button {
+  min-width: 7rem;
+  min-height: 2.35rem;
+  padding-inline: 0.9rem;
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.035em;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  background: rgba(8, 12, 20, 0.4);
+  border-width: 1px;
+  border-radius: 0.55rem;
+  box-shadow: inset 0 -0.15rem 0 rgba(0, 0, 0, 0.28);
+}
+
+.game-keybind-control {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.game-keybind-warning {
+  display: grid;
+  width: 1.35rem;
+  height: 1.35rem;
+  place-items: center;
+  color: #fff;
+  font-size: 0.85rem;
+  font-weight: 900;
+  line-height: 1;
+  background: #dc3545;
+  border-radius: 50%;
+  box-shadow: 0 0 0 0.16rem rgba(220, 53, 69, 0.2);
+}
+
+.game-keybind-warning[hidden] {
+  display: none;
+}
+
+.game-keybind-control.has-conflict .game-keybind-button {
+  color: #ff9aa4;
+  background: rgba(220, 53, 69, 0.12);
+  box-shadow:
+    inset 0 -0.15rem 0 rgba(0, 0, 0, 0.28),
+    0 0 0 0.12rem rgba(220, 53, 69, 0.12);
+}
+
+.game-keybind-button.is-listening {
+  color: #111827;
+  background: #facc15;
+  border-color: #facc15;
+}
+
+.game-keybind-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 0.65rem;
+}
+
+.game-keybind-empty {
+  padding: 1rem;
+  color: #adb5bd;
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 0.85rem;
+}
+
 .audio-setting {
   padding: 1rem;
   background: rgba(255, 255, 255, 0.045);
@@ -348,6 +500,16 @@ body {
 
   .game-display-setting {
     align-items: flex-start;
+  }
+}
+
+@media (max-width: 575.98px) {
+  .game-keybind-row {
+    align-items: flex-start;
+  }
+
+  .game-keybind-button {
+    min-width: 6.2rem;
   }
 }
 

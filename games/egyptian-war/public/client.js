@@ -57,6 +57,7 @@ let revealedEgyptianWarWinnerAnimationId = null;
 let egyptianWarTimerDurationMs = 15000;
 let egyptianWarTimerRemainingMs = null;
 let egyptianWarTimerDeadline = null;
+let egyptianWarInputUnsubscribers = [];
 
 function getAudio() {
   return currentContext?.audio ?? globalScope.GameHubAudio ?? {
@@ -1111,17 +1112,23 @@ toggleSlapRulesButton.addEventListener("click", () => {
     !expanded
   );
 });
-egyptianWarPlayCardButton.addEventListener("click", async () => {
+async function playEgyptianWarCard() {
+  if (egyptianWarPlayCardButton.disabled) return;
   const response = await currentContext?.submitAction({ type: "play-card" });
   if (response && !response.success) currentContext.notify(response.message);
-});
-egyptianWarSlapButton.addEventListener("click", async () => {
+}
+
+async function slapEgyptianWarPile() {
+  if (egyptianWarSlapButton.disabled) return;
   const response = await currentContext?.submitAction({
     type: "slap",
     payload: { pileVersion: previousEgyptianWarState?.pileVersion }
   });
   if (response && !response.success) currentContext.notify(response.message);
-});
+}
+
+egyptianWarPlayCardButton.addEventListener("click", playEgyptianWarCard);
+egyptianWarSlapButton.addEventListener("click", slapEgyptianWarPile);
 egyptianWarPauseButton.addEventListener("click", async () => {
   if (!currentContext?.isHost) return;
   const isPaused = egyptianWarPauseButton.getAttribute("aria-pressed") !== "true";
@@ -1147,6 +1154,10 @@ const egyptianWarClientModule = {
   mount(context) {
     currentContext = context;
     currentSettings = context.launchData.settings ?? {};
+    egyptianWarInputUnsubscribers = [
+      context.input?.onAction("play-card", playEgyptianWarCard),
+      context.input?.onAction("slap", slapEgyptianWarPile)
+    ].filter(Boolean);
     showEgyptianWarGame(context.launchData);
     timerInterval = setInterval(renderEgyptianWarTurnTimer, 100);
     return {
@@ -1164,6 +1175,8 @@ const egyptianWarClientModule = {
         if (event.type === "chat-message") renderChatMessage(event.payload);
       },
       destroy() {
+        for (const unsubscribe of egyptianWarInputUnsubscribers) unsubscribe();
+        egyptianWarInputUnsubscribers = [];
         destroyEgyptianWarGame();
         clearInterval(timerInterval);
         timerInterval = null;

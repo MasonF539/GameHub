@@ -1,6 +1,7 @@
 export type {
   BooleanGameSetting,
   GameDefinition,
+  GameKeybind,
   GamePreview,
   GameSetting,
   GameSettingValue,
@@ -29,6 +30,7 @@ export type {
   GameLifecycleState,
   GameMember,
   GameMemberRole,
+  GameInputApi,
   GamePlatformEvent,
   GameServerPlugin,
   GameSession,

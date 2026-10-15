@@ -20,6 +20,7 @@ function createClient({ prefersReducedMotion = false } = {}) {
   const gameClientPlatformEvents = [];
   const gameClientContexts = [];
   let modalHideCount = 0;
+  let modalShowCount = 0;
 
   global.window = dom.window;
   global.document = dom.window.document;
@@ -48,7 +49,9 @@ function createClient({ prefersReducedMotion = false } = {}) {
         hide() {
           modalHideCount += 1;
         },
-        show() {}
+        show() {
+          modalShowCount += 1;
+        }
       })
     }
   };
@@ -108,7 +111,8 @@ function createClient({ prefersReducedMotion = false } = {}) {
     gameClientEvents,
     gameClientPlatformEvents,
     gameClientContexts,
-    getModalHideCount: () => modalHideCount
+    getModalHideCount: () => modalHideCount,
+    getModalShowCount: () => modalShowCount
   };
 }
 
@@ -169,6 +173,210 @@ test("uses the static picker poster when reduced motion is preferred", () => {
   assert.equal(preview.autoplay, false);
   assert.equal(preview.loop, false);
   assert.equal(preview.preload, "none");
+  close();
+});
+
+test("renders collapsible package keybinds and routes a rebound action", () => {
+  const {
+    close,
+    handlers,
+    gameClientContexts,
+    getModalShowCount
+  } = createClient();
+  const configurableGame = game({
+    keybinds: [
+      {
+        id: "primary-action",
+        label: "Primary action",
+        description: "Perform the example action.",
+        defaultKey: "Space"
+      },
+      {
+        id: "secondary-action",
+        label: "Secondary action",
+        defaultKey: "KeyQ"
+      }
+    ]
+  });
+
+  handlers.get("available-games")([configurableGame]);
+  const sections = document.querySelectorAll(".game-keybind-section");
+  assert.equal(sections.length, 2);
+  assert.match(sections[0].textContent, /General/);
+  assert.match(sections[1].textContent, /Example Game/);
+  assert.equal(sections[0].querySelector(".game-keybind-section-body").hidden, false);
+  assert.equal(sections[1].querySelector(".game-keybind-section-body").hidden, true);
+
+  document.dispatchEvent(new window.KeyboardEvent("keydown", {
+    code: "Escape",
+    bubbles: true
+  }));
+  assert.equal(getModalShowCount(), 1);
+
+  sections[1].querySelector(".game-keybind-section-toggle").click();
+  assert.equal(sections[1].querySelector(".game-keybind-section-body").hidden, false);
+  const bindingButton = sections[1].querySelector(".game-keybind-button");
+  assert.equal(bindingButton.textContent, "Space");
+  bindingButton.click();
+  document.dispatchEvent(new window.KeyboardEvent("keydown", {
+    code: "KeyE",
+    bubbles: true
+  }));
+  assert.equal(
+    JSON.parse(localStorage.getItem("gamehub:keybinds"))["example-game"]["primary-action"],
+    "KeyE"
+  );
+  assert.equal(document.querySelectorAll(".game-keybind-control.has-conflict").length, 0);
+  assert.deepEqual(
+    [...document.querySelectorAll(".game-keybind-section-body")]
+      .map((body) => body.hidden),
+    [false, false]
+  );
+
+  document.querySelector("#app-settings-modal").dispatchEvent(
+    new window.Event("hidden.bs.modal")
+  );
+  assert.deepEqual(
+    [...document.querySelectorAll(".game-keybind-section-body")]
+      .map((body) => body.hidden),
+    [true, true]
+  );
+
+  handlers.get("room-resumed")({
+    roomCode: "ABC123",
+    isHost: true,
+    isLocked: false,
+    selectedGameId: "example-game",
+    gameSettings: {},
+    activeGameId: "example-game",
+    isPaused: false,
+    chatEnabled: true
+  });
+  let actionCount = 0;
+  gameClientContexts[0].input.onAction("primary-action", () => {
+    actionCount += 1;
+  });
+  document.dispatchEvent(new window.KeyboardEvent("keydown", {
+    code: "KeyE",
+    bubbles: true
+  }));
+  assert.equal(actionCount, 1);
+  close();
+});
+
+test("marks both invalid keybinds while allowing overlap across games", () => {
+  const { close, handlers } = createClient();
+  handlers.get("available-games")([
+    game({
+      keybinds: [
+        { id: "opens-settings-too", label: "Conflict", defaultKey: "Escape" },
+        { id: "shared-key", label: "Shared key", defaultKey: "KeyQ" }
+      ]
+    }),
+    game({
+      id: "second-game",
+      name: "Second Game",
+      keybinds: [
+        { id: "shared-key", label: "Shared key", defaultKey: "KeyQ" }
+      ]
+    })
+  ]);
+
+  const conflicts = document.querySelectorAll(".game-keybind-control.has-conflict");
+  assert.equal(conflicts.length, 2);
+  assert.match(conflicts[0].closest(".game-keybind-section").textContent, /General/);
+  assert.match(conflicts[1].closest(".game-keybind-section").textContent, /Example Game/);
+  assert.equal(
+    document.querySelectorAll(".game-keybind-warning:not([hidden])").length,
+    2
+  );
+  assert.equal(
+    [...document.querySelectorAll(".game-keybind-section")]
+      .find((section) => /Second Game/.test(section.textContent))
+      .querySelector(".has-conflict"),
+    null
+  );
+  close();
+});
+
+test("marks both bindings after a same-game overlap is assigned", () => {
+  const { close, handlers, gameClientContexts } = createClient();
+  handlers.get("available-games")([game({
+    keybinds: [
+      { id: "first", label: "First", defaultKey: "KeyQ" },
+      { id: "second", label: "Second", defaultKey: "KeyE" }
+    ]
+  })]);
+
+  const gameSection = [...document.querySelectorAll(".game-keybind-section")]
+    .find((section) => /Example Game/.test(section.textContent));
+  gameSection.querySelector(".game-keybind-section-toggle").click();
+  gameSection.querySelectorAll(".game-keybind-button")[1].click();
+  document.dispatchEvent(new window.KeyboardEvent("keydown", {
+    code: "KeyQ",
+    bubbles: true
+  }));
+
+  assert.equal(document.querySelectorAll(".game-keybind-control.has-conflict").length, 2);
+  assert.equal(
+    document.querySelectorAll(".game-keybind-warning:not([hidden])").length,
+    2
+  );
+
+  handlers.get("room-resumed")({
+    roomCode: "ABC123",
+    isHost: true,
+    isLocked: false,
+    selectedGameId: "example-game",
+    gameSettings: {},
+    activeGameId: "example-game",
+    isPaused: false,
+    chatEnabled: true
+  });
+  let actionCount = 0;
+  gameClientContexts[0].input.onAction("first", () => {
+    actionCount += 1;
+  });
+  gameClientContexts[0].input.onAction("second", () => {
+    actionCount += 1;
+  });
+  document.dispatchEvent(new window.KeyboardEvent("keydown", {
+    code: "KeyQ",
+    bubbles: true
+  }));
+  assert.equal(actionCount, 0);
+  close();
+});
+
+test("allows Escape to be assigned and marks its General conflict", () => {
+  const { close, handlers, getModalShowCount } = createClient();
+  handlers.get("available-games")([game({
+    keybinds: [
+      { id: "cancel-action", label: "Cancel action", defaultKey: "KeyQ" }
+    ]
+  })]);
+
+  const gameSection = [...document.querySelectorAll(".game-keybind-section")]
+    .find((section) => /Example Game/.test(section.textContent));
+  gameSection.querySelector(".game-keybind-section-toggle").click();
+  gameSection.querySelector(".game-keybind-button").click();
+  document.dispatchEvent(new window.KeyboardEvent("keydown", {
+    code: "Escape",
+    bubbles: true
+  }));
+
+  assert.equal(getModalShowCount(), 0);
+  assert.equal(
+    JSON.parse(localStorage.getItem("gamehub:keybinds"))["example-game"]["cancel-action"],
+    "Escape"
+  );
+  assert.equal(document.querySelectorAll(".game-keybind-control.has-conflict").length, 2);
+  assert.deepEqual(
+    [...document.querySelectorAll(".game-keybind-button")]
+      .filter((button) => button.textContent === "Esc")
+      .map((button) => button.classList.contains("btn-outline-danger")),
+    [true, true]
+  );
   close();
 });
 

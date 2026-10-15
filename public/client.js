@@ -21,6 +21,8 @@ const appSettingsModalElement =
   document.querySelector("#app-settings-modal");
 const appUtilityControls =
   document.querySelector(".app-utility-controls");
+const gameKeybindSections =
+  document.querySelector("#game-keybind-sections");
 
 const entryView = document.querySelector("#entry-view");
 const lobbyView = document.querySelector("#lobby-view");
@@ -37,6 +39,7 @@ const gameClientHost = new window.GameHubGameClientHost({
     role: isCurrentUserSpectator ? "spectator" : "player",
     isHost: isCurrentUserHost,
     audio: gameHubAudio,
+    input: createGameInput(gameId),
     submitAction: (action) => new Promise((resolve) => {
       if (currentRoomCode === null) {
         resolve({ success: false, message: "You are not in a room." });
@@ -174,6 +177,370 @@ let currentSpectators = [];
 let returningGameMemberIds = new Set();
 
 const lastRoomStorageKey = "gamehub:last-room";
+const keybindStorageKey = "gamehub:keybinds";
+const generalKeybindDefinition = {
+  id: "general",
+  name: "General",
+  keybinds: [
+    {
+      id: "settings",
+      label: "Settings",
+      description: "Open or close GameHub settings.",
+      defaultKey: "Escape"
+    }
+  ]
+};
+const keybindSubscriptions = new Map();
+let keybindOverrides = loadKeybindOverrides();
+let pendingKeybindCapture = null;
+const expandedKeybindGroupIds = new Set(["general"]);
+
+function loadKeybindOverrides() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(keybindStorageKey) ?? "{}");
+    if (saved && typeof saved === "object" && !Array.isArray(saved)) {
+      return saved;
+    }
+  } catch {
+    // Invalid local preferences should fall back to package defaults.
+  }
+  return {};
+}
+
+function saveKeybindOverrides() {
+  localStorage.setItem(keybindStorageKey, JSON.stringify(keybindOverrides));
+}
+
+function getKeybindDefinitions() {
+  return [
+    generalKeybindDefinition,
+    ...gameDefinitions
+      .filter((game) => Array.isArray(game.keybinds) && game.keybinds.length > 0)
+      .map((game) => ({ id: game.id, name: game.name, keybinds: game.keybinds }))
+  ];
+}
+
+function getKeybindDefinition(groupId, actionId) {
+  return getKeybindDefinitions()
+    .find((group) => group.id === groupId)
+    ?.keybinds.find((keybind) => keybind.id === actionId) ?? null;
+}
+
+function getAssignedKey(groupId, keybind) {
+  const override = keybindOverrides[groupId]?.[keybind.id];
+  return typeof override === "string" && override !== ""
+    ? override
+    : keybind.defaultKey;
+}
+
+function formatKeyCode(code) {
+  const labels = {
+    Escape: "Esc",
+    Space: "Space",
+    ArrowUp: "Up",
+    ArrowDown: "Down",
+    ArrowLeft: "Left",
+    ArrowRight: "Right"
+  };
+  if (labels[code]) return labels[code];
+  if (/^Key[A-Z]$/.test(code)) return code.slice(3);
+  if (/^Digit[0-9]$/.test(code)) return code.slice(5);
+  return code;
+}
+
+function setKeybind(groupId, actionId, code) {
+  const definition = getKeybindDefinition(groupId, actionId);
+  if (!definition) return;
+
+  if (code === definition.defaultKey) {
+    delete keybindOverrides[groupId]?.[actionId];
+    if (Object.keys(keybindOverrides[groupId] ?? {}).length === 0) {
+      delete keybindOverrides[groupId];
+    }
+  } else {
+    keybindOverrides[groupId] ??= {};
+    keybindOverrides[groupId][actionId] = code;
+  }
+  saveKeybindOverrides();
+}
+
+function createGameInput(gameId) {
+  return {
+    onAction(actionId, handler) {
+      if (typeof handler !== "function") {
+        throw new TypeError("A game input action handler must be a function.");
+      }
+      let gameActions = keybindSubscriptions.get(gameId);
+      if (!gameActions) {
+        gameActions = new Map();
+        keybindSubscriptions.set(gameId, gameActions);
+      }
+      let handlers = gameActions.get(actionId);
+      if (!handlers) {
+        handlers = new Set();
+        gameActions.set(actionId, handlers);
+      }
+      handlers.add(handler);
+      return () => {
+        handlers.delete(handler);
+        if (handlers.size === 0) gameActions.delete(actionId);
+        if (gameActions.size === 0) keybindSubscriptions.delete(gameId);
+      };
+    }
+  };
+}
+
+function keybindConflictId(groupId, actionId) {
+  return `${groupId}\u0000${actionId}`;
+}
+
+function findKeybindConflicts(groups) {
+  const conflicts = new Set();
+  const markDuplicates = (group) => {
+    const actionsByCode = new Map();
+    for (const keybind of group.keybinds) {
+      const code = getAssignedKey(group.id, keybind);
+      const actions = actionsByCode.get(code) ?? [];
+      actions.push(keybind.id);
+      actionsByCode.set(code, actions);
+    }
+    for (const actionIds of actionsByCode.values()) {
+      if (actionIds.length < 2) continue;
+      for (const actionId of actionIds) {
+        conflicts.add(keybindConflictId(group.id, actionId));
+      }
+    }
+  };
+
+  for (const group of groups) markDuplicates(group);
+
+  const general = groups.find((group) => group.id === "general");
+  if (general) {
+    for (const generalKeybind of general.keybinds) {
+      const generalCode = getAssignedKey(general.id, generalKeybind);
+      for (const group of groups) {
+        if (group.id === general.id) continue;
+        for (const keybind of group.keybinds) {
+          if (getAssignedKey(group.id, keybind) !== generalCode) continue;
+          conflicts.add(keybindConflictId(general.id, generalKeybind.id));
+          conflicts.add(keybindConflictId(group.id, keybind.id));
+        }
+      }
+    }
+  }
+
+  return conflicts;
+}
+
+function createKeybindSection(group, expanded, conflicts) {
+  const section = document.createElement("section");
+  section.className = "game-keybind-section";
+
+  const headingId = `keybind-heading-${group.id}`;
+  const bodyId = `keybind-body-${group.id}`;
+  const toggle = document.createElement("button");
+  toggle.className = "game-keybind-section-toggle";
+  toggle.type = "button";
+  toggle.id = headingId;
+  toggle.setAttribute("aria-controls", bodyId);
+  toggle.setAttribute("aria-expanded", String(expanded));
+
+  const title = document.createElement("span");
+  title.textContent = group.name;
+  const chevron = document.createElement("span");
+  chevron.className = "game-keybind-section-chevron";
+  chevron.setAttribute("aria-hidden", "true");
+  chevron.classList.toggle("is-expanded", expanded);
+  toggle.append(title, chevron);
+
+  const body = document.createElement("div");
+  body.className = "game-keybind-section-body";
+  body.id = bodyId;
+  body.setAttribute("aria-labelledby", headingId);
+  body.hidden = !expanded;
+
+  for (const keybind of group.keybinds) {
+    const row = document.createElement("div");
+    row.className = "game-keybind-row";
+
+    const copy = document.createElement("div");
+    copy.className = "game-keybind-copy";
+    const label = document.createElement("strong");
+    label.className = "d-block";
+    label.textContent = keybind.label;
+    copy.appendChild(label);
+    if (keybind.description) {
+      const description = document.createElement("small");
+      description.className = "game-keybind-description";
+      description.textContent = keybind.description;
+      copy.appendChild(description);
+    }
+
+    const keyButton = document.createElement("button");
+    keyButton.className = "game-keybind-button btn btn-outline-light btn-sm";
+    keyButton.type = "button";
+    keyButton.textContent = formatKeyCode(getAssignedKey(group.id, keybind));
+    keyButton.setAttribute(
+      "aria-label",
+      `Change ${group.name} ${keybind.label} keybind`
+    );
+
+    const hasConflict = conflicts.has(keybindConflictId(group.id, keybind.id));
+    const control = document.createElement("div");
+    control.className = "game-keybind-control";
+    const warning = document.createElement("span");
+    warning.className = "game-keybind-warning";
+    warning.textContent = "!";
+    warning.hidden = !hasConflict;
+    warning.setAttribute("aria-hidden", "true");
+    control.append(warning, keyButton);
+    if (hasConflict) {
+      control.classList.add("has-conflict");
+      keyButton.classList.remove("btn-outline-light");
+      keyButton.classList.add("btn-outline-danger");
+      keyButton.setAttribute(
+        "aria-label",
+        `Conflict: change ${group.name} ${keybind.label} keybind`
+      );
+      keyButton.title = "This key overlaps another binding.";
+    }
+    keyButton.addEventListener("click", () => {
+      pendingKeybindCapture?.cancel();
+      const originalText = keyButton.textContent;
+      keyButton.textContent = "Press a key…";
+      keyButton.classList.add("is-listening");
+      pendingKeybindCapture = {
+        groupId: group.id,
+        actionId: keybind.id,
+        button: keyButton,
+        cancel() {
+          keyButton.textContent = originalText;
+          keyButton.classList.remove("is-listening");
+          if (pendingKeybindCapture?.button === keyButton) {
+            pendingKeybindCapture = null;
+          }
+        }
+      };
+    });
+
+    row.append(copy, control);
+    body.appendChild(row);
+  }
+
+  const actions = document.createElement("div");
+  actions.className = "game-keybind-actions";
+  const resetButton = document.createElement("button");
+  resetButton.className = "btn btn-outline-secondary btn-sm";
+  resetButton.type = "button";
+  resetButton.textContent = "Reset defaults";
+  resetButton.addEventListener("click", () => {
+    delete keybindOverrides[group.id];
+    saveKeybindOverrides();
+    renderKeybindSettings();
+  });
+  actions.appendChild(resetButton);
+  body.appendChild(actions);
+
+  toggle.addEventListener("click", () => {
+    const isExpanded = toggle.getAttribute("aria-expanded") === "true";
+    toggle.setAttribute("aria-expanded", String(!isExpanded));
+    body.hidden = isExpanded;
+    chevron.classList.toggle("is-expanded", !isExpanded);
+    if (isExpanded) expandedKeybindGroupIds.delete(group.id);
+    else expandedKeybindGroupIds.add(group.id);
+  });
+
+  section.append(toggle, body);
+  return section;
+}
+
+function renderKeybindSettings() {
+  pendingKeybindCapture?.cancel();
+  gameKeybindSections.replaceChildren();
+  const groups = getKeybindDefinitions();
+  if (groups.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "game-keybind-empty mb-0";
+    empty.textContent = "No configurable keybinds are installed.";
+    gameKeybindSections.appendChild(empty);
+    return;
+  }
+  const conflicts = findKeybindConflicts(groups);
+  for (const group of groups) {
+    gameKeybindSections.appendChild(
+      createKeybindSection(group, expandedKeybindGroupIds.has(group.id), conflicts)
+    );
+  }
+}
+
+function isTextEntryTarget(target) {
+  return Boolean(target && typeof target.closest === "function" &&
+    target.closest("input, textarea, select, [contenteditable='true']")
+  );
+}
+
+function toggleAppSettings() {
+  const modal = bootstrap.Modal.getOrCreateInstance(appSettingsModalElement);
+  if (appSettingsModalElement.classList.contains("show")) modal.hide();
+  else modal.show();
+}
+
+document.addEventListener("keydown", (event) => {
+  if (pendingKeybindCapture) {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    const capture = pendingKeybindCapture;
+    setKeybind(capture.groupId, capture.actionId, event.code);
+    renderKeybindSettings();
+    return;
+  }
+
+  if (event.repeat || isTextEntryTarget(event.target)) return;
+
+  const generalSettings = generalKeybindDefinition.keybinds[0];
+  if (event.code === getAssignedKey("general", generalSettings)) {
+    const otherModalIsOpen = document.querySelector(
+      ".modal.show:not(#app-settings-modal)"
+    );
+    if (!otherModalIsOpen) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      toggleAppSettings();
+    }
+    return;
+  }
+
+  if (
+    currentActiveGameId === null ||
+    isCurrentUserSpectator ||
+    document.querySelector(".modal.show")
+  ) {
+    return;
+  }
+
+  const game = gameDefinitions.find((candidate) => candidate.id === currentActiveGameId);
+  const keybind = game?.keybinds?.find(
+    (candidate) => getAssignedKey(game.id, candidate) === event.code
+  );
+  if (!keybind) return;
+
+  const conflicts = findKeybindConflicts(getKeybindDefinitions());
+  if (conflicts.has(keybindConflictId(game.id, keybind.id))) {
+    event.preventDefault();
+    showToast(
+      `${formatKeyCode(event.code)} has overlapping keybinds. ` +
+      "Resolve the conflict before using it."
+    );
+    return;
+  }
+
+  const handlers = keybindSubscriptions.get(game.id)?.get(keybind.id);
+  if (!handlers || handlers.size === 0) return;
+  event.preventDefault();
+  for (const handler of [...handlers]) handler();
+}, true);
+
+renderKeybindSettings();
 
 function saveResumeSession(roomCode, resumeToken) {
   localStorage.setItem(
@@ -383,6 +750,11 @@ appSettingsModalElement.addEventListener(
   "show.bs.modal",
   updateGameSettingsControls
 );
+appSettingsModalElement.addEventListener("hidden.bs.modal", () => {
+  pendingKeybindCapture?.cancel();
+  expandedKeybindGroupIds.clear();
+  renderKeybindSettings();
+});
 updateGameSettingsControls();
 
 function createKickPlayerButton(player, className) {
@@ -1131,6 +1503,7 @@ socket.on("room-session-replaced", () => {
 socket.on("available-games", (games) => {
   gameDefinitions = games;
   updateGamePicker();
+  renderKeybindSettings();
 
   if (
     isCurrentUserHost &&

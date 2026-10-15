@@ -6,6 +6,7 @@ import {
 
 const identifierPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const settingKeyPattern = /^[A-Za-z][A-Za-z0-9]*$/;
+const actionIdPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const semanticVersionPattern =
   /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
 
@@ -165,6 +166,33 @@ export function validateGamePluginManifest(manifest: GamePluginManifest): void {
     }
     settingKeys.add(setting.key);
     validateSetting(setting, game.id);
+  }
+
+  const keybindIds = new Set<string>();
+  const defaultKeys = new Set<string>();
+  for (const keybind of game.keybinds ?? []) {
+    if (!actionIdPattern.test(keybind.id)) {
+      throw new GamePluginValidationError(
+        `${game.id} has an invalid keybind action id: ${keybind.id}.`
+      );
+    }
+    if (keybindIds.has(keybind.id)) {
+      throw new GamePluginValidationError(
+        `${game.id} has a duplicate keybind action id: ${keybind.id}.`
+      );
+    }
+    requireNonEmpty(keybind.label, `${game.id}.${keybind.id} keybind label`);
+    requireNonEmpty(
+      keybind.defaultKey,
+      `${game.id}.${keybind.id} default keybind`
+    );
+    if (defaultKeys.has(keybind.defaultKey)) {
+      throw new GamePluginValidationError(
+        `${game.id} assigns ${keybind.defaultKey} to multiple actions.`
+      );
+    }
+    keybindIds.add(keybind.id);
+    defaultKeys.add(keybind.defaultKey);
   }
 
   if (manifest.client.delivery === "module") {

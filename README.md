@@ -30,7 +30,7 @@ The server runs locally in Docker and can optionally use a temporary Cloudflare 
 - Late-game joining as a read-only spectator, with live public state, spectator reconnect support, in-game chat, voluntary return to the lobby, and a lobby action for spectating again while the game remains active
 - Display-only network ping indicator that does not influence gameplay arbitration
 - Viewport-fitted Egyptian War interface with a casino-style table, responsive player seats and controls, a full-width numeric turn timer with a stationary seconds label, a tabbed chat/spectator overlay, stable mobile positioning, and a compact in-game Settings shortcut
-- A responsive tabbed GameHub Settings panel with reusable Game actions for full screen, pausing, and exiting, plus persistent, independent music, lobby alert, and gameplay volume controls; setting an audio category to 0% disables it
+- A responsive tabbed GameHub Settings panel with reusable Game actions for full screen, pausing, and exiting; persistent independent audio controls; and locally saved keybinds grouped into collapsible General and per-game package sections with visible conflict warnings
 
 Game events and game-specific sounds are sent only to people currently viewing the active board. A lobby member therefore cannot hear a delayed game-win effect. When a game ends, people already waiting in the lobby hear a separate GameHub completion chime; returning participants are not mistaken for new joins and do not trigger the player-join sound.
 

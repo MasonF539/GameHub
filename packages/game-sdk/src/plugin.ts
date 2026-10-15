@@ -103,6 +103,11 @@ export type GameAudioApi = {
   setScene(scene: string | null): void;
 };
 
+export type GameInputApi = {
+  /** Subscribe to a named action declared by this game's manifest. */
+  onAction(actionId: string, handler: () => void): () => void;
+};
+
 export type GameClientContext = {
   root: HTMLElement;
   gameId: string;
@@ -111,6 +116,7 @@ export type GameClientContext = {
   isHost: boolean;
   launchData: unknown;
   audio: GameAudioApi;
+  input: GameInputApi;
   submitAction(action: GameActionEnvelope): Promise<GameActionResult>;
   requestPause(isPaused: boolean): Promise<GameActionResult>;
   sendChat(message: string): Promise<GameActionResult>;

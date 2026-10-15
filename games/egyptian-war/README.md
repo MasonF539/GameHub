@@ -30,6 +30,10 @@ below GameHub's Settings shortcut. Full Screen and confirmed Exit/Leave
 actions remain platform-owned controls in GameHub's reusable Game tab. The
 shortcut is mounted inside the active game viewport, while the Settings tabs
 move into one horizontal row at medium and small widths.
+Egyptian War declares `play-card` and `slap` input actions for GameHub's
+package-aware Keybinds tab. Their defaults are E and Space respectively, and
+the game subscribes through the shared input service so remapping remains a
+personal GameHub preference.
 The package's public state also states whether the current player may legally
 play a card, keeping the action disabled during the final slap window after a
 failed challenge. Its numeric countdown stays fixed at the right edge inside

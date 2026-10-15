@@ -48,6 +48,21 @@ export const egyptianWar: GameDefinition = {
     posterPath: "/games/egyptian-war/assets/game-previews/poster.webp"
   },
 
+  keybinds: [
+    {
+      id: "play-card",
+      label: "Play a card",
+      description: "Play the top card when it is your turn.",
+      defaultKey: "KeyE"
+    },
+    {
+      id: "slap",
+      label: "Slap",
+      description: "Attempt to slap the central pile.",
+      defaultKey: "Space"
+    }
+  ],
+
   rules: [
     "The server shuffles the deck, deals every card face down, and randomly selects the first player.",
     "Players cannot view or shuffle their decks.",

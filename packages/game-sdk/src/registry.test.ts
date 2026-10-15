@@ -129,6 +129,35 @@ test("rejects malformed player limits and settings", () => {
   );
 });
 
+test("validates game keybind action ids and defaults", () => {
+  const valid = createManifest();
+  valid.definition.keybinds = [
+    { id: "primary-action", label: "Primary action", defaultKey: "Space" },
+    { id: "secondary-action", label: "Secondary action", defaultKey: "KeyE" }
+  ];
+  assert.doesNotThrow(() => validateGamePluginManifest(valid));
+
+  const duplicateAction = createManifest();
+  duplicateAction.definition.keybinds = [
+    { id: "act", label: "First", defaultKey: "Space" },
+    { id: "act", label: "Second", defaultKey: "KeyE" }
+  ];
+  assert.throws(
+    () => validateGamePluginManifest(duplicateAction),
+    /duplicate keybind action id/
+  );
+
+  const duplicateDefault = createManifest();
+  duplicateDefault.definition.keybinds = [
+    { id: "first", label: "First", defaultKey: "Space" },
+    { id: "second", label: "Second", defaultKey: "Space" }
+  ];
+  assert.throws(
+    () => validateGamePluginManifest(duplicateDefault),
+    /assigns Space to multiple actions/
+  );
+});
+
 test("preview media must live inside the game's own public folder", () => {
   const valid = createManifest();
   valid.definition.preview = {

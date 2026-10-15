@@ -27,6 +27,7 @@ The independently buildable `@masonf539/game-sdk` workspace under
 - `GameServerPlugin` creates an authoritative `GameSession` for a room.
 - `GameSession` receives generic actions and lifecycle notifications and exposes viewer-safe public state.
 - `GameClientModule` mounts a game's browser interface inside the root supplied by GameHub and receives generic state and events.
+- Optional keybind declarations expose stable named actions and physical-key defaults; mounted clients subscribe through `GameClientContext.input` rather than owning global keyboard listeners.
 - `GamePluginRegistry` validates manifests, rejects duplicate IDs, and supplies public definitions to the game picker.
 
 The manifest API and package version are separate. `apiVersion` describes compatibility with GameHub, while `packageVersion` describes a release of the game itself.
@@ -71,7 +72,14 @@ actions without querying package-specific controls. Game packages remain
 responsible for fitting their mounted panels to the supplied viewport;
 Egyptian War fixes its active panel to that viewport and accounts for mobile
 safe areas. The settings categories are vertical on large screens and move
-above the selected panel horizontally at medium and small breakpoints.
+above the selected panel horizontally at medium and small breakpoints. The
+Keybinds tab contains a General group and one independently collapsible group
+for every installed game that declares keybinds. Overrides are personal,
+stored locally by game and action ID, and routed only to an active player while
+that game is mounted. Text entry, spectators, and open modal dialogs suppress
+gameplay shortcuts. The interface marks both sides of a collision within one
+game or against a General shortcut; the same physical key may be reused by
+different games because only one game can be mounted at a time.
 
 The platform owns menu/lobby audio and the adjustable lobby alert category, which includes player-join notifications and the replaceable `public/assets/audio/effects/game-finished.mp3` alert heard by members already waiting in the lobby. Individual game packages own game music and action effects and register them through the shared audio service. The server routes package events only to active players and spectators, preventing lobby waiters from receiving delayed gameplay audio. GameHub identifies members returning from a finished game so their promotion back into the player list does not trigger the new-player sound.
 

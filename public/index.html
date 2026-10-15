@@ -216,6 +216,11 @@
                 data-bs-target="#app-settings-audio-panel">
                 Audio
               </button>
+              <button id="app-settings-keybinds-tab" class="app-settings-navigation-button nav-link" type="button"
+                role="tab" aria-selected="false" aria-controls="app-settings-keybinds-panel" data-bs-toggle="pill"
+                data-bs-target="#app-settings-keybinds-panel">
+                Keybinds
+              </button>
             </div>
 
             <div class="app-settings-content tab-content">
@@ -323,6 +328,20 @@
                   </div>
                 </div>
               </div>
+              </section>
+
+              <section id="app-settings-keybinds-panel" class="app-settings-section tab-pane fade" role="tabpanel"
+                aria-labelledby="app-settings-keybinds-tab" tabindex="0">
+                <div class="app-settings-section-heading">
+                  <div>
+                    <h3 class="h5 mb-1">Keybinds</h3>
+                    <p class="mb-0 text-body-secondary">
+                      Personal controls for each installed game.
+                    </p>
+                  </div>
+                </div>
+
+                <div id="game-keybind-sections" class="game-keybind-sections"></div>
               </section>
             </div>
           </div>
