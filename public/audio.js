@@ -8,29 +8,19 @@
     game: 1
   };
   const musicSources = {
-    menu: "/assets/audio/music/menu-lobby.mp3",
-    "egyptian-war": "/assets/audio/music/egyptian-war.mp3"
+    menu: "/assets/audio/music/menu-lobby.mp3"
   };
   const effectSources = {
     "player-join": "/assets/audio/effects/player-join.mp3",
-    "card-play": "/assets/audio/effects/card-play.mp3",
-    slap: "/assets/audio/effects/slap.mp3",
-    "pile-win": "/assets/audio/effects/pile-win.mp3",
-    "game-win": "/assets/audio/effects/game-win.mp3"
+    "game-finished": "/assets/audio/effects/game-finished.mp3"
   };
   const effectVolumes = {
     "player-join": 0.8,
-    "card-play": 0.85,
-    slap: 0.9,
-    "pile-win": 0.85,
-    "game-win": 0.95
+    "game-finished": 0.8
   };
   const effectCategories = {
     "player-join": "join",
-    "card-play": "game",
-    slap: "game",
-    "pile-win": "game",
-    "game-win": "game"
+    "game-finished": "join"
   };
   const musicBaseVolume = 0.42;
   const music = new Audio();
@@ -241,6 +231,42 @@
     playCurrentMusic();
   }
 
+  function registerMusicScene(name, source) {
+    if (
+      typeof name !== "string" ||
+      name.trim() === "" ||
+      typeof source !== "string" ||
+      source.trim() === ""
+    ) {
+      throw new TypeError("Audio music scenes require a name and source.");
+    }
+
+    musicSources[name] = source;
+  }
+
+  function registerEffect(
+    name,
+    { source, category = "game", volume = 1 }
+  ) {
+    if (
+      typeof name !== "string" ||
+      name.trim() === "" ||
+      typeof source !== "string" ||
+      source.trim() === "" ||
+      !categories.includes(category)
+    ) {
+      throw new TypeError("Audio effects require a valid name, source, and category.");
+    }
+
+    const normalizedVolume = clampVolume(volume);
+    const template = new Audio(source);
+    template.preload = "auto";
+    effectSources[name] = source;
+    effectVolumes[name] = normalizedVolume;
+    effectCategories[name] = category;
+    effectTemplates.set(name, template);
+  }
+
   function playEffect(name) {
     const category = effectCategories[name];
 
@@ -284,6 +310,8 @@
   window.GameHubAudio = {
     getSettings: () => JSON.parse(JSON.stringify(settings)),
     playEffect,
+    registerEffect,
+    registerMusicScene,
     setCategoryEnabled,
     setCategoryVolume,
     setMuted,

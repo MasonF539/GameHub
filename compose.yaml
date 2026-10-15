@@ -12,6 +12,16 @@ services:
       # The port used by GameHub inside the container.
       PORT: "3000"
 
+      # "true" only when players reach GameHub through the Cloudflare tunnel
+      # (the launcher's Public mode sets it). It makes rate limits use each
+      # visitor's real address instead of the tunnel's. Never turn it on if
+      # people you do not trust can reach port 3000 directly: they could forge
+      # the address and dodge the limits.
+      GAMEHUB_TRUST_CLOUDFLARE_IP: "${GAMEHUB_TRUST_CLOUDFLARE_IP:-false}"
+
+      # The most rooms the server will hold at once.
+      GAMEHUB_MAX_ROOMS: "${GAMEHUB_MAX_ROOMS:-200}"
+
     init: true
 
   tunnel:
@@ -19,7 +29,9 @@ services:
     profiles:
       - public
 
-    image: cloudflare/cloudflared:latest
+    # Set CLOUDFLARED_VERSION to a release tag (for example in a .env file)
+    # to pin the tunnel to a specific version instead of "latest".
+    image: cloudflare/cloudflared:${CLOUDFLARED_VERSION:-latest}
 
     command:
       - tunnel

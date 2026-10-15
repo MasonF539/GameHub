@@ -64,6 +64,12 @@ test("switches music scenes and independently adjusts persisted audio categories
 
   const music = audioInstances[0];
   const audio = dom.window.GameHubAudio;
+  audio.registerMusicScene("test-game", "/games/test-game/music.mp3");
+  audio.registerEffect("test-action", {
+    source: "/games/test-game/action.mp3",
+    category: "game",
+    volume: 0.9
+  });
   const musicVolume = dom.window.document.querySelector(
     "#audio-music-volume"
   );
@@ -84,12 +90,16 @@ test("switches music scenes and independently adjusts persisted audio categories
   dom.window.document.dispatchEvent(new dom.window.Event("pointerdown"));
   assert.equal(music.playCount, 1);
 
-  audio.setScene("egyptian-war");
-  assert.match(music.src, /egyptian-war\.mp3$/);
+  audio.setScene("test-game");
+  assert.match(music.src, /test-game\/music\.mp3$/);
   assert.equal(music.playCount, 2);
 
-  audio.playEffect("slap");
-  assert.match(audioInstances.at(-1).src, /effects\/slap\.mp3$/);
+  audio.playEffect("test-action");
+  assert.match(audioInstances.at(-1).src, /test-game\/action\.mp3$/);
+  assert.equal(audioInstances.at(-1).playCount, 1);
+
+  audio.playEffect("game-finished");
+  assert.match(audioInstances.at(-1).src, /game-finished\.mp3$/);
   assert.equal(audioInstances.at(-1).playCount, 1);
 
   musicVolume.value = "50";
@@ -99,7 +109,7 @@ test("switches music scenes and independently adjusts persisted audio categories
 
   gameVolume.value = "25";
   gameVolume.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
-  audio.playEffect("slap");
+  audio.playEffect("test-action");
   assert.equal(audioInstances.at(-1).volume, 0.225);
 
   joinVolume.value = "0";
@@ -108,7 +118,7 @@ test("switches music scenes and independently adjusts persisted audio categories
   audio.playEffect("player-join");
   assert.equal(audioInstances.length, instanceCountWithJoinDisabled);
 
-  audio.playEffect("card-play");
+  audio.playEffect("test-action");
   assert.equal(audioInstances.length, instanceCountWithJoinDisabled + 1);
 
   musicVolume.value = "0";

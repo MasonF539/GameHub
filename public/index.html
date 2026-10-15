@@ -3,19 +3,22 @@
 
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>GameHub</title>
   <link rel="stylesheet" href="/vendor/bootstrap/css/bootstrap.min.css">
   <link rel="stylesheet" href="/style.css">
+  <!-- game-plugin-styles -->
 </head>
 
 <body>
-  <button id="app-settings-button" class="app-settings-button btn btn-outline-light btn-sm" type="button"
-    data-bs-toggle="modal" data-bs-target="#app-settings-modal" aria-label="Open GameHub settings"
-    title="GameHub settings">
-    <span class="app-settings-icon" aria-hidden="true">&#9881;</span>
-    <span class="app-settings-label">Settings</span>
-  </button>
+  <div class="app-utility-controls" role="group" aria-label="Display controls">
+    <button id="app-settings-button" class="app-settings-button btn btn-outline-light btn-sm" type="button"
+      data-bs-toggle="modal" data-bs-target="#app-settings-modal" aria-label="Open GameHub settings"
+      title="GameHub settings">
+      <span class="app-settings-icon" aria-hidden="true">&#9881;</span>
+      <span class="app-settings-label">Settings</span>
+    </button>
+  </div>
 
   <main class="container py-5">
     <header class="text-center mb-5">
@@ -109,6 +112,9 @@
           type="button" data-bs-toggle="modal" data-bs-target="#close-lobby-modal">
           Close Lobby
         </button>
+        <button id="leave-lobby" class="btn btn-outline-light btn-sm" type="button">
+          Leave Lobby
+        </button>
         <h2 class="card-title text-center">Game Lobby</h2>
 
         <div class="room-code-container d-flex align-items-center justify-content-center gap-1">
@@ -136,7 +142,7 @@
 
         <ul id="player-list" class="list-group mb-4"></ul>
 
-        <h3 class="h5">Game</h3>
+        <h3 class="h5">Choose a game</h3>
 
         <div class="selected-game-panel mb-3">
           <div>
@@ -171,155 +177,16 @@
           Start Game
         </button>
 
+        <button id="spectate-game" class="btn btn-info btn-lg w-100 d-none" type="button" disabled>
+          Spectate Game
+        </button>
+
         <p id="game-status" class="status-message mt-3 mb-0"></p>
       </div>
     </section>
 
     <section id="gameplay-view" class="card game-card shadow mx-auto d-none">
-      <div class="card-body p-4 egyptian-war-game-panel">
-        <h2 class="card-title text-center">Egyptian War</h2>
-        <div class="egyptian-war-top-right">
-          <div class="egyptian-war-host-controls d-none" id="egyptian-war-host-controls">
-            <button id="egyptian-war-pause" class="btn btn-outline-light btn-sm"
-              type="button" aria-pressed="false">
-              Pause
-            </button>
-            <button id="egyptian-war-exit-game" class="btn btn-outline-danger btn-sm" type="button"
-              data-bs-toggle="modal" data-bs-target="#exit-game-modal">
-              Exit Game
-            </button>
-          </div>
-          <p id="gameplay-connection-status"
-            class="server-connection-status text-bg-warning egyptian-war-connection-status">
-            Connecting to server…
-          </p>
-          <span id="network-ping" class="network-ping" aria-label="Current network ping"
-            aria-live="polite">Ping: -- ms</span>
-        </div>
-        <aside id="egyptian-war-slap-rules" class="egyptian-war-slap-rules"
-          aria-labelledby="egyptian-war-slap-rules-title">
-          <div class="egyptian-war-slap-rules-heading">
-            <h3 id="egyptian-war-slap-rules-title">Slap Rules</h3>
-            <button id="toggle-slap-rules" class="btn btn-outline-light btn-sm"
-              type="button" aria-expanded="true" aria-controls="egyptian-war-slap-rules-list">
-              Hide
-            </button>
-          </div>
-          <ul id="egyptian-war-slap-rules-list"></ul>
-        </aside>
-
-        <div class="egyptian-war-play-layout">
-          <aside class="egyptian-war-side-panel" aria-label="Game communication">
-            <div class="egyptian-war-side-panel-heading">
-              <div class="egyptian-war-side-tabs" role="tablist" aria-label="Chat or spectators">
-                <button id="show-game-chat" class="btn btn-sm btn-light" type="button" role="tab"
-                  aria-selected="true" aria-controls="egyptian-war-chat">Chat</button>
-                <button id="show-game-spectators" class="btn btn-sm btn-outline-light" type="button" role="tab"
-                  aria-selected="false" aria-controls="egyptian-war-spectators">Spectators</button>
-              </div>
-              <button id="toggle-game-side-panel" class="btn btn-sm btn-outline-light egyptian-war-side-expand"
-                type="button" aria-expanded="false" aria-label="Expand panel" title="Expand panel">
-                <span aria-hidden="true"></span>
-                <span aria-hidden="true"></span>
-              </button>
-            </div>
-
-            <section id="egyptian-war-chat" class="egyptian-war-chat" role="tabpanel"
-              aria-labelledby="show-game-chat" hidden>
-              <h3 id="egyptian-war-chat-title" class="visually-hidden">Game chat</h3>
-              <ol id="egyptian-war-chat-messages" class="egyptian-war-chat-messages"
-                aria-live="polite" aria-relevant="additions"></ol>
-              <form id="egyptian-war-chat-form" class="egyptian-war-chat-form">
-                <label class="visually-hidden" for="egyptian-war-chat-input">Message</label>
-                <input id="egyptian-war-chat-input" class="form-control" type="text"
-                  maxlength="300" autocomplete="off" placeholder="Write a message">
-                <button class="btn btn-outline-light" type="submit">Send</button>
-              </form>
-            </section>
-
-            <section id="egyptian-war-spectators" class="egyptian-war-spectators" role="tabpanel"
-              aria-labelledby="show-game-spectators" hidden>
-              <h3 id="egyptian-war-spectators-title" class="visually-hidden">Spectators</h3>
-              <ul id="egyptian-war-spectator-list" class="egyptian-war-spectator-list list-group"
-                aria-live="polite"></ul>
-            </section>
-          </aside>
-
-          <div class="egyptian-war-board-column">
-            <div id="egyptian-war-arena" class="egyptian-war-arena">
-              <div id="egyptian-war-animation-layer" class="egyptian-war-animation-layer"
-                aria-hidden="true"></div>
-              <div class="egyptian-war-felt">
-                <div class="egyptian-war-table-info">
-                  <p id="egyptian-war-turn" class="egyptian-war-turn-inline" aria-live="polite"></p>
-                  <p class="egyptian-war-pile-label mb-2">
-                    Central pile: <span id="egyptian-war-pile-count">0 cards</span>
-                  </p>
-                  <div id="egyptian-war-pile-stack" class="egyptian-war-pile-stack"
-                    aria-label="Central card pile">
-                    <p id="egyptian-war-top-card" class="egyptian-war-empty-pile">
-                      No card played yet
-                    </p>
-                  </div>
-                  <p id="egyptian-war-challenge" class="egyptian-war-challenge mb-1"></p>
-                  <p id="egyptian-war-message" class="egyptian-war-message mb-0" aria-live="polite"></p>
-                </div>
-              </div>
-              <div id="egyptian-war-players" class="egyptian-war-seats"
-                aria-label="Players around the table"></div>
-              <div id="egyptian-war-victory" class="egyptian-war-victory" role="status" aria-live="assertive"
-                hidden></div>
-            </div>
-
-            <div class="egyptian-war-action-area">
-              <div id="egyptian-war-turn-timer" class="egyptian-war-turn-timer mb-2 is-hidden"
-                aria-hidden="true">
-                <div class="progress flex-grow-1" role="progressbar" aria-label="Time remaining for this turn"
-                  aria-valuemin="0" aria-valuemax="100" aria-valuenow="100">
-                  <div class="egyptian-war-timer-sleep-pattern" aria-hidden="true">
-                    <span class="egyptian-war-final-sleeper">
-                      <span class="egyptian-war-sleeping-bear">&#x1F43B;</span>
-                      <span class="egyptian-war-sleep-zs">
-                        <span>z</span><span>z</span><span>z</span><span>z</span>
-                      </span>
-                    </span>
-                    <span class="egyptian-war-sleep-zs">
-                      <span>z</span><span>z</span><span>z</span>
-                    </span>
-                    <span class="egyptian-war-sleep-zs">
-                      <span>z</span><span>z</span>
-                    </span>
-                    <span class="egyptian-war-sleep-zs">
-                      <span>z</span>
-                    </span>
-                    <span class="egyptian-war-sleep-spacer"></span>
-                  </div>
-                  <div id="egyptian-war-turn-timer-bar" class="progress-bar bg-warning" style="width: 100%"></div>
-                </div>
-                <span id="egyptian-war-turn-timer-value" class="egyptian-war-turn-timer-value">15s</span>
-              </div>
-
-              <div class="row g-2 egyptian-war-controls">
-                <div class="col">
-                  <button id="egyptian-war-play-card" class="btn btn-success btn-lg w-100" type="button" disabled>
-                    Play a Card
-                  </button>
-                </div>
-                <div class="col">
-                  <button id="egyptian-war-slap" class="btn btn-warning btn-lg w-100" type="button" disabled>
-                    <span class="egyptian-war-action-label">Slap!</span>
-                    <span class="egyptian-war-action-subtitle">
-                      <span class="egyptian-war-action-fire" aria-hidden="true">&#x1F525;</span>
-                      Bring the pain
-                      <span class="egyptian-war-action-fire" aria-hidden="true">&#x1F525;</span>
-                    </span>
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+      <div id="game-root"><!-- game-plugin-markup --></div>
     </section>
 
     <div id="app-settings-modal" class="modal fade" tabindex="-1" aria-labelledby="app-settings-modal-title"
@@ -330,7 +197,7 @@
             <div>
               <h2 id="app-settings-modal-title" class="modal-title fs-4">GameHub Settings</h2>
               <p id="app-settings-modal-description" class="mb-0 text-body-secondary">
-                Personal settings apply only to this browser.
+                Personal preferences and controls for the current game.
               </p>
             </div>
 
@@ -339,15 +206,76 @@
 
           <div class="modal-body app-settings-layout">
             <div class="app-settings-navigation nav nav-pills" role="tablist" aria-label="Settings categories">
-              <button id="app-settings-audio-tab" class="app-settings-navigation-button nav-link active" type="button"
-                role="tab" aria-selected="true" aria-controls="app-settings-audio-panel" data-bs-toggle="pill"
+              <button id="app-settings-game-tab" class="app-settings-navigation-button nav-link active" type="button"
+                role="tab" aria-selected="true" aria-controls="app-settings-game-panel" data-bs-toggle="pill"
+                data-bs-target="#app-settings-game-panel">
+                Game
+              </button>
+              <button id="app-settings-audio-tab" class="app-settings-navigation-button nav-link" type="button"
+                role="tab" aria-selected="false" aria-controls="app-settings-audio-panel" data-bs-toggle="pill"
                 data-bs-target="#app-settings-audio-panel">
                 Audio
               </button>
+              <button id="app-settings-keybinds-tab" class="app-settings-navigation-button nav-link" type="button"
+                role="tab" aria-selected="false" aria-controls="app-settings-keybinds-panel" data-bs-toggle="pill"
+                data-bs-target="#app-settings-keybinds-panel">
+                Keybinds
+              </button>
             </div>
 
-            <section id="app-settings-audio-panel" class="app-settings-section tab-pane fade show active" role="tabpanel"
-              aria-labelledby="app-settings-audio-tab" tabindex="0">
+            <div class="app-settings-content tab-content">
+              <section id="app-settings-game-panel" class="app-settings-section tab-pane fade show active" role="tabpanel"
+                aria-labelledby="app-settings-game-tab" tabindex="0">
+              <div class="app-settings-section-heading">
+                <div>
+                  <h3 class="h5 mb-1">Game</h3>
+                  <p class="mb-0 text-body-secondary">
+                    Display and match controls for the current game.
+                  </p>
+                </div>
+              </div>
+
+              <div class="game-settings-groups">
+                <section class="game-settings-group" aria-labelledby="game-settings-display-title">
+                  <h4 id="game-settings-display-title" class="game-settings-group-title">Display</h4>
+                  <div class="game-setting-row game-display-setting">
+                    <div class="game-setting-copy">
+                      <span class="game-setting-display-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" width="20" height="20" focusable="false">
+                          <path id="app-game-display-icon-path" d="M9 3H3v6 M15 3h6v6 M21 15v6h-6 M9 21H3v-6"
+                            fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                            stroke-linejoin="round" />
+                        </svg>
+                      </span>
+                      <span>
+                        <strong class="d-block">Display Mode</strong>
+                        <small class="text-body-secondary">Switch between browser and full-screen play.</small>
+                      </span>
+                    </div>
+                    <button id="app-game-fullscreen-toggle" class="btn btn-primary btn-sm" type="button"
+                      aria-pressed="false">Full Screen</button>
+                  </div>
+                </section>
+
+                <section class="game-settings-group" aria-labelledby="game-settings-match-title">
+                  <h4 id="game-settings-match-title" class="game-settings-group-title">Match</h4>
+                  <div class="game-setting-row">
+                    <span>Pause / Resume <small class="text-body-secondary">(Host Only)</small></span>
+                    <button id="app-game-pause-toggle" class="btn btn-outline-light btn-sm" type="button"
+                      disabled>Pause</button>
+                  </div>
+                  <hr class="game-setting-divider">
+                  <div class="game-setting-row">
+                    <span id="app-game-exit-label">Exit Game</span>
+                    <button id="app-game-exit" class="btn btn-outline-danger btn-sm" type="button"
+                      disabled>Exit</button>
+                  </div>
+                </section>
+              </div>
+              </section>
+
+              <section id="app-settings-audio-panel" class="app-settings-section tab-pane fade" role="tabpanel"
+                aria-labelledby="app-settings-audio-tab" tabindex="0">
               <div class="app-settings-section-heading">
                 <div>
                   <h3 id="audio-settings-title" class="h5 mb-1">Audio</h3>
@@ -375,13 +303,13 @@
                 <div class="audio-setting" data-audio-category="join">
                   <div class="audio-setting-header">
                     <div>
-                      <label class="audio-setting-title" for="audio-join-volume">Player joins</label>
-                      <p class="audio-setting-description mb-0">The notification when a player joins your lobby.</p>
+                      <label class="audio-setting-title" for="audio-join-volume">Lobby alerts</label>
+                      <p class="audio-setting-description mb-0">Player-join notifications and game-finished alerts.</p>
                     </div>
                   </div>
                   <div class="audio-volume-row">
                     <input id="audio-join-volume" class="form-range" type="range" min="0" max="100" step="1"
-                      value="100" aria-label="Player join sound volume">
+                      value="100" aria-label="Lobby alert sound volume">
                     <output id="audio-join-volume-value" for="audio-join-volume">100%</output>
                   </div>
                 </div>
@@ -390,7 +318,7 @@
                   <div class="audio-setting-header">
                     <div>
                       <label class="audio-setting-title" for="audio-game-volume">Game sounds</label>
-                      <p class="audio-setting-description mb-0">Cards, slaps, pile wins, and game victories.</p>
+                      <p class="audio-setting-description mb-0">Game actions, round results, and victories.</p>
                     </div>
                   </div>
                   <div class="audio-volume-row">
@@ -400,7 +328,22 @@
                   </div>
                 </div>
               </div>
-            </section>
+              </section>
+
+              <section id="app-settings-keybinds-panel" class="app-settings-section tab-pane fade" role="tabpanel"
+                aria-labelledby="app-settings-keybinds-tab" tabindex="0">
+                <div class="app-settings-section-heading">
+                  <div>
+                    <h3 class="h5 mb-1">Keybinds</h3>
+                    <p class="mb-0 text-body-secondary">
+                      Personal controls for each installed game.
+                    </p>
+                  </div>
+                </div>
+
+                <div id="game-keybind-sections" class="game-keybind-sections"></div>
+              </section>
+            </div>
           </div>
         </div>
       </div>
@@ -515,10 +458,55 @@
     </div>
   </main>
 
+  <div id="leave-game-modal" class="modal fade" tabindex="-1"
+    aria-labelledby="leave-game-modal-title" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2 id="leave-game-modal-title" class="modal-title fs-5">Leave Game</h2>
+          <button class="btn-close" type="button" data-bs-dismiss="modal" aria-label="Cancel"></button>
+        </div>
+        <div id="leave-game-modal-body" class="modal-body">
+          Leave this game? Your cards will be added to the next pile.
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" type="button" data-bs-dismiss="modal">Stay</button>
+          <button id="confirm-leave-game" class="btn btn-danger" type="button">
+            Leave Game
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="leave-spectator-modal" class="modal fade" tabindex="-1"
+    aria-labelledby="leave-spectator-modal-title" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2 id="leave-spectator-modal-title" class="modal-title fs-5">Leave Game</h2>
+          <button class="btn-close" type="button" data-bs-dismiss="modal" aria-label="Cancel"></button>
+        </div>
+        <div class="modal-body">
+          Leave the game and return to the lobby?
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" type="button" data-bs-dismiss="modal">Stay</button>
+          <button id="confirm-leave-spectator" class="btn btn-danger" type="button">
+            Leave Game
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script src="/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
+  <script id="gamehub-config" type="application/json"><!-- gamehub-config --></script>
   <script src="/socket.io/socket.io.js"></script>
   <script src="/audio.js"></script>
-  <script src="/client.js"></script>
+  <script src="/gameHost.js"></script>
+  <!-- game-plugin-scripts -->
+  <script src="/client.js?v=20261010-leave-ui-fix"></script>
 </body>
 
 </html>

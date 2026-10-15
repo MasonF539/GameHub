@@ -2,6 +2,12 @@
 
 ## Planned features
 
+### Shared interface
+
+- [x] Keep a compact GameHub Settings shortcut aligned above package-owned controls and place reusable Full Screen, Pause/Resume, and Exit/Leave actions in its Game tab.
+- [x] Prevent mobile browser viewport changes from pushing active Egyptian War gameplay off-screen.
+- [x] Move the GameHub Settings tabs above their content at medium and small breakpoints.
+
 ### Spectator mode for games in progress
 
 - [x] Allow people to join a room after a game has started.
@@ -11,6 +17,8 @@
 - [x] Prevent spectators from submitting game actions.
 - [x] Enforce spectator restrictions on the server, not only in the browser.
 - [x] Allow spectators to become players when the room returns to the lobby.
+- [x] Let spectators leave the board for the lobby and let lobby waiters spectate the still-active game again.
+- [x] Deliver game events only to active board viewers and use a distinct GameHub completion chime for lobby waiters instead of treating returning participants as new joins.
 - [ ] Let each additional game define the information included in its spectator snapshot before that game becomes playable.
 
 ### Visual game selection
@@ -27,6 +35,25 @@
 - [ ] Revisit optional non-host voting after the picker and additional games have been tested; voting is not part of the initial picker.
 
 ## Architecture requirements
+
+### Installable game plugins
+
+- [x] Define versioned server, client, and manifest contracts in the initial GameHub game SDK.
+- [x] Validate registered manifests and reject incompatible versions, duplicate game IDs, and malformed settings.
+- [x] Register the embedded Egyptian War definition through the plugin registry without changing gameplay.
+- [x] Add generic game state, event, and action envelopes and migrate the built-in browser client to them.
+- [x] Move active room state and game actions behind the generic `GameSession` lifecycle.
+- [x] Remove the temporary Egyptian-War-specific Socket.IO compatibility events after introducing the session adapter.
+- [x] Add a generic browser game host and route active `GameClientModule` state and events through it.
+- [x] Establish independently buildable GameHub SDK and Egyptian War workspaces with package-name imports.
+- [x] Move Egyptian War preview media and game-specific audio into its package-owned public directory.
+- [x] Move Egyptian War markup, styles, previews, and game audio into its package boundary.
+- [x] Load installed game packages and their browser resources from explicit administrator-controlled configuration.
+- [ ] Publish `@masonf539/game-sdk` to the public npm registry, publish the
+  extracted Egyptian War repository against that exact SDK release, and
+  reinstall the game as a pinned package dependency.
+- [x] Add a minimal test plugin to prove that GameHub's host lifecycle contains
+  no Egyptian War assumptions.
 
 Each playable game should support:
 

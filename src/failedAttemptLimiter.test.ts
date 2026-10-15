@@ -1,0 +1,44 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { FailedAttemptLimiter } from "./failedAttemptLimiter.js";
+
+test("blocks a key after the configured number of failures", () => {
+  const limiter = new FailedAttemptLimiter(2, 1_000);
+
+  limiter.recordFailure("client", 100);
+  assert.equal(limiter.isBlocked("client", 101), false);
+  limiter.recordFailure("client", 102);
+  assert.equal(limiter.isBlocked("client", 103), true);
+});
+
+test("expired and successful attempt windows can be cleared", () => {
+  const limiter = new FailedAttemptLimiter(1, 100);
+
+  limiter.recordFailure("expired", 100);
+  assert.equal(limiter.isBlocked("expired", 200), false);
+
+  limiter.recordFailure("successful", 300);
+  limiter.clear("successful");
+  assert.equal(limiter.isBlocked("successful", 301), false);
+});
+
+test("recording after expiry starts a fresh failure window", () => {
+  const limiter = new FailedAttemptLimiter(2, 100);
+
+  limiter.recordFailure("client", 100);
+  limiter.recordFailure("client", 200);
+
+  assert.equal(limiter.isBlocked("client", 201), false);
+  limiter.recordFailure("client", 202);
+  assert.equal(limiter.isBlocked("client", 203), true);
+});
+
+test("never tracks more keys than the cap", () => {
+  const limiter = new FailedAttemptLimiter(1, 1_000, 3);
+
+  for (let index = 0; index < 50; index += 1) {
+    limiter.recordFailure(`key-${index}`, index);
+  }
+  assert.equal(limiter.isBlocked("key-0", 60), false, "oldest keys were evicted");
+  assert.equal(limiter.isBlocked("key-49", 60), true);
+});

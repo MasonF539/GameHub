@@ -47,6 +47,20 @@ function Wait-ForGameHub {
     return $false
 }
 
+function Set-GameHubClipboard {
+    param([Parameter(Mandatory = $true)][string]$Value)
+
+    try {
+        Set-Clipboard -Value $Value -ErrorAction Stop
+        Start-Sleep -Milliseconds 100
+        $clipboardValue = [string](Get-Clipboard -Raw -ErrorAction Stop)
+        return $clipboardValue.Trim() -eq $Value
+    }
+    catch {
+        return $false
+    }
+}
+
 function Start-LocalGameHub {
     if (-not (Test-Docker)) {
         return
@@ -90,7 +104,15 @@ function Start-PublicGameHub {
     Write-Host
     Write-Host "Building GameHub and requesting a public tunnel..." -ForegroundColor Cyan
 
-    docker compose --profile public up --build --detach
+    # Behind the tunnel, rate limits should use each visitor's real address.
+    $env:GAMEHUB_TRUST_CLOUDFLARE_IP = "true"
+
+    try {
+        docker compose --profile public up --build --detach
+    }
+    finally {
+        Remove-Item Env:\GAMEHUB_TRUST_CLOUDFLARE_IP -ErrorAction SilentlyContinue
+    }
 
     if ($LASTEXITCODE -ne 0) {
         Write-Host
@@ -108,14 +130,14 @@ function Start-PublicGameHub {
         return
     }
 
-    Start-Process "http://localhost:3000"
-
     $publicUrl = $null
 
-    for ($attempt = 1; $attempt -le 30; $attempt += 1) {
-        Start-Sleep -Seconds 1
+    # Resolve the tunnel before opening the browser. Repeated Docker CLI polls
+    # can briefly contend with desktop window activation on Windows.
+    for ($attempt = 1; $attempt -le 20; $attempt += 1) {
+        Start-Sleep -Seconds 2
 
-        $tunnelLogs = docker compose logs --tail 100 tunnel 2>&1 |
+        $tunnelLogs = docker compose logs --no-color --tail 100 tunnel 2>&1 |
             Out-String
 
         $urlMatch = [regex]::Match(
@@ -124,7 +146,7 @@ function Start-PublicGameHub {
         )
 
         if ($urlMatch.Success) {
-            $publicUrl = $urlMatch.Value
+            $publicUrl = ([string]$urlMatch.Value).Trim()
             break
         }
 
@@ -136,7 +158,7 @@ function Start-PublicGameHub {
     Write-Host
 
     if ($publicUrl) {
-        Set-Clipboard $publicUrl
+        $copiedPublicUrl = Set-GameHubClipboard -Value $publicUrl
 
         Write-Host "GameHub is public!" -ForegroundColor Green
         Write-Host
@@ -146,7 +168,14 @@ function Start-PublicGameHub {
         Write-Host "Player link:"
         Write-Host $publicUrl -ForegroundColor Yellow
         Write-Host
-        Write-Host "The player link was copied to your clipboard."
+        if ($copiedPublicUrl) {
+            Write-Host "The full player link was copied to your clipboard."
+        }
+        else {
+            Write-Host "The player link could not be copied. Copy the yellow link above." -ForegroundColor Yellow
+        }
+
+        Start-Process "http://localhost:3000"
     }
     else {
         Write-Host "Cloudflare did not provide a public address." -ForegroundColor Red

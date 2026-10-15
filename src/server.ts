@@ -1,27 +1,23 @@
 import express from "express";
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomInt } from "node:crypto";
+import { readFileSync } from "node:fs";
 import http from "http";
 import path from "path";
 import { Server, type Socket } from "socket.io";
-import { egyptianWar } from "./games/egyptianWar/definition.js";
 import {
-  applyEgyptianWarAction,
-  createEgyptianWarState,
-  createPublicEgyptianWarState,
-  isEgyptianWarPileSlappable,
-  removeEgyptianWarPlayer,
-  resolveEgyptianWarTurnTimeout,
-  type EgyptianWarAction,
-  EgyptianWarRuleError,
-  type EgyptianWarSettings,
-  type EgyptianWarState
-} from "./games/egyptianWar/engine.js";
-import type { GameSetting } from "./games/gameDefinition.js";
-import {
-  defaultSlapJitterMs,
-  selectWeightedSlapWinner,
-  slapCollectionWindowMs
-} from "./games/egyptianWar/slapArbitration.js";
+  GamePluginRegistry,
+  type GamePluginPackage,
+  type GameSetting
+} from "@masonf539/game-sdk";
+import type {
+  GameActionEnvelope,
+  GameEvent,
+  GameSession,
+  GameViewer
+} from "@masonf539/game-sdk";
+import { FailedAttemptLimiter } from "./failedAttemptLimiter.js";
+import { resolveClientAddress } from "./clientAddress.js";
+import { RateLimiter } from "./rateLimiter.js";
 
 type GameSettingValue = boolean | number;
 
@@ -32,41 +28,17 @@ type Player = {
   isConnected: boolean;
 };
 
-type PendingSlapCandidate = {
-  playerId: string;
-  adjustedArrivalTime: number;
-  jitterMs: number;
-};
-
-type SlapAnimationAttempt = {
-  playerId: string;
-  delayMs: number;
-  isWinner: boolean;
-};
-
 type Room = {
   hostId: string;
   players: Map<string, Player>;
   spectators: Map<string, Player>;
+  /** Lobby players who are still participating in the current game. */
+  activeGamePlayerIds: Set<string>;
   selectedGameId: string | null;
   gameSettings: Record<string, GameSettingValue>;
   isLocked: boolean;
   activeGameId: string | null;
-  gameState: EgyptianWarState | null;
-  isPaused: boolean;
-  isAnimating: boolean;
-  animationId: number;
-  turnTimer: ReturnType<typeof setTimeout> | null;
-  turnDeadlineAt: number | null;
-  turnTimeRemainingMs: number | null;
-  reconnectGracePlayerId: string | null;
-  reconnectGraceUsedThisTurn: boolean;
-  pendingSlapResolution: {
-    timer: ReturnType<typeof setTimeout>;
-    candidates: Map<string, PendingSlapCandidate>;
-  } | null;
-  disconnectPausedPlayerId: string | null;
-  wasPausedBeforeDisconnect: boolean;
+  gameSession: GameSession | null;
 };
 
 const availableAvatars = [
@@ -77,25 +49,168 @@ const availableAvatars = [
   "🐼",
   "🐯",
   "🐵",
-  "🐙",
-  "🦄",
-  "🐲",
-  "🤖",
   "👻",
-  "👽",
-  "🥷",
-  "🧙"
+  "🐢",
+  "🎃",
+  "🥸",
+  "🤠",
+  "🐧",
+  "🐨",
+  "🐷",
+  "🐺"
 ];
 
-const availableGames = [
-  egyptianWar
-];
+const gameHubConfiguration = JSON.parse(
+  readFileSync(path.join(process.cwd(), "gamehub.config.json"), "utf8")
+) as { gamePackages?: unknown };
+const defaultGamePackages = Array.isArray(gameHubConfiguration.gamePackages)
+  ? gameHubConfiguration.gamePackages.filter(
+    (packageName): packageName is string =>
+      typeof packageName === "string" && packageName.trim() !== ""
+  )
+  : [];
+const configuredGamePackages = process.env.GAMEHUB_GAME_PACKAGES === undefined
+  ? defaultGamePackages
+  : process.env.GAMEHUB_GAME_PACKAGES
+    .split(",")
+    .map((packageName) => packageName.trim())
+    .filter(Boolean);
+
+function loadGamePackage(packageName: string): GamePluginPackage {
+  const packageExports = require(packageName) as {
+    gameHubPlugin?: GamePluginPackage;
+  };
+  if (!packageExports.gameHubPlugin) {
+    throw new Error(
+      `Installed game package ${packageName} does not export gameHubPlugin.`
+    );
+  }
+  const gamePackage = packageExports.gameHubPlugin;
+  if (
+    typeof gamePackage.publicDirectory !== "string" ||
+    gamePackage.publicDirectory.trim() === "" ||
+    typeof gamePackage.server?.createSession !== "function"
+  ) {
+    throw new Error(
+      `Installed game package ${packageName} has an invalid runtime export.`
+    );
+  }
+  if (
+    gamePackage.server.manifest.apiVersion !== gamePackage.manifest.apiVersion ||
+    gamePackage.server.manifest.definition.id !==
+    gamePackage.manifest.definition.id
+  ) {
+    throw new Error(
+      `Installed game package ${packageName} has mismatched client and server manifests.`
+    );
+  }
+  return gamePackage;
+}
+
+const installedGamePackages = configuredGamePackages.map(loadGamePackage);
+const gamePackagesById = new Map(
+  installedGamePackages.map((gamePackage) => [
+    gamePackage.manifest.definition.id,
+    gamePackage
+  ])
+);
+const gamePluginRegistry = new GamePluginRegistry(
+  installedGamePackages.map((gamePackage) => gamePackage.manifest)
+);
+const availableGames = gamePluginRegistry.listDefinitions();
+
+function getGameDefinition(gameId: string | null) {
+  return gameId === null
+    ? null
+    : gamePluginRegistry.getDefinition(gameId);
+}
 
 const app = express();
 const server = http.createServer(app);
-const reconnectGracePeriodMs = 120_000;
-const reconnectTurnGraceMs = 5_000;
-const gameEndAnimationMs = 3_600;
+const indexShell = readFileSync(
+  path.join(process.cwd(), "public", "index.html"),
+  "utf8"
+);
+const gameMarkupMarker = "<!-- game-plugin-markup -->";
+const gameStyleMarker = "<!-- game-plugin-styles -->";
+const gameScriptMarker = "<!-- game-plugin-scripts -->";
+const gameHubConfigMarker = "<!-- gamehub-config -->";
+
+function replaceRequiredMarker(
+  html: string,
+  marker: string,
+  replacement: string
+): string {
+  if (!html.includes(marker)) {
+    throw new Error(`GameHub index is missing required marker: ${marker}`);
+  }
+  // A function replacer keeps "$&" and friends in plugin markup literal.
+  return html.replace(marker, () => replacement);
+}
+
+function gamePublicUrl(gameId: string, resourcePath: string): string {
+  return `/games/${gameId}/${resourcePath}`;
+}
+
+const gameMarkup = installedGamePackages.flatMap((gamePackage) => {
+  const gameId = gamePackage.manifest.definition.id;
+  const markupPath = gamePackage.manifest.client.markupPath;
+  return markupPath
+    ? [
+      `<div data-game-plugin-root="${gameId}" hidden>`,
+      readFileSync(path.join(gamePackage.publicDirectory, markupPath), "utf8"),
+      "</div>"
+    ].join("\n")
+    : [];
+}).join("\n");
+const gameStyles = installedGamePackages.flatMap((gamePackage) => {
+  const gameId = gamePackage.manifest.definition.id;
+  return (gamePackage.manifest.client.stylePaths ?? []).map(
+    (stylePath) =>
+      `<link rel="stylesheet" href="${gamePublicUrl(gameId, stylePath)}" ` +
+      `data-game-plugin-style="${gameId}" disabled>`
+  );
+}).join("\n  ");
+const gameScripts = installedGamePackages.flatMap((gamePackage) => {
+  const gameId = gamePackage.manifest.definition.id;
+  const moduleEntryPath = gamePackage.manifest.client.delivery === "module"
+    ? gamePackage.manifest.client.entryPath
+    : null;
+  const classicScripts = (gamePackage.manifest.client.entryPaths ?? [])
+    .filter((entryPath) => entryPath !== moduleEntryPath)
+    .map(
+      (entryPath) =>
+        `<script src="${gamePublicUrl(gameId, entryPath)}"></script>`
+    );
+  if (gamePackage.manifest.client.delivery !== "module") {
+    return classicScripts;
+  }
+  return [
+    ...classicScripts,
+    `<script type="module" src="${gamePublicUrl(gameId, gamePackage.manifest.client.entryPath)}"></script>`
+  ];
+}).join("\n  ");
+
+let renderedIndex = replaceRequiredMarker(
+  indexShell,
+  gameMarkupMarker,
+  gameMarkup
+);
+renderedIndex = replaceRequiredMarker(renderedIndex, gameStyleMarker, gameStyles);
+renderedIndex = replaceRequiredMarker(renderedIndex, gameScriptMarker, gameScripts);
+renderedIndex = replaceRequiredMarker(
+  renderedIndex,
+  gameHubConfigMarker,
+  JSON.stringify({ avatars: availableAvatars }).replace(/</g, "\\u003c")
+);
+// Tests may shorten the recovery period; production always uses two minutes.
+const testReconnectGracePeriodMs = Number(
+  process.env.GAMEHUB_TEST_RECONNECT_GRACE_MS
+);
+const reconnectGracePeriodMs =
+  process.env.NODE_ENV === "test" && testReconnectGracePeriodMs > 0
+    ? testReconnectGracePeriodMs
+    : 120_000;
 const io = new Server(server, {
   connectionStateRecovery: {
     maxDisconnectionDuration: reconnectGracePeriodMs,
@@ -106,24 +221,65 @@ const io = new Server(server, {
 const configuredPort = Number(process.env.PORT);
 const port =
   Number.isInteger(configuredPort) &&
-  configuredPort >= 0 &&
-  configuredPort <= 65_535
+    configuredPort >= 0 &&
+    configuredPort <= 65_535
     ? configuredPort
     : 3000;
 const deterministicTestRandomInteger =
   process.env.NODE_ENV === "test" &&
-  process.env.GAMEHUB_DETERMINISTIC_DECK === "true"
+    process.env.GAMEHUB_DETERMINISTIC_DECK === "true"
     ? (maxExclusive: number): number => maxExclusive - 1
-    : undefined;
+    : randomInt;
 const maxLobbyPlayers = 12;
 const rooms = new Map<string, Room>();
 const socketRoomCodes = new Map<string, string>();
 const disconnectedPlayerTimers =
   new Map<string, ReturnType<typeof setTimeout>>();
-const playerResumeTokens =
-  new Map<string, { roomCode: string; playerId: string }>();
+const playerResumeTokens = new Map<
+  string,
+  { roomCode: string; playerId: string; createdAt: number }
+>();
 const revokedResumeTokenMessages = new Map<string, string>();
 const revokedSocketMessages = new Map<string, string>();
+const invalidJoinLimiter = new FailedAttemptLimiter(10, 60_000);
+// Only believe Cloudflare's client-address header when the operator says
+// GameHub really is behind Cloudflare. Otherwise anyone can forge it.
+const trustCloudflareHeader =
+  process.env.GAMEHUB_TRUST_CLOUDFLARE_IP === "true";
+const configuredMaxRooms = Number(process.env.GAMEHUB_MAX_ROOMS);
+const maxRooms =
+  Number.isInteger(configuredMaxRooms) && configuredMaxRooms > 0
+    ? configuredMaxRooms
+    : 200;
+const resumeTokenMaxAgeMs = 24 * 60 * 60 * 1000;
+const roomCreationLimiter = new RateLimiter(6, 10 * 60_000);
+const socketRequestLimiter = new RateLimiter(120, 10_000);
+const contentSecurityPolicy = [
+  "default-src 'self'",
+  "script-src 'self'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data:",
+  "media-src 'self'",
+  "font-src 'self'",
+  "connect-src 'self' ws: wss:",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "frame-ancestors 'none'"
+].join("; ");
+
+app.disable("x-powered-by");
+app.use((_request, response, next) => {
+  response.setHeader("Content-Security-Policy", contentSecurityPolicy);
+  response.setHeader("X-Content-Type-Options", "nosniff");
+  response.setHeader("X-Frame-Options", "DENY");
+  response.setHeader("Referrer-Policy", "no-referrer");
+  response.setHeader(
+    "Permissions-Policy",
+    "camera=(), microphone=(), geolocation=()"
+  );
+  next();
+});
 
 app.use(
   "/vendor/bootstrap",
@@ -131,6 +287,17 @@ app.use(
     path.join(process.cwd(), "node_modules", "bootstrap", "dist")
   )
 );
+
+app.get(["/", "/index.html"], (_request, response) => {
+  response.type("html").send(renderedIndex);
+});
+
+for (const gamePackage of installedGamePackages) {
+  app.use(
+    `/games/${gamePackage.manifest.definition.id}`,
+    express.static(gamePackage.publicDirectory)
+  );
+}
 
 app.use(express.static(path.join(process.cwd(), "public")));
 
@@ -142,7 +309,7 @@ function generateRoomCode(): string {
     code = "";
 
     for (let index = 0; index < 6; index += 1) {
-      const randomIndex = Math.floor(Math.random() * characters.length);
+      const randomIndex = randomInt(characters.length);
       code += characters[randomIndex];
     }
   } while (rooms.has(code));
@@ -174,6 +341,11 @@ function getRoomMember(
   return spectator
     ? { member: spectator, role: "spectator" }
     : null;
+}
+
+function isActiveGameViewer(room: Room, memberId: string): boolean {
+  return room.spectators.has(memberId) ||
+    room.activeGamePlayerIds.has(memberId);
 }
 
 function promoteSpectatorsToPlayers(
@@ -216,7 +388,11 @@ function createPlayerResumeToken(
   playerId: string
 ): string {
   const token = randomBytes(32).toString("base64url");
-  playerResumeTokens.set(token, { roomCode, playerId });
+  playerResumeTokens.set(token, {
+    roomCode,
+    playerId,
+    createdAt: Date.now()
+  });
   return token;
 }
 
@@ -237,73 +413,93 @@ function removePlayerResumeTokens(
   }
 }
 
+function normalizeRoomCode(value: unknown): string {
+  return String(value ?? "").trim().toUpperCase();
+}
+
+function clearDisconnectTimer(memberId: string): void {
+  const timer = disconnectedPlayerTimers.get(memberId);
+
+  if (timer !== undefined) {
+    clearTimeout(timer);
+    disconnectedPlayerTimers.delete(memberId);
+  }
+}
+
 function markPlayerReconnected(
   roomCode: string,
   playerId: string,
   room: Room
 ): void {
-  const reconnectTimer = disconnectedPlayerTimers.get(playerId);
-
-  if (reconnectTimer !== undefined) {
-    clearTimeout(reconnectTimer);
-    disconnectedPlayerTimers.delete(playerId);
-  }
+  clearDisconnectTimer(playerId);
 
   const player = room.players.get(playerId);
 
   if (player) {
     player.isConnected = true;
   }
+  if (room.activeGamePlayerIds.has(playerId)) {
+    room.gameSession?.memberReconnected?.(playerId);
+  }
+}
 
-  if (room.disconnectPausedPlayerId === playerId) {
-    const stillDisconnectedPlayer = Array.from(
-      room.players.values()
-    ).find((candidate) => !candidate.isConnected);
+// Names may not contain control characters, invisible characters or bidi
+// overrides, which could be used to impersonate other players.
+const disallowedNameCharacters =
+  /[\u0000-\u001F\u007F\u061C\u200B\u200E\u200F\u2028\u2029\u202A-\u202E\u2060\u2066-\u2069\uFEFF]/;
 
-    room.disconnectPausedPlayerId =
-      stillDisconnectedPlayer?.id ?? null;
+function isValidPlayerName(playerName: string): boolean {
+  return playerName.length >= 1 &&
+    playerName.length <= 20 &&
+    !disallowedNameCharacters.test(playerName);
+}
 
-    if (room.disconnectPausedPlayerId === null) {
-      room.isPaused = room.wasPausedBeforeDisconnect;
-      room.wasPausedBeforeDisconnect = false;
+function isPlayerNameTaken(room: Room, playerName: string): boolean {
+  const wanted = playerName.toLocaleLowerCase();
+
+  return [...room.players.values(), ...room.spectators.values()].some(
+    (member) => member.name.toLocaleLowerCase() === wanted
+  );
+}
+
+type SocketResponse = (response: unknown) => void;
+
+function onSocketRequest(
+  socket: Socket,
+  event: string,
+  handler: (data: any, respond: SocketResponse) => void
+): void {
+  socket.on(event, (data: any, candidateResponse?: unknown) => {
+    const respond: SocketResponse = typeof candidateResponse === "function"
+      ? candidateResponse as SocketResponse
+      : () => undefined;
+
+    if (!socketRequestLimiter.consume(socket.id)) {
+      respond({
+        success: false,
+        message: "You are sending requests too quickly. Please slow down."
+      });
+      return;
     }
 
-    if (room.gameState && player) {
-      room.gameState.activityMessage =
-        room.disconnectPausedPlayerId !== null
-          ? `${player.name} reconnected. The game remains paused until the other player returns.`
-          : room.isPaused
-            ? `${player.name} reconnected. The host can resume the game.`
-            : `${player.name} reconnected. The game is continuing.`;
+    try {
+      handler(data, respond);
+    } catch (error) {
+      console.error(`Unable to process Socket.IO request ${event}:`, error);
+      respond({
+        success: false,
+        message: "Unable to process that request."
+      });
     }
-  }
+  });
+}
 
-  const currentPlayer =
-    room.gameState?.players[room.gameState.currentPlayerIndex];
-  if (
-    room.gameState?.status === "playing" &&
-    currentPlayer?.id === playerId
-  ) {
-    const remainingMs =
-      getTurnTimeRemainingMs(room) ??
-      getTurnTimerSeconds(room) * 1000;
-    clearTurnTimer(room, false);
-    room.turnTimeRemainingMs = remainingMs;
-    if (!room.reconnectGraceUsedThisTurn) {
-      room.reconnectGracePlayerId = playerId;
-      room.reconnectGraceUsedThisTurn = true;
-    } else {
-      room.reconnectGracePlayerId = null;
-    }
-  }
-
-  if (
-    !room.isPaused &&
-    room.activeGameId !== null &&
-    room.turnTimer === null
-  ) {
-    startTurnTimer(roomCode, room);
-  }
+function getSocketClientAddress(socket: Socket): string {
+  return resolveClientAddress(
+    socket.handshake.headers,
+    socket.handshake.address,
+    trustCloudflareHeader
+  );
 }
 
 function sendRoomResumed(
@@ -311,6 +507,7 @@ function sendRoomResumed(
   roomCode: string,
   room: Room
 ): void {
+  const canViewActiveGame = isActiveGameViewer(room, socket.id);
   socket.emit("room-resumed", {
     roomCode,
     isHost: room.hostId === socket.id,
@@ -318,22 +515,158 @@ function sendRoomResumed(
     isLocked: room.isLocked,
     selectedGameId: room.selectedGameId,
     gameSettings: room.gameSettings,
-    activeGameId: room.activeGameId,
-    isPaused: room.isPaused,
-    chatEnabled: availableGames.find(
-      (game) => game.id === room.activeGameId
-    )?.chatEnabled ?? false
+    hasActiveGame: room.activeGameId !== null,
+    activeGameId: canViewActiveGame ? room.activeGameId : null,
+    isPaused: room.gameSession?.getLifecycleState().isPaused ?? false,
+    chatEnabled: canViewActiveGame
+      ? getGameDefinition(room.activeGameId)?.chatEnabled ?? false
+      : false
   });
 
-  if (room.activeGameId === egyptianWar.id) {
-    sendEgyptianWarState(roomCode, room, socket);
+  if (room.activeGameId !== null && canViewActiveGame) {
+    sendActiveGameState(roomCode, room, socket);
   }
+}
+
+// Lock state, selected game and member lists: what a (re)joining browser needs.
+function sendLobbyState(socket: Socket, roomCode: string, room: Room): void {
+  socket.emit("room-lock-changed", { isLocked: room.isLocked });
+
+  if (room.selectedGameId !== null) {
+    socket.emit("game-selected", {
+      gameId: room.selectedGameId,
+      settings: room.gameSettings
+    });
+  }
+
+  sendRoomMemberLists(roomCode, room);
+}
+
+function sendRoomSnapshot(
+  socket: Socket,
+  roomCode: string,
+  room: Room,
+  rotatedResumeToken?: string
+): void {
+  sendRoomResumed(socket, roomCode, room);
+
+  if (rotatedResumeToken !== undefined) {
+    socket.emit("room-resume-token", rotatedResumeToken);
+  }
+
+  sendLobbyState(socket, roomCode, room);
+}
+
+function closeRoom(roomCode: string, room: Room, logMessage: string): void {
+  disposeGameSession(room);
+  io.to(roomCode).emit("room-closed");
+
+  const memberIds = new Set([
+    ...room.players.keys(),
+    ...room.spectators.keys()
+  ]);
+
+  for (const memberId of memberIds) {
+    socketRoomCodes.delete(memberId);
+    removePlayerResumeTokens(memberId);
+    clearDisconnectTimer(memberId);
+    socketRequestLimiter.forget(memberId);
+  }
+
+  io.in(roomCode).socketsLeave(roomCode);
+  rooms.delete(roomCode);
+  console.log(logMessage);
+}
+
+// Takes a member out of a room. Pass `kickedMessage` when the host removed
+// them: they are told why, and a reconnecting browser sees the same message.
+function removeMemberFromRoom(
+  roomCode: string,
+  room: Room,
+  memberId: string,
+  role: "player" | "spectator",
+  kickedMessage?: string
+): void {
+  room.activeGamePlayerIds.delete(memberId);
+  (role === "player" ? room.players : room.spectators).delete(memberId);
+  socketRoomCodes.delete(memberId);
+  removePlayerResumeTokens(memberId, kickedMessage);
+  clearDisconnectTimer(memberId);
+
+  if (kickedMessage !== undefined) {
+    revokedSocketMessages.set(memberId, kickedMessage);
+    setTimeout(
+      () => revokedSocketMessages.delete(memberId),
+      reconnectGracePeriodMs
+    );
+  }
+
+  const memberSocket = io.sockets.sockets.get(memberId);
+
+  if (memberSocket) {
+    if (kickedMessage !== undefined) {
+      memberSocket.emit("kicked-from-room", { message: kickedMessage });
+    }
+    memberSocket.leave(roomCode);
+  }
+
+  sendRoomMemberLists(roomCode, room);
+}
+
+// Starts the recovery countdown for a disconnected member. When it ends:
+// a missing host closes the room (even mid-game, since only the host can
+// resume or remove players), a lobby player or spectator is removed, and a
+// player in an active game is left for the host to deal with.
+function scheduleDisconnectExpiry(
+  roomCode: string,
+  room: Room,
+  memberId: string
+): void {
+  clearDisconnectTimer(memberId);
+
+  const timer = setTimeout(() => {
+    disconnectedPlayerTimers.delete(memberId);
+
+    if (rooms.get(roomCode) !== room) {
+      return;
+    }
+
+    const found = getRoomMember(room, memberId);
+
+    if (!found || found.member.isConnected) {
+      return;
+    }
+
+    if (found.role === "player" && room.hostId === memberId) {
+      closeRoom(
+        roomCode,
+        room,
+        `Room ${roomCode} closed after host recovery expired`
+      );
+      return;
+    }
+
+    if (
+      found.role === "player" &&
+      room.gameSession !== null &&
+      room.activeGamePlayerIds.has(memberId)
+    ) {
+      return;
+    }
+
+    removeMemberFromRoom(roomCode, room, memberId, found.role);
+    console.log(
+      `Removed disconnected ${found.role} ${found.member.name} from room ${roomCode}`
+    );
+  }, reconnectGracePeriodMs);
+
+  disconnectedPlayerTimers.set(memberId, timer);
 }
 
 function createDefaultSettings(
   gameId: string
 ): Record<string, GameSettingValue> | null {
-  const game = availableGames.find((item) => item.id === gameId);
+  const game = getGameDefinition(gameId);
 
   if (!game) {
     return null;
@@ -347,528 +680,114 @@ function createDefaultSettings(
   );
 }
 
-function getTurnTimerSeconds(room: Room): number {
-  const configuredSeconds = room.gameSettings.turnTimerSeconds;
-
-  return typeof configuredSeconds === "number"
-    ? configuredSeconds
-    : 15;
-}
-
-function getTurnTimeRemainingMs(room: Room): number | null {
-  if (room.turnDeadlineAt !== null) {
-    return Math.max(0, room.turnDeadlineAt - Date.now());
-  }
-
-  return room.turnTimeRemainingMs;
-}
-
-function clearTurnTimer(room: Room, clearRemaining = true): void {
-  if (room.turnTimer !== null) {
-    clearTimeout(room.turnTimer);
-  }
-
-  room.turnTimer = null;
-  room.turnDeadlineAt = null;
-
-  if (clearRemaining) {
-    room.turnTimeRemainingMs = null;
-  }
-}
-
-function suspendTurnTimer(room: Room): void {
-  room.turnTimeRemainingMs = getTurnTimeRemainingMs(room);
-  clearTurnTimer(room, false);
-}
-
-function cancelPendingSlapResolution(room: Room): void {
-  if (room.pendingSlapResolution === null) {
-    return;
-  }
-
-  clearTimeout(room.pendingSlapResolution.timer);
-  room.pendingSlapResolution = null;
-}
-
-function startTurnTimer(
-  roomCode: string,
-  room: Room,
-  remainingMs = room.turnTimeRemainingMs ?? getTurnTimerSeconds(room) * 1000
-): void {
-  if (
-    room.gameState === null ||
-    room.gameState.status !== "playing" ||
-    room.isPaused ||
-    room.isAnimating ||
-    room.pendingSlapResolution !== null
-  ) {
-    return;
-  }
-
-  clearTurnTimer(room);
-  const timerDurationMs = getTurnTimerSeconds(room) * 1000;
-  const currentPlayerId =
-    room.gameState.players[room.gameState.currentPlayerIndex]?.id ?? null;
-  if (
-    room.reconnectGracePlayerId !== null &&
-    room.reconnectGracePlayerId !== currentPlayerId
-  ) {
-    room.reconnectGracePlayerId = null;
-  }
-  const reconnectGraceMs =
-    room.reconnectGracePlayerId === currentPlayerId
-      ? reconnectTurnGraceMs
-      : 0;
-  if (reconnectGraceMs > 0) {
-    room.reconnectGracePlayerId = null;
-  }
-  const delayMs =
-    Math.max(
-      0,
-      Math.min(timerDurationMs, remainingMs + reconnectGraceMs)
-    );
-  room.turnTimeRemainingMs = delayMs;
-  room.turnDeadlineAt = Date.now() + delayMs;
-  room.turnTimer = setTimeout(() => {
-    room.turnTimer = null;
-    room.turnDeadlineAt = null;
-    room.turnTimeRemainingMs = null;
-
-    if (
-      rooms.get(roomCode) !== room ||
-      room.gameState === null ||
-      room.gameState.status !== "playing" ||
-      room.isPaused ||
-      room.isAnimating
-    ) {
-      return;
-    }
-
-    const currentPlayer =
-      room.gameState.players[room.gameState.currentPlayerIndex];
-
-    if (!currentPlayer) {
-      return;
-    }
-
-    handleEgyptianWarAction(
-      roomCode,
-      currentPlayer.id,
-      "play-card",
-      (response) => {
-        if (!response.success && rooms.get(roomCode) === room) {
-          startTurnTimer(roomCode, room);
-          sendEgyptianWarState(roomCode, room);
-        }
-      },
-      true
-    );
-  }, delayMs);
-}
-
-function collectValidSlap(
-  roomCode: string,
-  playerId: string,
-  room: Room,
-  respond: (response: { success: boolean; message?: string }) => void
-): void {
-  let resolution = room.pendingSlapResolution;
-
-  if (resolution === null) {
-    resolution = {
-      timer: setTimeout(() => {
-        resolveCollectedSlaps(roomCode, room);
-      }, slapCollectionWindowMs),
-      candidates: new Map()
-    };
-    room.pendingSlapResolution = resolution;
-    suspendTurnTimer(room);
-  }
-
-  if (!resolution.candidates.has(playerId)) {
-    resolution.candidates.set(playerId, {
-      playerId,
-      adjustedArrivalTime: performance.now(),
-      jitterMs: defaultSlapJitterMs
-    });
-  }
-
-  respond({ success: true });
-}
-
-function resolveCollectedSlaps(
-  roomCode: string,
-  room: Room
-): void {
-  const resolution = room.pendingSlapResolution;
-  room.pendingSlapResolution = null;
-
-  if (
-    !resolution ||
-    rooms.get(roomCode) !== room ||
-    room.gameState === null ||
-    room.gameState.status !== "playing" ||
-    room.isAnimating
-  ) {
-    return;
-  }
-
-  const candidates = Array.from(resolution.candidates.values());
-  if (candidates.length === 0) {
-    if (!room.isPaused) {
-      startTurnTimer(roomCode, room);
-    }
-    return;
-  }
-
-  const winner = selectWeightedSlapWinner(candidates);
-
-  if (!winner) {
-    throw new Error("No slap candidate was selected.");
-  }
-
-  const winnerAdjustedTime = winner.adjustedArrivalTime;
-
-  const orderedCandidates = [
-    winner,
-    ...candidates
-      .filter(
-        (candidate) => candidate.playerId !== winner.playerId
-      )
-      .sort(
-        (first, second) =>
-          first.adjustedArrivalTime -
-          second.adjustedArrivalTime
-      )
-  ];
-
-  let cappedAttemptCount = 0;
-
-  const slapAttempts = orderedCandidates.map((candidate) => {
-    const adjustedDifference = Math.max(
-      0,
-      candidate.adjustedArrivalTime - winnerAdjustedTime
-    );
-
-    const scaledDelay = adjustedDifference * 1.5;
-
-    let delayMs = Math.round(
-      Math.min(scaledDelay, slapCollectionWindowMs)
-    );
-
-    if (scaledDelay >= slapCollectionWindowMs) {
-      delayMs += cappedAttemptCount * 8;
-      cappedAttemptCount += 1;
-    }
-
-    return {
-      playerId: candidate.playerId,
-      delayMs,
-      isWinner: candidate.playerId === winner.playerId
-    };
-  });
-
-  handleEgyptianWarAction(
-    roomCode,
-    winner.playerId,
-    "slap",
-    (response) => {
-      if (
-        !response.success &&
-        rooms.get(roomCode) === room &&
-        room.gameState?.status === "playing" &&
-        !room.isPaused
-      ) {
-        startTurnTimer(roomCode, room);
-        sendEgyptianWarState(roomCode, room);
-      }
-    },
-    false,
-    true,
-    slapAttempts
-  );
-}
-
-function sendEgyptianWarState(
-  roomCode: string,
-  room: Room,
-  targetSocket?: Socket
-): void {
-  if (room.gameState === null) {
-    return;
-  }
-
-  const publicState = createPublicEgyptianWarState(
-    room.gameState,
-    room.isPaused,
-    room.isAnimating,
-    getTurnTimerSeconds(room),
-    getTurnTimeRemainingMs(room),
-    room.disconnectPausedPlayerId !== null
-      ? "A player disconnected; the host may resume the game."
-      : room.isPaused
-        ? "Game paused by the host."
-        : null,
-    new Set(
-      Array.from(room.players.values())
-        .filter((player) => player.isConnected)
-        .map((player) => player.id)
-    )
-  );
-
-  if (targetSocket) {
-    targetSocket.emit("egyptian-war-state", publicState);
-  } else {
-    io.to(roomCode).emit("egyptian-war-state", publicState);
-  }
-}
-
-function completeEgyptianWar(roomCode: string, room: Room): void {
-  const state = room.gameState;
-
-  if (state === null || state.status !== "finished") {
-    return;
-  }
-
-  clearTurnTimer(room);
-  cancelPendingSlapResolution(room);
-  room.activeGameId = null;
-  room.gameState = null;
-  room.isPaused = false;
-  room.isAnimating = false;
-  promoteSpectatorsToPlayers(roomCode, room);
-  io.to(roomCode).emit("game-ended", {
-    winnerId: state.winnerId,
-    message: state.activityMessage
-  });
-}
-
 function validateGameSetting(
   setting: GameSetting,
   value: unknown
 ): value is GameSettingValue {
   if (setting.type === "number") {
-    if (typeof value !== "number" || !Number.isInteger(value)) {
-      return false;
-    }
-
+    if (typeof value !== "number" || !Number.isInteger(value)) return false;
     if (setting.control === "range") {
       return value >= setting.min &&
         value <= setting.max &&
         (value - setting.min) % setting.step === 0;
     }
-
     return setting.options.includes(value);
   }
-
   return typeof value === "boolean";
 }
 
-function handleEgyptianWarAction(
-  roomCode: string,
-  playerId: string,
-  action: EgyptianWarAction,
-  respond: (response: { success: boolean; message?: string }) => void,
-  isTurnTimeout = false,
-  isResolvedSlap = false,
-  slapAttempts: SlapAnimationAttempt[] = []
-): void {
-  const room = rooms.get(roomCode);
-
-  if (
-    !room ||
-    room.activeGameId !== egyptianWar.id ||
-    room.gameState === null ||
-    room.gameState.status !== "playing"
-  ) {
-    respond({
-      success: false,
-      message: "Egyptian War is not active in that room."
-    });
-    return;
-  }
-
-  if (!room.players.has(playerId)) {
-    respond({
-      success: false,
-      message: "You are not a player in that room."
-    });
-    return;
-  }
-
-  if (room.isPaused && !isResolvedSlap) {
-    respond({
-      success: false,
-      message: "The host has paused the game."
-    });
-    return;
-  }
-
-  if (room.isAnimating) {
-    respond({
-      success: false,
-      message: "Wait for the current action to finish."
-    });
-    return;
-  }
-
-  const state = room.gameState;
-  if (
-    action === "slap" &&
-    !isTurnTimeout &&
-    !isResolvedSlap &&
-    state.pile.length > state.penaltyPileCardCount &&
-    isEgyptianWarPileSlappable(
-      state.pile.slice(state.penaltyPileCardCount),
-      state.settings
-    )
-  ) {
-    collectValidSlap(roomCode, playerId, room, respond);
-    return;
-  }
-
-  if (room.pendingSlapResolution !== null && !isResolvedSlap) {
-    respond({
-      success: false,
-      message: "A slap is being resolved. Please wait."
-    });
-    return;
-  }
-
-  const currentPlayer = state.players[state.currentPlayerIndex];
-  const currentPlayerIdBeforeAction = currentPlayer?.id ?? null;
-  const isResolvingSlapWindow =
-    isTurnTimeout && state.pendingPileWinnerId !== null;
-  const playedCard =
-    !isResolvingSlapWindow &&
-      action === "play-card" &&
-      currentPlayer?.id === playerId &&
-      currentPlayer.cards.length > 0
-      ? currentPlayer.cards[0]
-      : null;
-  const wasSlappable =
-    action === "slap" &&
-    isEgyptianWarPileSlappable(
-      state.pile.slice(state.penaltyPileCardCount),
-      state.settings
-    );
-  const previousPileCount = state.pile.length;
-  const previousCardCounts = new Map(
-    state.players.map((player) => [player.id, player.cards.length])
-  );
-
+function disposeGameSession(room: Room): void {
+  const session = room.gameSession;
+  room.gameSession = null;
   try {
-    if (isTurnTimeout) {
-      resolveEgyptianWarTurnTimeout(state);
-    } else {
-      applyEgyptianWarAction(state, playerId, action);
-    }
+    session?.dispose();
   } catch (error) {
-    if (!(error instanceof EgyptianWarRuleError)) {
-      console.error(
-        `Unexpected error while processing ${action} in room ${roomCode}:`,
-        error
-      );
-      respond({
-        success: false,
-        message: "Unable to process that game action."
-      });
-      return;
+    console.error("Unable to dispose a game session cleanly:", error);
+  }
+}
+
+function getGameViewer(room: Room, memberId: string): GameViewer | null {
+  if (room.activeGamePlayerIds.has(memberId)) {
+    return { memberId, role: "player" };
+  }
+  if (room.spectators.has(memberId)) return { memberId, role: "spectator" };
+  return null;
+}
+
+function emitToActiveGameViewers(
+  room: Room,
+  eventName: string,
+  payload: unknown
+): void {
+  const viewerIds = new Set([
+    ...room.activeGamePlayerIds,
+    ...room.spectators.keys()
+  ]);
+
+  for (const viewerId of viewerIds) {
+    const viewer = getRoomMember(room, viewerId);
+    if (!viewer?.member.isConnected || !isActiveGameViewer(room, viewerId)) {
+      continue;
     }
 
-    respond({
-      success: false,
-      message: error.message
+    io.sockets.sockets.get(viewerId)?.emit(eventName, payload);
+  }
+}
+
+function sendActiveGameState(
+  roomCode: string,
+  room: Room,
+  targetSocket?: Socket
+): void {
+  if (room.activeGameId === null || room.gameSession === null) return;
+  const send = (memberId: string, target: Socket) => {
+    const viewer = getGameViewer(room, memberId);
+    if (!viewer || room.activeGameId === null || room.gameSession === null) return;
+    target.emit("game-state", {
+      gameId: room.activeGameId,
+      state: room.gameSession.getPublicState(viewer)
     });
+    target.emit("game-lifecycle", {
+      gameId: room.activeGameId,
+      ...room.gameSession.getLifecycleState()
+    });
+  };
+  if (targetSocket) {
+    send(targetSocket.id, targetSocket);
     return;
   }
-
-  suspendTurnTimer(room);
-  const currentPlayerIdAfterAction =
-    state.players[state.currentPlayerIndex]?.id ?? null;
-
-  if (
-    action !== "slap" ||
-    (wasSlappable && playerId === currentPlayerIdBeforeAction) ||
-    currentPlayerIdAfterAction !== currentPlayerIdBeforeAction
-  ) {
-    room.turnTimeRemainingMs = null;
-    room.reconnectGraceUsedThisTurn = false;
+  for (const member of [...room.players.values(), ...room.spectators.values()]) {
+    if (!member.isConnected) continue;
+    const target = io.sockets.sockets.get(member.id);
+    if (target) send(member.id, target);
   }
+}
 
-  const pileWinner = state.players.find((player) =>
-    player.cards.length >
-    (previousCardCounts.get(player.id) ?? player.cards.length)
-  ) ?? (
-      state.status === "finished"
-        ? state.players.find((player) => player.id === state.winnerId)
-        : undefined
-    );
-  const pileWasAwarded =
-    pileWinner !== undefined &&
-    (previousPileCount > 0 || playedCard !== null);
-  const isFinalWin = state.status === "finished";
-  const penaltyCardCount =
-    action === "slap" && !wasSlappable
-      ? (previousCardCounts.get(playerId) ?? 0) -
-      (state.players.find((player) => player.id === playerId)?.cards.length ?? 0)
-      : 0;
-  const collectedPileCardCount = pileWinner
-    ? previousPileCount +
-    (playedCard === null ? 0 : 1) +
-    penaltyCardCount
-    : 0;
+function finishActiveGame(
+  roomCode: string,
+  room: Room,
+  winnerId: string | null,
+  message: string
+): void {
+  if (rooms.get(roomCode) !== room || room.activeGameId === null) return;
+  const returningMemberIds = Array.from(room.spectators.keys());
+  disposeGameSession(room);
+  room.activeGameId = null;
+  room.activeGamePlayerIds.clear();
 
-  room.animationId += 1;
-  const animation = {
-    id: room.animationId,
-    action: isResolvingSlapWindow ? "timeout" : action,
-    actorId: playerId,
-    slapAttempts:
-      action === "slap" ? slapAttempts : [],
-    playedCard,
-    isValidSlap: action === "slap" && wasSlappable,
-    winnerId: pileWinner?.id ?? state.winnerId,
-    transferCardCount: collectedPileCardCount,
-    pileCardCountBeforeTransfer: collectedPileCardCount,
-    penaltyCardCount,
-    isFinalWin
-  };
+  io.to(roomCode).emit("game-ended", {
+    winnerId,
+    message,
+    returningMemberIds
+  });
+  promoteSpectatorsToPlayers(roomCode, room);
 
-  room.isAnimating = true;
-  io.to(roomCode).emit("egyptian-war-animation", animation);
-  sendEgyptianWarState(roomCode, room);
-  respond({ success: true });
-
-  const animationDuration = isFinalWin
-    ? 3600
-    : animation.transferCardCount > 0
-      ? 2400
-      : action === "slap"
-        ? 1050
-        : playedCard
-          ? 650
-          : 450;
-
-  setTimeout(() => {
-    if (
-      rooms.get(roomCode) !== room ||
-      room.animationId !== animation.id ||
-      room.gameState === null
-    ) {
-      return;
+  // Players who dropped during the game never got an expiry timer.
+  for (const member of [...room.players.values(), ...room.spectators.values()]) {
+    if (!member.isConnected && !disconnectedPlayerTimers.has(member.id)) {
+      scheduleDisconnectExpiry(roomCode, room, member.id);
     }
-
-    room.isAnimating = false;
-
-    if (room.gameState.status === "finished") {
-      completeEgyptianWar(roomCode, room);
-      return;
-    }
-
-    startTurnTimer(roomCode, room);
-    sendEgyptianWarState(roomCode, room);
-  }, animationDuration);
+  }
 }
 
 io.on("connection", (socket) => {
@@ -885,35 +804,11 @@ io.on("connection", (socket) => {
       if (roomMember.role === "player") {
         markPlayerReconnected(roomCode, socket.id, room);
       } else {
-        const reconnectTimer = disconnectedPlayerTimers.get(socket.id);
-        if (reconnectTimer !== undefined) {
-          clearTimeout(reconnectTimer);
-          disconnectedPlayerTimers.delete(socket.id);
-        }
+        clearDisconnectTimer(socket.id);
         roomMember.member.isConnected = true;
       }
       socket.join(roomCode);
-      sendRoomResumed(socket, roomCode, room);
-      socket.emit("room-lock-changed", {
-        isLocked: room.isLocked
-      });
-
-      if (room.selectedGameId !== null) {
-        socket.emit("game-selected", {
-          gameId: room.selectedGameId,
-          settings: room.gameSettings
-        });
-      }
-
-      sendRoomMemberLists(roomCode, room);
-      if (
-        roomMember.role === "player" &&
-        room.disconnectPausedPlayerId === null
-      ) {
-        io.to(roomCode).emit("egyptian-war-pause-changed", {
-          isPaused: room.isPaused
-        });
-      }
+      sendRoomSnapshot(socket, roomCode, room);
     } else {
       const revokedMessage = revokedSocketMessages.get(socket.id);
       if (revokedMessage) {
@@ -926,7 +821,7 @@ io.on("connection", (socket) => {
     }
   }
 
-  socket.on("resume-room", (data, respond) => {
+  onSocketRequest(socket, "resume-room", (data, respond) => {
     const token = String(data?.resumeToken ?? "");
     const session = playerResumeTokens.get(token);
 
@@ -939,6 +834,15 @@ io.on("connection", (socket) => {
         success: false,
         message: revokedMessage ??
           "That saved room session is no longer available."
+      });
+      return;
+    }
+
+    if (Date.now() - session.createdAt > resumeTokenMaxAgeMs) {
+      playerResumeTokens.delete(token);
+      respond({
+        success: false,
+        message: "That saved room session has expired."
       });
       return;
     }
@@ -979,22 +883,7 @@ io.on("connection", (socket) => {
       member.isConnected
     ) {
       socket.join(session.roomCode);
-      sendRoomResumed(socket, session.roomCode, room);
-      socket.emit("room-lock-changed", {
-        isLocked: room.isLocked
-      });
-      if (room.selectedGameId !== null) {
-        socket.emit("game-selected", {
-          gameId: room.selectedGameId,
-          settings: room.gameSettings
-        });
-      }
-      sendRoomMemberLists(session.roomCode, room);
-      if (role === "player") {
-        io.to(session.roomCode).emit("egyptian-war-pause-changed", {
-          isPaused: room.isPaused
-        });
-      }
+      sendRoomSnapshot(socket, session.roomCode, room);
       respond({ success: true, role });
       return;
     }
@@ -1014,47 +903,8 @@ io.on("connection", (socket) => {
       room.hostId = socket.id;
     }
 
-    const gamePlayer = role === "player"
-      ? room.gameState?.players.find(
-      (candidate) => candidate.id === oldPlayerId
-      )
-      : undefined;
-
-    if (gamePlayer) {
-      gamePlayer.id = socket.id;
-    }
-
-    if (role === "player" && room.gameState?.challenge) {
-      if (room.gameState.challenge.challengerId === oldPlayerId) {
-        room.gameState.challenge.challengerId = socket.id;
-      }
-
-      if (room.gameState.challenge.responderId === oldPlayerId) {
-        room.gameState.challenge.responderId = socket.id;
-      }
-    }
-
-    if (
-      role === "player" &&
-      room.gameState?.pendingPileWinnerId === oldPlayerId
-    ) {
-      room.gameState.pendingPileWinnerId = socket.id;
-    }
-
-    if (role === "player" && room.reconnectGracePlayerId === oldPlayerId) {
-      room.reconnectGracePlayerId = socket.id;
-    }
-
-    const pendingSlapCandidate = role === "player"
-      ? room.pendingSlapResolution?.candidates.get(oldPlayerId)
-      : undefined;
-    if (pendingSlapCandidate) {
-      room.pendingSlapResolution?.candidates.delete(oldPlayerId);
-      pendingSlapCandidate.playerId = socket.id;
-      room.pendingSlapResolution?.candidates.set(
-        socket.id,
-        pendingSlapCandidate
-      );
+    if (room.activeGamePlayerIds.delete(oldPlayerId)) {
+      room.activeGamePlayerIds.add(socket.id);
     }
 
     if (previousSocket && oldPlayerId !== socket.id) {
@@ -1062,50 +912,24 @@ io.on("connection", (socket) => {
       previousSocket.leave(session.roomCode);
     }
 
-    const reconnectTimer = disconnectedPlayerTimers.get(oldPlayerId);
+    clearDisconnectTimer(oldPlayerId);
+    socketRequestLimiter.forget(oldPlayerId);
 
-    if (reconnectTimer !== undefined) {
-      clearTimeout(reconnectTimer);
-      disconnectedPlayerTimers.delete(oldPlayerId);
-    }
-
-    if (role === "player" && room.disconnectPausedPlayerId === oldPlayerId) {
-      room.disconnectPausedPlayerId = socket.id;
-    }
-
+    // Replaces every token this member held (including the one just used).
     removePlayerResumeTokens(oldPlayerId);
     const rotatedResumeToken = createPlayerResumeToken(
       session.roomCode,
       socket.id
     );
-    playerResumeTokens.delete(token);
     socket.join(session.roomCode);
-    if (role === "player") {
-      markPlayerReconnected(session.roomCode, socket.id, room);
+    if (role === "player" && room.activeGamePlayerIds.has(socket.id)) {
+      room.gameSession?.memberReconnected?.(socket.id, oldPlayerId);
     }
-    sendRoomResumed(socket, session.roomCode, room);
-    socket.emit("room-resume-token", rotatedResumeToken);
-    socket.emit("room-lock-changed", {
-      isLocked: room.isLocked
-    });
-
-    if (room.selectedGameId !== null) {
-      socket.emit("game-selected", {
-        gameId: room.selectedGameId,
-        settings: room.gameSettings
-      });
-    }
-
-    sendRoomMemberLists(session.roomCode, room);
-    if (role === "player") {
-      io.to(session.roomCode).emit("egyptian-war-pause-changed", {
-        isPaused: room.isPaused
-      });
-    }
+    sendRoomSnapshot(socket, session.roomCode, room, rotatedResumeToken);
     respond({ success: true, role });
   });
 
-  socket.on("create-room", (data, respond) => {
+  onSocketRequest(socket, "create-room", (data, respond) => {
     if (socketRoomCodes.has(socket.id)) {
       respond({
         success: false,
@@ -1117,7 +941,7 @@ io.on("connection", (socket) => {
     const playerName = String(data?.playerName ?? "").trim();
     const avatar = String(data?.avatar ?? "");
 
-    if (playerName.length < 1 || playerName.length > 20) {
+    if (!isValidPlayerName(playerName)) {
       respond({
         success: false,
         message: "Enter a name between 1 and 20 characters."
@@ -1133,28 +957,34 @@ io.on("connection", (socket) => {
       return;
     }
 
+    if (rooms.size >= maxRooms) {
+      respond({
+        success: false,
+        message: "The server is busy right now. Try again later."
+      });
+      return;
+    }
+
+    if (!roomCreationLimiter.consume(getSocketClientAddress(socket))) {
+      respond({
+        success: false,
+        message: "You are creating rooms too quickly. Try again in a few minutes."
+      });
+      return;
+    }
+
     const roomCode = generateRoomCode();
 
     const room: Room = {
       hostId: socket.id,
       players: new Map(),
       spectators: new Map(),
+      activeGamePlayerIds: new Set(),
       selectedGameId: null,
       gameSettings: {},
       isLocked: false,
       activeGameId: null,
-      gameState: null,
-      isPaused: false,
-      isAnimating: false,
-      animationId: 0,
-      turnTimer: null,
-      turnDeadlineAt: null,
-      turnTimeRemainingMs: null,
-      reconnectGracePlayerId: null,
-      reconnectGraceUsedThisTurn: false,
-      pendingSlapResolution: null,
-      disconnectPausedPlayerId: null,
-      wasPausedBeforeDisconnect: false
+      gameSession: null
     };
 
     room.players.set(socket.id, {
@@ -1184,7 +1014,7 @@ io.on("connection", (socket) => {
     });
   });
 
-  socket.on("join-room", (data, respond) => {
+  onSocketRequest(socket, "join-room", (data, respond) => {
     if (socketRoomCodes.has(socket.id)) {
       respond({
         success: false,
@@ -1193,11 +1023,21 @@ io.on("connection", (socket) => {
       return;
     }
 
-    const roomCode = String(data?.roomCode ?? "").trim().toUpperCase();
+    const roomCode = normalizeRoomCode(data?.roomCode);
     const playerName = String(data?.playerName ?? "").trim();
     const avatar = String(data?.avatar ?? "");
+    const joinLimitKey = getSocketClientAddress(socket);
+
+    if (invalidJoinLimiter.isBlocked(joinLimitKey)) {
+      respond({
+        success: false,
+        message: "Too many unsuccessful join attempts. Try again in a minute."
+      });
+      return;
+    }
 
     if (roomCode.length !== 6) {
+      invalidJoinLimiter.recordFailure(joinLimitKey);
       respond({
         success: false,
         message: "Enter a valid six-character room code."
@@ -1205,7 +1045,7 @@ io.on("connection", (socket) => {
       return;
     }
 
-    if (playerName.length < 1 || playerName.length > 20) {
+    if (!isValidPlayerName(playerName)) {
       respond({
         success: false,
         message: "Enter a name between 1 and 20 characters."
@@ -1224,6 +1064,7 @@ io.on("connection", (socket) => {
     const room = rooms.get(roomCode);
 
     if (!room) {
+      invalidJoinLimiter.recordFailure(joinLimitKey);
       respond({
         success: false,
         message: "That room does not exist."
@@ -1249,6 +1090,14 @@ io.on("connection", (socket) => {
       return;
     }
 
+    if (isPlayerNameTaken(room, playerName)) {
+      respond({
+        success: false,
+        message: "That name is already taken in this room. Pick another one."
+      });
+      return;
+    }
+
     const role = room.activeGameId === null
       ? "player"
       : "spectator";
@@ -1265,20 +1114,11 @@ io.on("connection", (socket) => {
       room.spectators.set(socket.id, roomMember);
     }
 
+    // Failures are deliberately not cleared on success: otherwise a guesser
+    // could reset their own counter by joining a room they created.
     socketRoomCodes.set(socket.id, roomCode);
     socket.join(roomCode);
-    sendRoomMemberLists(roomCode, room);
-
-    socket.emit("room-lock-changed", {
-      isLocked: room.isLocked
-    });
-
-    if (room.selectedGameId !== null) {
-      socket.emit("game-selected", {
-        gameId: room.selectedGameId,
-        settings: room.gameSettings
-      });
-    }
+    sendLobbyState(socket, roomCode, room);
 
     console.log(
       `${playerName} joined room ${roomCode} as a ${role}`
@@ -1296,21 +1136,18 @@ io.on("connection", (socket) => {
       role,
       activeGameId: room.activeGameId,
       gameSettings: room.gameSettings,
-      isPaused: room.isPaused,
-      chatEnabled: availableGames.find(
-        (game) => game.id === room.activeGameId
-      )?.chatEnabled ?? false
+      isPaused: room.gameSession?.getLifecycleState().isPaused ?? false,
+      chatEnabled:
+        getGameDefinition(room.activeGameId)?.chatEnabled ?? false
     });
 
-    if (role === "spectator" && room.activeGameId === egyptianWar.id) {
-      sendEgyptianWarState(roomCode, room, socket);
+    if (role === "spectator" && room.activeGameId !== null) {
+      sendActiveGameState(roomCode, room, socket);
     }
   });
 
-  socket.on("select-game", (data, respond) => {
-    const roomCode = String(data?.roomCode ?? "")
-      .trim()
-      .toUpperCase();
+  onSocketRequest(socket, "select-game", (data, respond) => {
+    const roomCode = normalizeRoomCode(data?.roomCode);
 
     const gameId = String(data?.gameId ?? "");
     const room = rooms.get(roomCode);
@@ -1339,7 +1176,7 @@ io.on("connection", (socket) => {
       return;
     }
 
-    const game = availableGames.find((item) => item.id === gameId);
+    const game = getGameDefinition(gameId);
 
     if (!game) {
       respond({
@@ -1374,10 +1211,8 @@ io.on("connection", (socket) => {
     });
   });
 
-  socket.on("update-game-settings", (data, respond) => {
-    const roomCode = String(data?.roomCode ?? "")
-      .trim()
-      .toUpperCase();
+  onSocketRequest(socket, "update-game-settings", (data, respond) => {
+    const roomCode = normalizeRoomCode(data?.roomCode);
 
     const room = rooms.get(roomCode);
 
@@ -1413,9 +1248,7 @@ io.on("connection", (socket) => {
       return;
     }
 
-    const game = availableGames.find(
-      (item) => item.id === room.selectedGameId
-    );
+    const game = getGameDefinition(room.selectedGameId);
 
     if (!game) {
       respond({
@@ -1468,10 +1301,8 @@ io.on("connection", (socket) => {
     });
   });
 
-  socket.on("set-room-locked", (data, respond) => {
-    const roomCode = String(data?.roomCode ?? "")
-      .trim()
-      .toUpperCase();
+  onSocketRequest(socket, "set-room-locked", (data, respond) => {
+    const roomCode = normalizeRoomCode(data?.roomCode);
 
     const room = rooms.get(roomCode);
 
@@ -1514,11 +1345,8 @@ io.on("connection", (socket) => {
     });
   });
 
-  socket.on("kick-player", (data, respond) => {
-    const roomCode = String(data?.roomCode ?? "")
-      .trim()
-      .toUpperCase();
-
+  onSocketRequest(socket, "kick-player", (data, respond) => {
+    const roomCode = normalizeRoomCode(data?.roomCode);
     const playerId = String(data?.playerId ?? "");
     const room = rooms.get(roomCode);
 
@@ -1540,32 +1368,14 @@ io.on("connection", (socket) => {
 
     const spectator = room.spectators.get(playerId);
     if (spectator) {
-      room.spectators.delete(playerId);
-      socketRoomCodes.delete(playerId);
-      const kickedMessage = "You were removed from the spectators.";
-      removePlayerResumeTokens(playerId, kickedMessage);
-      revokedSocketMessages.set(playerId, kickedMessage);
-      setTimeout(() => {
-        revokedSocketMessages.delete(playerId);
-      }, reconnectGracePeriodMs);
-      const reconnectTimer = disconnectedPlayerTimers.get(playerId);
-      if (reconnectTimer !== undefined) {
-        clearTimeout(reconnectTimer);
-        disconnectedPlayerTimers.delete(playerId);
-      }
-
-      const spectatorSocket = io.sockets.sockets.get(playerId);
-      if (spectatorSocket) {
-        spectatorSocket.emit("kicked-from-room", {
-          message: kickedMessage
-        });
-        spectatorSocket.leave(roomCode);
-      }
-
-      sendRoomMemberLists(roomCode, room);
-      console.log(
-        `${spectator.name} was removed from room ${roomCode}`
+      removeMemberFromRoom(
+        roomCode,
+        room,
+        playerId,
+        "spectator",
+        "You were removed from the spectators."
       );
+      console.log(`${spectator.name} was removed from room ${roomCode}`);
       respond({
         success: true,
         message: "Spectator removed from the game."
@@ -1573,208 +1383,177 @@ io.on("connection", (socket) => {
       return;
     }
 
-    const isActiveEgyptianWar =
-      room.activeGameId === egyptianWar.id &&
-      room.gameState?.status === "playing";
-
-    if (isActiveEgyptianWar && room.isAnimating) {
-      respond({
-        success: false,
-        message: "Wait for the current game animation to finish."
-      });
-      return;
-    }
-
-    if (
-      isActiveEgyptianWar &&
-      room.pendingSlapResolution !== null
-    ) {
-      respond({
-        success: false,
-        message: "Wait for the slap decision to finish."
-      });
-      return;
-    }
-
-    if (room.activeGameId !== null && !isActiveEgyptianWar) {
-      respond({
-        success: false,
-        message: "Players cannot be kicked during this game."
-      });
-      return;
-    }
-
     if (playerId === room.hostId) {
-      respond({
-        success: false,
-        message: "The host cannot remove themselves."
-      });
+      respond({ success: false, message: "The host cannot remove themselves." });
       return;
     }
 
     const player = room.players.get(playerId);
-
     if (!player) {
-      respond({
-        success: false,
-        message: "That player is no longer in the room."
-      });
+      respond({ success: false, message: "That player is no longer in the room." });
       return;
     }
 
-    if (isActiveEgyptianWar && player.isConnected) {
-      respond({
+    const wasInActiveGame =
+      room.gameSession !== null &&
+      room.activeGamePlayerIds.has(playerId);
+    const removalResult = wasInActiveGame
+      ? room.gameSession?.memberRemoved?.(playerId) ?? {
         success: false,
-        message: "Only disconnected players can be kicked during a game."
-      });
-      return;
-    }
-
-    const currentGamePlayerId =
-      room.gameState?.players[room.gameState.currentPlayerIndex]?.id ??
-      null;
-    if (isActiveEgyptianWar && room.turnTimer !== null) {
-      suspendTurnTimer(room);
-    }
-
-    if (isActiveEgyptianWar && room.gameState) {
-      try {
-        removeEgyptianWarPlayer(room.gameState, playerId);
-      } catch (error) {
-        if (!(error instanceof EgyptianWarRuleError)) {
-          console.error(
-            `Unable to remove ${player.name} from Egyptian War in room ${roomCode}:`,
-            error
-          );
-          respond({
-            success: false,
-            message: "Unable to remove that player from the game."
-          });
-          return;
-        }
-
-        respond({
-          success: false,
-          message: error.message
-        });
-        return;
+        message: "Players cannot be removed during this game."
       }
+      : { success: true, message: "Player removed from the lobby." };
+    if (!removalResult.success) {
+      respond(removalResult);
+      return;
     }
 
-    room.players.delete(playerId);
-    socketRoomCodes.delete(playerId);
-    const kickedMessage = isActiveEgyptianWar
+    room.activeGamePlayerIds.delete(playerId);
+
+    const kickedMessage = wasInActiveGame
       ? "You were kicked from the game while disconnected."
-      : "You were kicked from the lobby while disconnected.";
-    removePlayerResumeTokens(playerId, kickedMessage);
-    revokedSocketMessages.set(playerId, kickedMessage);
-    setTimeout(() => {
-      revokedSocketMessages.delete(playerId);
-    }, reconnectGracePeriodMs);
-    const reconnectTimer = disconnectedPlayerTimers.get(playerId);
-
-    if (reconnectTimer !== undefined) {
-      clearTimeout(reconnectTimer);
-      disconnectedPlayerTimers.delete(playerId);
-    }
-
-    if (room.reconnectGracePlayerId === playerId) {
-      room.reconnectGracePlayerId = null;
-    }
-
-    if (room.disconnectPausedPlayerId === playerId) {
-      const otherDisconnectedPlayer = Array.from(
-        room.players.values()
-      ).find((candidate) => !candidate.isConnected);
-      room.disconnectPausedPlayerId =
-        otherDisconnectedPlayer?.id ?? null;
-
-      if (room.disconnectPausedPlayerId === null) {
-        room.isPaused = room.wasPausedBeforeDisconnect;
-        room.wasPausedBeforeDisconnect = false;
-      }
-    }
-
-    const playerSocket = io.sockets.sockets.get(playerId);
-
-    if (playerSocket) {
-      playerSocket.emit("kicked-from-room", {
-        message: kickedMessage
-      });
-
-      playerSocket.leave(roomCode);
-    }
-
-    const nextGamePlayerId =
-      room.gameState?.players[room.gameState.currentPlayerIndex]?.id ??
-      null;
-    if (
-      isActiveEgyptianWar &&
-      currentGamePlayerId !== nextGamePlayerId
-    ) {
-      room.turnTimeRemainingMs = null;
-      room.reconnectGraceUsedThisTurn = false;
-    }
-
-    sendRoomMemberLists(roomCode, room);
-    if (isActiveEgyptianWar && room.gameState) {
-      if (room.gameState.status === "finished") {
-        room.animationId += 1;
-        const finalAnimationId = room.animationId;
-        const winner = room.gameState.players.find(
-          (gamePlayer) => gamePlayer.id === room.gameState?.winnerId
-        );
-        room.isAnimating = true;
-        io.to(roomCode).emit("egyptian-war-animation", {
-          id: finalAnimationId,
-          action: "kick",
-          actorId: playerId,
-          playedCard: null,
-          isValidSlap: false,
-          winnerId: winner?.id ?? null,
-          transferCardCount: room.gameState.totalCardCount,
-          pileCardCountBeforeTransfer: room.gameState.totalCardCount,
-          penaltyCardCount: 0,
-          isFinalWin: winner !== undefined
-        });
-        sendEgyptianWarState(roomCode, room);
-        setTimeout(() => {
-          if (
-            rooms.get(roomCode) === room &&
-            room.animationId === finalAnimationId
-          ) {
-            completeEgyptianWar(roomCode, room);
-          }
-        }, gameEndAnimationMs);
-      } else {
-        if (
-          !room.isPaused &&
-          !room.isAnimating &&
-          room.turnTimer === null
-        ) {
-          startTurnTimer(roomCode, room);
-        }
-        sendEgyptianWarState(roomCode, room);
-      }
-    }
-
-    console.log(
-      `${player.name} was removed from room ${roomCode}`
-    );
-
+      : player.isConnected
+        ? "You were removed from the lobby by the host."
+        : "You were kicked from the lobby while disconnected.";
+    removeMemberFromRoom(roomCode, room, playerId, "player", kickedMessage);
+    console.log(`${player.name} was removed from room ${roomCode}`);
     respond({
       success: true,
-      message: isActiveEgyptianWar
-        ? room.gameState?.activityMessage ??
-        "Disconnected player removed from the game."
-        : "Player removed from the lobby."
+      message: removalResult.message ?? "Player removed."
     });
   });
 
-  socket.on("start-game", (data, respond) => {
-    const roomCode = String(data?.roomCode ?? "")
-      .trim()
-      .toUpperCase();
+  onSocketRequest(socket, "leave-lobby", (_data, respond) => {
+    const roomCode = socketRoomCodes.get(socket.id);
+    const room = roomCode ? rooms.get(roomCode) : undefined;
+    const found = room ? getRoomMember(room, socket.id) : null;
+
+    if (!roomCode || !room || !found) {
+      respond({ success: false, message: "You are not in a room." });
+      return;
+    }
+
+    if (room.hostId === socket.id) {
+      respond({
+        success: false,
+        message: "The host closes the lobby instead of leaving it."
+      });
+      return;
+    }
+
+    removeMemberFromRoom(roomCode, room, socket.id, found.role);
+    console.log(`${found.member.name} left lobby ${roomCode}`);
+    respond({ success: true });
+  });
+
+  onSocketRequest(socket, "leave-game", (_data, respond) => {
+    const roomCode = socketRoomCodes.get(socket.id);
+    const room = roomCode ? rooms.get(roomCode) : undefined;
+    const found = room ? getRoomMember(room, socket.id) : null;
+
+    if (!roomCode || !room || !found) {
+      respond({ success: false, message: "You are not in a room." });
+      return;
+    }
+
+    if (room.hostId === socket.id) {
+      respond({
+        success: false,
+        message: "The host cannot leave the game."
+      });
+      return;
+    }
+
+    if (found.role === "spectator") {
+      room.spectators.delete(socket.id);
+      room.players.set(socket.id, found.member);
+      sendRoomMemberLists(roomCode, room);
+      console.log(`${found.member.name} stopped spectating game ${roomCode}`);
+      respond({
+        success: true,
+        role: "player",
+        hasActiveGame: room.activeGameId !== null
+      });
+      return;
+    }
+
+    if (room.gameSession === null) {
+      respond({
+        success: false,
+        message: "You are not in an active game."
+      });
+      return;
+    }
+
+    room.activeGamePlayerIds.delete(socket.id);
+    const result =
+      room.gameSession.memberRemoved?.(
+        socket.id,
+        { voluntary: true }
+      ) ?? {
+        success: false,
+        message: "You cannot leave during this game."
+      };
+
+    if (!result.success) {
+      room.activeGamePlayerIds.add(socket.id);
+      respond(result);
+      return;
+    }
+
+    // IMPORTANT: do NOT call removeMemberFromRoom().
+    // The player is leaving the game but staying in the lobby.
+    console.log(`${found.member.name} left game ${roomCode}`);
+    respond({
+      success: true,
+      hasActiveGame: room.activeGameId !== null
+    });
+  });
+
+  onSocketRequest(socket, "spectate-game", (_data, respond) => {
+    const roomCode = socketRoomCodes.get(socket.id);
+    const room = roomCode ? rooms.get(roomCode) : undefined;
+    const found = room ? getRoomMember(room, socket.id) : null;
+
+    if (!roomCode || !room || !found) {
+      respond({ success: false, message: "You are not in a room." });
+      return;
+    }
+
+    if (room.activeGameId === null || room.gameSession === null) {
+      respond({ success: false, message: "There is no active game to spectate." });
+      return;
+    }
+
+    if (found.role === "spectator") {
+      respond({ success: false, message: "You are already spectating this game." });
+      return;
+    }
+
+    if (room.activeGamePlayerIds.has(socket.id)) {
+      respond({ success: false, message: "You are already playing in this game." });
+      return;
+    }
+
+    room.players.delete(socket.id);
+    room.spectators.set(socket.id, found.member);
+    sendRoomMemberLists(roomCode, room);
+
+    const game = getGameDefinition(room.activeGameId);
+    respond({ success: true, role: "spectator" });
+    socket.emit("game-started", {
+      gameId: room.activeGameId,
+      name: game?.name ?? "Game",
+      chatEnabled: game?.chatEnabled ?? false,
+      settings: room.gameSettings,
+      isPaused: room.gameSession.getLifecycleState().isPaused
+    });
+    sendActiveGameState(roomCode, room, socket);
+    console.log(`${found.member.name} started spectating game ${roomCode}`);
+  });
+
+  onSocketRequest(socket, "start-game", (data, respond) => {
+    const roomCode = normalizeRoomCode(data?.roomCode);
 
     const room = rooms.get(roomCode);
 
@@ -1823,9 +1602,7 @@ io.on("connection", (socket) => {
       return;
     }
 
-    const game = availableGames.find(
-      (item) => item.id === room.selectedGameId
-    );
+    const game = getGameDefinition(room.selectedGameId);
 
     if (!game) {
       respond({
@@ -1863,31 +1640,46 @@ io.on("connection", (socket) => {
       return;
     }
 
-    const settings: EgyptianWarSettings = {
-      deckCount:
-        typeof room.gameSettings.deckCount === "number"
-          ? room.gameSettings.deckCount
-          : 1,
-      includeJokers: room.gameSettings.includeJokers === true,
-      allowDoubles: room.gameSettings.allowDoubles === true,
-      allowSandwiches: room.gameSettings.allowSandwiches === true,
-      allowFourInARow: room.gameSettings.allowFourInARow === true,
-      allowTopBottom: room.gameSettings.allowTopBottom === true,
-      allowTens: room.gameSettings.allowTens === true,
-      allowMarriage: room.gameSettings.allowMarriage === true,
-      falseSlapPenaltyCards:
-        typeof room.gameSettings.falseSlapPenaltyCards === "number"
-          ? room.gameSettings.falseSlapPenaltyCards
-          : 2
-    };
+    const gamePackage = gamePackagesById.get(game.id);
+    if (!gamePackage) {
+      respond({ success: false, message: "The selected game package is unavailable." });
+      return;
+    }
 
+    room.activeGamePlayerIds = new Set(room.players.keys());
+    let createdSession: GameSession | null = null;
     try {
-      room.gameState = createEgyptianWarState(
-        Array.from(room.players.values()),
-        settings,
-        deterministicTestRandomInteger
-      );
+      createdSession = gamePackage.server.createSession({
+        roomCode,
+        members: () => [
+          ...Array.from(room.players.values())
+            .filter((member) => room.activeGamePlayerIds.has(member.id))
+            .map((member) => ({
+            ...member,
+            role: "player" as const
+          })),
+          ...Array.from(room.spectators.values(), (member) => ({
+            ...member,
+            role: "spectator" as const
+          }))
+        ],
+        broadcastState: () => sendActiveGameState(roomCode, room),
+        emitEvent: (event) => {
+          emitToActiveGameViewers(room, "game-event", {
+            gameId: game.id,
+            event
+          });
+        },
+        finish: ({ winnerId, reason }) => {
+          if (room.gameSession === createdSession) {
+            finishActiveGame(roomCode, room, winnerId, reason);
+          }
+        },
+        now: Date.now,
+        randomInteger: deterministicTestRandomInteger
+      }, room.gameSettings);
     } catch (error) {
+      room.activeGamePlayerIds.clear();
       console.error(`Unable to initialize ${game.name} in room ${roomCode}:`, error);
       respond({
         success: false,
@@ -1897,20 +1689,29 @@ io.on("connection", (socket) => {
     }
 
     room.activeGameId = game.id;
-    room.isPaused = false;
-    room.isAnimating = false;
-    room.reconnectGraceUsedThisTurn = false;
-    cancelPendingSlapResolution(room);
-    clearTurnTimer(room);
+    room.gameSession = createdSession;
 
-    io.to(roomCode).emit("game-started", {
+    try {
+      room.gameSession.start?.();
+    } catch (error) {
+      console.error(`Unable to start ${game.name} in room ${roomCode}:`, error);
+      disposeGameSession(room);
+      room.activeGameId = null;
+      room.activeGamePlayerIds.clear();
+      respond({
+        success: false,
+        message: "Unable to start the game. Please try again."
+      });
+      return;
+    }
+
+    emitToActiveGameViewers(room, "game-started", {
       gameId: game.id,
       name: game.name,
       chatEnabled: game.chatEnabled,
       settings: room.gameSettings
     });
-    startTurnTimer(roomCode, room);
-    sendEgyptianWarState(roomCode, room);
+    sendActiveGameState(roomCode, room);
 
     console.log(`${game.name} started in room ${roomCode}`);
 
@@ -1919,21 +1720,14 @@ io.on("connection", (socket) => {
     });
   });
 
-  socket.on("toggle-game-pause", (data, respond) => {
-    const roomCode = String(data?.roomCode ?? "")
-      .trim()
-      .toUpperCase();
+  onSocketRequest(socket, "toggle-game-pause", (data, respond) => {
+    const roomCode = normalizeRoomCode(data?.roomCode);
     const room = rooms.get(roomCode);
 
-    if (
-      !room ||
-      room.activeGameId !== egyptianWar.id ||
-      room.gameState === null ||
-      room.gameState.status !== "playing"
-    ) {
+    if (!room || room.activeGameId === null || room.gameSession === null) {
       respond({
         success: false,
-        message: "Egyptian War is not active in that room."
+        message: "No game is active in that room."
       });
       return;
     }
@@ -1954,44 +1748,22 @@ io.on("connection", (socket) => {
       return;
     }
 
-    if (data.isPaused === room.isPaused) {
+    const lifecycle = room.gameSession.getLifecycleState();
+    if (data.isPaused === lifecycle.isPaused) {
       respond({ success: true });
       return;
     }
-
-    if (data.isPaused) {
-      if (room.pendingSlapResolution !== null) {
-        respond({
-          success: false,
-          message: "Wait for the accepted slap decision before pausing."
-        });
-        return;
-      }
-
-      suspendTurnTimer(room);
-    }
-
-    if (room.disconnectPausedPlayerId !== null) {
-      room.wasPausedBeforeDisconnect = data.isPaused;
-    }
-
-    room.isPaused = data.isPaused;
-
-    if (!room.isPaused) {
-      startTurnTimer(roomCode, room);
-    }
-
-    io.to(roomCode).emit("egyptian-war-pause-changed", {
-      isPaused: room.isPaused
+    const result = data.isPaused
+      ? room.gameSession.pause?.()
+      : room.gameSession.resume?.();
+    respond(result ?? {
+      success: false,
+      message: "This game does not support pausing."
     });
-    sendEgyptianWarState(roomCode, room);
-    respond({ success: true });
   });
 
-  socket.on("close-room", (data, respond) => {
-    const roomCode = String(data?.roomCode ?? "")
-      .trim()
-      .toUpperCase();
+  onSocketRequest(socket, "close-room", (data, respond) => {
+    const roomCode = normalizeRoomCode(data?.roomCode);
     const room = rooms.get(roomCode);
 
     if (!room) {
@@ -2018,44 +1790,18 @@ io.on("connection", (socket) => {
       return;
     }
 
-    clearTurnTimer(room);
-    cancelPendingSlapResolution(room);
-    const memberIds = new Set([
-      ...room.players.keys(),
-      ...room.spectators.keys()
-    ]);
-    for (const memberId of memberIds) {
-      socketRoomCodes.delete(memberId);
-      removePlayerResumeTokens(memberId);
-      const reconnectTimer = disconnectedPlayerTimers.get(memberId);
-
-      if (reconnectTimer !== undefined) {
-        clearTimeout(reconnectTimer);
-        disconnectedPlayerTimers.delete(memberId);
-      }
-    }
-
     respond({ success: true });
-    io.to(roomCode).emit("room-closed");
-    io.in(roomCode).socketsLeave(roomCode);
-    rooms.delete(roomCode);
-    console.log(`Room ${roomCode} closed by its host`);
+    closeRoom(roomCode, room, `Room ${roomCode} closed by its host`);
   });
 
-  socket.on("close-game-to-lobby", (data, respond) => {
-    const roomCode = String(data?.roomCode ?? "")
-      .trim()
-      .toUpperCase();
+  onSocketRequest(socket, "close-game-to-lobby", (data, respond) => {
+    const roomCode = normalizeRoomCode(data?.roomCode);
     const room = rooms.get(roomCode);
 
-    if (
-      !room ||
-      room.activeGameId !== egyptianWar.id ||
-      room.gameState === null
-    ) {
+    if (!room || room.activeGameId === null || room.gameSession === null) {
       respond({
         success: false,
-        message: "Egyptian War is not active in that room."
+        message: "No game is active in that room."
       });
       return;
     }
@@ -2068,25 +1814,17 @@ io.on("connection", (socket) => {
       return;
     }
 
-    clearTurnTimer(room);
-    cancelPendingSlapResolution(room);
-    room.animationId += 1;
-    room.activeGameId = null;
-    room.gameState = null;
-    room.isPaused = false;
-    room.isAnimating = false;
-    promoteSpectatorsToPlayers(roomCode, room);
-    io.to(roomCode).emit("game-ended", {
-      winnerId: null,
-      message: "The host ended the game and returned everyone to the lobby."
-    });
+    finishActiveGame(
+      roomCode,
+      room,
+      null,
+      "The host ended the game and returned everyone to the lobby."
+    );
     respond({ success: true });
   });
 
-  socket.on("game-chat-send", (data, respond) => {
-    const roomCode = String(data?.roomCode ?? "")
-      .trim()
-      .toUpperCase();
+  onSocketRequest(socket, "game-chat-send", (data, respond) => {
+    const roomCode = normalizeRoomCode(data?.roomCode);
     const room = rooms.get(roomCode);
     const roomMember = room
       ? getRoomMember(room, socket.id)
@@ -2095,7 +1833,8 @@ io.on("connection", (socket) => {
     if (
       !room ||
       !roomMember ||
-      room.activeGameId === null
+      room.activeGameId === null ||
+      !isActiveGameViewer(room, socket.id)
     ) {
       respond({
         success: false,
@@ -2104,9 +1843,7 @@ io.on("connection", (socket) => {
       return;
     }
 
-    const game = availableGames.find(
-      (availableGame) => availableGame.id === room.activeGameId
-    );
+    const game = getGameDefinition(room.activeGameId);
 
     if (!game?.chatEnabled) {
       respond({
@@ -2153,205 +1890,88 @@ io.on("connection", (socket) => {
     respond({ success: true });
   });
 
-  socket.on("play-card", (data, respond) => {
-    const roomCode = String(data?.roomCode ?? "")
-      .trim()
-      .toUpperCase();
+  onSocketRequest(socket, "game-action", (data, respond) => {
+    const roomCode = normalizeRoomCode(data?.roomCode);
+    const gameId = String(data?.gameId ?? "");
+    const actionType = String(data?.action?.type ?? "");
 
-    handleEgyptianWarAction(
-      roomCode,
-      socket.id,
-      "play-card",
-      respond
-    );
-  });
+    const room = rooms.get(roomCode);
+    if (
+      !room ||
+      room.activeGameId !== gameId ||
+      room.gameSession === null
+    ) {
+      respond({
+        success: false,
+        message: "That game is not active in this room."
+      });
+      return;
+    }
 
-  socket.on("slap", (data, respond) => {
-    const roomCode = String(data?.roomCode ?? "")
-      .trim()
-      .toUpperCase();
+    if (!isActiveGameViewer(room, socket.id)) {
+      respond({
+        success: false,
+        message: "Join this room as an active game participant before submitting actions."
+      });
+      return;
+    }
 
-    handleEgyptianWarAction(
-      roomCode,
-      socket.id,
-      "slap",
-      respond
-    );
+    Promise.resolve().then(() => room.gameSession?.handleAction(socket.id, {
+      type: actionType,
+      payload: data?.action?.payload
+    })).then((result) => {
+      respond(result ?? {
+        success: false,
+        message: "That game is no longer active."
+      });
+    }).catch((error) => {
+      console.error(
+        "Unable to process " + gameId +
+        " action in room " + roomCode + ":",
+        error
+      );
+      respond({
+        success: false,
+        message: "Unable to process that game action."
+      });
+    });
   });
 
   socket.on("disconnect", () => {
     console.log(`Browser disconnected: ${socket.id}`);
+    socketRequestLimiter.forget(socket.id);
 
     const roomCode = socketRoomCodes.get(socket.id);
     const room = roomCode ? rooms.get(roomCode) : undefined;
+    const found = room ? getRoomMember(room, socket.id) : null;
 
-    if (!roomCode || !room) {
+    if (!roomCode || !room || !found) {
       socketRoomCodes.delete(socket.id);
       return;
     }
 
-    const spectator = room.spectators.get(socket.id);
-    if (spectator) {
-      spectator.isConnected = false;
-      sendRoomMemberLists(roomCode, room);
+    found.member.isConnected = false;
 
-      const previousTimer = disconnectedPlayerTimers.get(socket.id);
-      if (previousTimer !== undefined) {
-        clearTimeout(previousTimer);
-      }
-
-      const reconnectTimer = setTimeout(() => {
-        disconnectedPlayerTimers.delete(socket.id);
-        const currentRoom = rooms.get(roomCode);
-        if (currentRoom !== room) {
-          return;
-        }
-
-        const disconnectedMember = getRoomMember(room, socket.id);
-        if (
-          !disconnectedMember ||
-          disconnectedMember.member.isConnected
-        ) {
-          return;
-        }
-
-        if (disconnectedMember.role === "spectator") {
-          room.spectators.delete(socket.id);
-        } else if (room.hostId !== socket.id && room.gameState === null) {
-          room.players.delete(socket.id);
-        } else {
-          return;
-        }
-
-        socketRoomCodes.delete(socket.id);
-        removePlayerResumeTokens(socket.id);
-        sendRoomMemberLists(roomCode, room);
-        console.log(
-          `Removed disconnected spectator ${spectator.name} from room ${roomCode}`
-        );
-      }, reconnectGracePeriodMs);
-
-      disconnectedPlayerTimers.set(socket.id, reconnectTimer);
-      return;
-    }
-
-    const player = room.players.get(socket.id);
-
-    if (!player) {
-      socketRoomCodes.delete(socket.id);
-      return;
-    }
-
-    player.isConnected = false;
-
-    if (room.gameState?.status === "playing") {
-      suspendTurnTimer(room);
-      if (room.disconnectPausedPlayerId === null) {
-        room.wasPausedBeforeDisconnect = room.isPaused;
-        room.disconnectPausedPlayerId = socket.id;
-      }
-
-      room.isPaused = true;
-      room.isAnimating = false;
-      room.animationId += 1;
-      room.gameState.activityMessage =
-        `${player.name} disconnected. The game is paused until they return.`;
-      io.to(roomCode).emit("egyptian-war-pause-changed", {
-        isPaused: true
-      });
-      sendEgyptianWarState(roomCode, room);
+    if (
+      found.role === "player" &&
+      room.activeGamePlayerIds.has(socket.id)
+    ) {
+      room.gameSession?.memberDisconnected?.(socket.id);
     }
 
     sendRoomMemberLists(roomCode, room);
 
-    if (room.gameState !== null) {
-      return;
+    // In an active game the host decides what happens to a missing player, so
+    // only spectators and the host (whose absence would strand the game) get
+    // an expiry countdown there. Lobby members always do.
+    if (
+      found.role === "spectator" ||
+      room.gameSession === null ||
+      room.hostId === socket.id ||
+      !room.activeGamePlayerIds.has(socket.id)
+    ) {
+      scheduleDisconnectExpiry(roomCode, room, socket.id);
     }
-
-    const previousTimer = disconnectedPlayerTimers.get(socket.id);
-
-    if (previousTimer !== undefined) {
-      clearTimeout(previousTimer);
-    }
-
-    const reconnectTimer = setTimeout(() => {
-      disconnectedPlayerTimers.delete(socket.id);
-
-      if (
-        rooms.get(roomCode) !== room ||
-        room.players.get(socket.id)?.isConnected !== false
-      ) {
-        return;
-      }
-
-      if (room.hostId === socket.id) {
-        clearTurnTimer(room);
-        cancelPendingSlapResolution(room);
-        io.to(roomCode).emit("room-closed");
-
-        const memberIds = new Set([
-          ...room.players.keys(),
-          ...room.spectators.keys()
-        ]);
-        for (const memberId of memberIds) {
-          socketRoomCodes.delete(memberId);
-          removePlayerResumeTokens(memberId);
-          const timer = disconnectedPlayerTimers.get(memberId);
-
-          if (timer !== undefined) {
-            clearTimeout(timer);
-            disconnectedPlayerTimers.delete(memberId);
-          }
-        }
-
-        io.in(roomCode).socketsLeave(roomCode);
-        rooms.delete(roomCode);
-        console.log(`Room ${roomCode} closed after host recovery expired`);
-        return;
-      }
-
-      if (room.gameState !== null) {
-        clearTurnTimer(room);
-        cancelPendingSlapResolution(room);
-        room.animationId += 1;
-        room.activeGameId = null;
-        room.gameState = null;
-        room.isPaused = false;
-        room.isAnimating = false;
-        room.disconnectPausedPlayerId = null;
-        room.wasPausedBeforeDisconnect = false;
-        promoteSpectatorsToPlayers(roomCode, room);
-        io.to(roomCode).emit("game-ended", {
-          winnerId: null,
-          message:
-            `${player.name} did not reconnect in time. The game ended and everyone returned to the lobby.`
-        });
-      } else if (room.disconnectPausedPlayerId === socket.id) {
-        const otherDisconnectedPlayer = Array.from(
-          room.players.values()
-        ).find(
-          (candidate) =>
-            candidate.id !== socket.id && !candidate.isConnected
-        );
-
-        room.disconnectPausedPlayerId =
-          otherDisconnectedPlayer?.id ?? null;
-        if (room.disconnectPausedPlayerId === null) {
-          room.isPaused = room.wasPausedBeforeDisconnect;
-          room.wasPausedBeforeDisconnect = false;
-        }
-      }
-
-      room.players.delete(socket.id);
-      socketRoomCodes.delete(socket.id);
-      removePlayerResumeTokens(socket.id);
-      sendRoomMemberLists(roomCode, room);
-      console.log(
-        `Removed disconnected player ${player.name} from room ${roomCode}`
-      );
-    }, reconnectGracePeriodMs);
-
-    disconnectedPlayerTimers.set(socket.id, reconnectTimer);
   });
 });
 

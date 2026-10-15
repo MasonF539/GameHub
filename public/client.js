@@ -7,82 +7,95 @@ const gameHubToastElement =
   document.querySelector("#gamehub-toast");
 const gameHubToastMessage =
   document.querySelector("#gamehub-toast-message");
+const fullscreenButton =
+  document.querySelector("#app-game-fullscreen-toggle");
+const fullscreenIconPath =
+  document.querySelector("#app-game-display-icon-path");
+const appGamePauseButton =
+  document.querySelector("#app-game-pause-toggle");
+const appGameExitButton =
+  document.querySelector("#app-game-exit");
+const appGameExitLabel =
+  document.querySelector("#app-game-exit-label");
+const appSettingsModalElement =
+  document.querySelector("#app-settings-modal");
+const appUtilityControls =
+  document.querySelector(".app-utility-controls");
+const gameKeybindSections =
+  document.querySelector("#game-keybind-sections");
 
 const entryView = document.querySelector("#entry-view");
 const lobbyView = document.querySelector("#lobby-view");
 const gameplayView = document.querySelector("#gameplay-view");
+const gameRoot = document.querySelector("#game-root");
 const gameHubAudio = window.GameHubAudio ?? {
   playEffect() {},
   setScene() {}
 };
+const gameClientHost = new window.GameHubGameClientHost({
+  root: gameRoot,
+  createContext: (gameId) => ({
+    memberId: socket.id ?? "",
+    role: isCurrentUserSpectator ? "spectator" : "player",
+    isHost: isCurrentUserHost,
+    audio: gameHubAudio,
+    input: createGameInput(gameId),
+    submitAction: (action) => new Promise((resolve) => {
+      if (currentRoomCode === null) {
+        resolve({ success: false, message: "You are not in a room." });
+        return;
+      }
+
+      socket.emit(
+        "game-action",
+        { roomCode: currentRoomCode, gameId, action },
+        resolve
+      );
+    }),
+    requestPause: requestGamePause,
+    sendChat: (message) => new Promise((resolve) => {
+      if (currentRoomCode === null) {
+        resolve({ success: false, message: "You are not in a room." });
+        return;
+      }
+      socket.emit("game-chat-send", { roomCode: currentRoomCode, message }, resolve);
+    }),
+    removeMember: (memberId) => new Promise((resolve) => {
+      if (currentRoomCode === null) {
+        resolve({ success: false, message: "You are not in a room." });
+        return;
+      }
+      socket.emit(
+        "kick-player",
+        { roomCode: currentRoomCode, playerId: memberId },
+        resolve
+      );
+    }),
+    requestLeave: showLeaveGameConfirmation,
+    notify: showToast,
+    requestExit: () => {
+      bootstrap.Modal.getOrCreateInstance(exitGameModalElement).show();
+    }
+  })
+});
 gameHubAudio.setScene("menu");
 const networkPing = document.querySelector("#network-ping");
-const egyptianWarTurn = document.querySelector("#egyptian-war-turn");
-const egyptianWarTurnTimer =
-  document.querySelector("#egyptian-war-turn-timer");
-const egyptianWarTurnTimerBar =
-  document.querySelector("#egyptian-war-turn-timer-bar");
-const egyptianWarTurnTimerValue =
-  document.querySelector("#egyptian-war-turn-timer-value");
-const egyptianWarChallenge =
-  document.querySelector("#egyptian-war-challenge");
-const egyptianWarPileCount =
-  document.querySelector("#egyptian-war-pile-count");
-const egyptianWarTopCard =
-  document.querySelector("#egyptian-war-top-card");
-const egyptianWarPlayers =
-  document.querySelector("#egyptian-war-players");
-const egyptianWarArena =
-  document.querySelector("#egyptian-war-arena");
-const egyptianWarPileStack =
-  document.querySelector("#egyptian-war-pile-stack");
-const egyptianWarPlayCardButton =
-  document.querySelector("#egyptian-war-play-card");
-const egyptianWarSlapButton =
-  document.querySelector("#egyptian-war-slap");
-const egyptianWarPauseButton =
-  document.querySelector("#egyptian-war-pause");
-const egyptianWarHostControls =
-  document.querySelector("#egyptian-war-host-controls");
 const confirmCloseLobbyButton =
   document.querySelector("#confirm-close-lobby");
 const confirmExitGameButton =
   document.querySelector("#confirm-exit-game");
+const confirmLeaveGameButton =
+  document.querySelector("#confirm-leave-game");
+const confirmLeaveSpectatorButton =
+  document.querySelector("#confirm-leave-spectator");
 const closeLobbyModalElement =
   document.querySelector("#close-lobby-modal");
 const exitGameModalElement =
   document.querySelector("#exit-game-modal");
-const egyptianWarSlapRulesList =
-  document.querySelector("#egyptian-war-slap-rules-list");
-const toggleSlapRulesButton =
-  document.querySelector("#toggle-slap-rules");
-const egyptianWarMessage =
-  document.querySelector("#egyptian-war-message");
-const egyptianWarVictory =
-  document.querySelector("#egyptian-war-victory");
-const egyptianWarAnimationLayer =
-  document.querySelector("#egyptian-war-animation-layer");
-const egyptianWarChat =
-  document.querySelector("#egyptian-war-chat");
-const egyptianWarChatForm =
-  document.querySelector("#egyptian-war-chat-form");
-const egyptianWarChatInput =
-  document.querySelector("#egyptian-war-chat-input");
-const egyptianWarChatMessages =
-  document.querySelector("#egyptian-war-chat-messages");
-const egyptianWarSpectators =
-  document.querySelector("#egyptian-war-spectators");
-const egyptianWarSpectatorList =
-  document.querySelector("#egyptian-war-spectator-list");
-const showGameChatButton =
-  document.querySelector("#show-game-chat");
-const showGameSpectatorsButton =
-  document.querySelector("#show-game-spectators");
-const toggleGameSidePanelButton =
-  document.querySelector("#toggle-game-side-panel");
-const egyptianWarSidePanel =
-  document.querySelector(".egyptian-war-side-panel");
-
+const leaveGameModalElement =
+  document.querySelector("#leave-game-modal");
+const leaveSpectatorModalElement =
+  document.querySelector("#leave-spectator-modal");
 const createRoomButton = document.querySelector("#create-room");
 const createdRoom = document.querySelector("#created-room");
 const toggleRoomCodeButton =
@@ -116,8 +129,10 @@ const settingsModalBody =
 const saveGameSettingsButton =
   document.querySelector("#save-game-settings");
 const startGameButton = document.querySelector("#start-game");
+const spectateGameButton = document.querySelector("#spectate-game");
 const gameStatus = document.querySelector("#game-status");
 const closeLobbyButton = document.querySelector("#close-lobby");
+const leaveLobbyButton = document.querySelector("#leave-lobby");
 
 const joinRoomButton = document.querySelector("#join-room");
 const roomCodeInput = document.querySelector("#room-code");
@@ -126,23 +141,20 @@ const previousAvatarButton = document.querySelector("#previous-avatar");
 const avatarPreview = document.querySelector("#avatar-preview");
 const nextAvatarButton = document.querySelector("#next-avatar");
 
-const avatars = [
-  "🐱",
-  "🐶",
-  "🦊",
-  "🐸",
-  "🐼",
-  "🐯",
-  "🐵",
-  "🐙",
-  "🦄",
-  "🐲",
-  "🤖",
-  "👻",
-  "👽",
-  "🥷",
-  "🧙"
-];
+const gameHubConfigElement = document.querySelector("#gamehub-config");
+let avatars = [];
+try {
+  const configuredAvatars = JSON.parse(
+    gameHubConfigElement?.textContent ?? "{}"
+  ).avatars;
+  if (Array.isArray(configuredAvatars)) {
+    avatars = configuredAvatars.filter(
+      (avatar) => typeof avatar === "string" && avatar !== ""
+    );
+  }
+} catch {
+  avatars = [];
+}
 
 let selectedAvatarIndex = 0;
 let currentRoomCode = null;
@@ -157,20 +169,378 @@ let currentPlayers = [];
 let hasReceivedPlayerList = false;
 let isRoomRequestPending = false;
 let isGameSelectionPending = false;
-let previousEgyptianWarState = null;
-let visibleEgyptianWarCards = [];
-let activeEgyptianWarAnimation = null;
-let lastEgyptianWarAnimationId = 0;
-let egyptianWarAnimationTimeout = null;
-let egyptianWarTransferTimeout = null;
-let egyptianWarWinnerRevealTimeout = null;
-let egyptianWarSoundTimeouts = [];
-let revealedEgyptianWarWinnerAnimationId = null;
-let egyptianWarTimerDurationMs = 15000;
-let egyptianWarTimerRemainingMs = null;
-let egyptianWarTimerDeadline = null;
+let currentActiveGameId = null;
+let activeGameIsPaused = false;
+let activeGameIsBusy = false;
+let roomHasActiveGame = false;
+let currentSpectators = [];
+let returningGameMemberIds = new Set();
 
 const lastRoomStorageKey = "gamehub:last-room";
+const keybindStorageKey = "gamehub:keybinds";
+const generalKeybindDefinition = {
+  id: "general",
+  name: "General",
+  keybinds: [
+    {
+      id: "settings",
+      label: "Settings",
+      description: "Open or close GameHub settings.",
+      defaultKey: "Escape"
+    }
+  ]
+};
+const keybindSubscriptions = new Map();
+let keybindOverrides = loadKeybindOverrides();
+let pendingKeybindCapture = null;
+const expandedKeybindGroupIds = new Set(["general"]);
+
+function loadKeybindOverrides() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(keybindStorageKey) ?? "{}");
+    if (saved && typeof saved === "object" && !Array.isArray(saved)) {
+      return saved;
+    }
+  } catch {
+    // Invalid local preferences should fall back to package defaults.
+  }
+  return {};
+}
+
+function saveKeybindOverrides() {
+  localStorage.setItem(keybindStorageKey, JSON.stringify(keybindOverrides));
+}
+
+function getKeybindDefinitions() {
+  return [
+    generalKeybindDefinition,
+    ...gameDefinitions
+      .filter((game) => Array.isArray(game.keybinds) && game.keybinds.length > 0)
+      .map((game) => ({ id: game.id, name: game.name, keybinds: game.keybinds }))
+  ];
+}
+
+function getKeybindDefinition(groupId, actionId) {
+  return getKeybindDefinitions()
+    .find((group) => group.id === groupId)
+    ?.keybinds.find((keybind) => keybind.id === actionId) ?? null;
+}
+
+function getAssignedKey(groupId, keybind) {
+  const override = keybindOverrides[groupId]?.[keybind.id];
+  return typeof override === "string" && override !== ""
+    ? override
+    : keybind.defaultKey;
+}
+
+function formatKeyCode(code) {
+  const labels = {
+    Escape: "Esc",
+    Space: "Space",
+    ArrowUp: "Up",
+    ArrowDown: "Down",
+    ArrowLeft: "Left",
+    ArrowRight: "Right"
+  };
+  if (labels[code]) return labels[code];
+  if (/^Key[A-Z]$/.test(code)) return code.slice(3);
+  if (/^Digit[0-9]$/.test(code)) return code.slice(5);
+  return code;
+}
+
+function setKeybind(groupId, actionId, code) {
+  const definition = getKeybindDefinition(groupId, actionId);
+  if (!definition) return;
+
+  if (code === definition.defaultKey) {
+    delete keybindOverrides[groupId]?.[actionId];
+    if (Object.keys(keybindOverrides[groupId] ?? {}).length === 0) {
+      delete keybindOverrides[groupId];
+    }
+  } else {
+    keybindOverrides[groupId] ??= {};
+    keybindOverrides[groupId][actionId] = code;
+  }
+  saveKeybindOverrides();
+}
+
+function createGameInput(gameId) {
+  return {
+    onAction(actionId, handler) {
+      if (typeof handler !== "function") {
+        throw new TypeError("A game input action handler must be a function.");
+      }
+      let gameActions = keybindSubscriptions.get(gameId);
+      if (!gameActions) {
+        gameActions = new Map();
+        keybindSubscriptions.set(gameId, gameActions);
+      }
+      let handlers = gameActions.get(actionId);
+      if (!handlers) {
+        handlers = new Set();
+        gameActions.set(actionId, handlers);
+      }
+      handlers.add(handler);
+      return () => {
+        handlers.delete(handler);
+        if (handlers.size === 0) gameActions.delete(actionId);
+        if (gameActions.size === 0) keybindSubscriptions.delete(gameId);
+      };
+    }
+  };
+}
+
+function keybindConflictId(groupId, actionId) {
+  return `${groupId}\u0000${actionId}`;
+}
+
+function findKeybindConflicts(groups) {
+  const conflicts = new Set();
+  const markDuplicates = (group) => {
+    const actionsByCode = new Map();
+    for (const keybind of group.keybinds) {
+      const code = getAssignedKey(group.id, keybind);
+      const actions = actionsByCode.get(code) ?? [];
+      actions.push(keybind.id);
+      actionsByCode.set(code, actions);
+    }
+    for (const actionIds of actionsByCode.values()) {
+      if (actionIds.length < 2) continue;
+      for (const actionId of actionIds) {
+        conflicts.add(keybindConflictId(group.id, actionId));
+      }
+    }
+  };
+
+  for (const group of groups) markDuplicates(group);
+
+  const general = groups.find((group) => group.id === "general");
+  if (general) {
+    for (const generalKeybind of general.keybinds) {
+      const generalCode = getAssignedKey(general.id, generalKeybind);
+      for (const group of groups) {
+        if (group.id === general.id) continue;
+        for (const keybind of group.keybinds) {
+          if (getAssignedKey(group.id, keybind) !== generalCode) continue;
+          conflicts.add(keybindConflictId(general.id, generalKeybind.id));
+          conflicts.add(keybindConflictId(group.id, keybind.id));
+        }
+      }
+    }
+  }
+
+  return conflicts;
+}
+
+function createKeybindSection(group, expanded, conflicts) {
+  const section = document.createElement("section");
+  section.className = "game-keybind-section";
+
+  const headingId = `keybind-heading-${group.id}`;
+  const bodyId = `keybind-body-${group.id}`;
+  const toggle = document.createElement("button");
+  toggle.className = "game-keybind-section-toggle";
+  toggle.type = "button";
+  toggle.id = headingId;
+  toggle.setAttribute("aria-controls", bodyId);
+  toggle.setAttribute("aria-expanded", String(expanded));
+
+  const title = document.createElement("span");
+  title.textContent = group.name;
+  const chevron = document.createElement("span");
+  chevron.className = "game-keybind-section-chevron";
+  chevron.setAttribute("aria-hidden", "true");
+  chevron.classList.toggle("is-expanded", expanded);
+  toggle.append(title, chevron);
+
+  const body = document.createElement("div");
+  body.className = "game-keybind-section-body";
+  body.id = bodyId;
+  body.setAttribute("aria-labelledby", headingId);
+  body.hidden = !expanded;
+
+  for (const keybind of group.keybinds) {
+    const row = document.createElement("div");
+    row.className = "game-keybind-row";
+
+    const copy = document.createElement("div");
+    copy.className = "game-keybind-copy";
+    const label = document.createElement("strong");
+    label.className = "d-block";
+    label.textContent = keybind.label;
+    copy.appendChild(label);
+    if (keybind.description) {
+      const description = document.createElement("small");
+      description.className = "game-keybind-description";
+      description.textContent = keybind.description;
+      copy.appendChild(description);
+    }
+
+    const keyButton = document.createElement("button");
+    keyButton.className = "game-keybind-button btn btn-outline-light btn-sm";
+    keyButton.type = "button";
+    keyButton.textContent = formatKeyCode(getAssignedKey(group.id, keybind));
+    keyButton.setAttribute(
+      "aria-label",
+      `Change ${group.name} ${keybind.label} keybind`
+    );
+
+    const hasConflict = conflicts.has(keybindConflictId(group.id, keybind.id));
+    const control = document.createElement("div");
+    control.className = "game-keybind-control";
+    const warning = document.createElement("span");
+    warning.className = "game-keybind-warning";
+    warning.textContent = "!";
+    warning.hidden = !hasConflict;
+    warning.setAttribute("aria-hidden", "true");
+    control.append(warning, keyButton);
+    if (hasConflict) {
+      control.classList.add("has-conflict");
+      keyButton.classList.remove("btn-outline-light");
+      keyButton.classList.add("btn-outline-danger");
+      keyButton.setAttribute(
+        "aria-label",
+        `Conflict: change ${group.name} ${keybind.label} keybind`
+      );
+      keyButton.title = "This key overlaps another binding.";
+    }
+    keyButton.addEventListener("click", () => {
+      pendingKeybindCapture?.cancel();
+      const originalText = keyButton.textContent;
+      keyButton.textContent = "Press a key…";
+      keyButton.classList.add("is-listening");
+      pendingKeybindCapture = {
+        groupId: group.id,
+        actionId: keybind.id,
+        button: keyButton,
+        cancel() {
+          keyButton.textContent = originalText;
+          keyButton.classList.remove("is-listening");
+          if (pendingKeybindCapture?.button === keyButton) {
+            pendingKeybindCapture = null;
+          }
+        }
+      };
+    });
+
+    row.append(copy, control);
+    body.appendChild(row);
+  }
+
+  const actions = document.createElement("div");
+  actions.className = "game-keybind-actions";
+  const resetButton = document.createElement("button");
+  resetButton.className = "btn btn-outline-secondary btn-sm";
+  resetButton.type = "button";
+  resetButton.textContent = "Reset defaults";
+  resetButton.addEventListener("click", () => {
+    delete keybindOverrides[group.id];
+    saveKeybindOverrides();
+    renderKeybindSettings();
+  });
+  actions.appendChild(resetButton);
+  body.appendChild(actions);
+
+  toggle.addEventListener("click", () => {
+    const isExpanded = toggle.getAttribute("aria-expanded") === "true";
+    toggle.setAttribute("aria-expanded", String(!isExpanded));
+    body.hidden = isExpanded;
+    chevron.classList.toggle("is-expanded", !isExpanded);
+    if (isExpanded) expandedKeybindGroupIds.delete(group.id);
+    else expandedKeybindGroupIds.add(group.id);
+  });
+
+  section.append(toggle, body);
+  return section;
+}
+
+function renderKeybindSettings() {
+  pendingKeybindCapture?.cancel();
+  gameKeybindSections.replaceChildren();
+  const groups = getKeybindDefinitions();
+  if (groups.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "game-keybind-empty mb-0";
+    empty.textContent = "No configurable keybinds are installed.";
+    gameKeybindSections.appendChild(empty);
+    return;
+  }
+  const conflicts = findKeybindConflicts(groups);
+  for (const group of groups) {
+    gameKeybindSections.appendChild(
+      createKeybindSection(group, expandedKeybindGroupIds.has(group.id), conflicts)
+    );
+  }
+}
+
+function isTextEntryTarget(target) {
+  return Boolean(target && typeof target.closest === "function" &&
+    target.closest("input, textarea, select, [contenteditable='true']")
+  );
+}
+
+function toggleAppSettings() {
+  const modal = bootstrap.Modal.getOrCreateInstance(appSettingsModalElement);
+  if (appSettingsModalElement.classList.contains("show")) modal.hide();
+  else modal.show();
+}
+
+document.addEventListener("keydown", (event) => {
+  if (pendingKeybindCapture) {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    const capture = pendingKeybindCapture;
+    setKeybind(capture.groupId, capture.actionId, event.code);
+    renderKeybindSettings();
+    return;
+  }
+
+  if (event.repeat || isTextEntryTarget(event.target)) return;
+
+  const generalSettings = generalKeybindDefinition.keybinds[0];
+  if (event.code === getAssignedKey("general", generalSettings)) {
+    const otherModalIsOpen = document.querySelector(
+      ".modal.show:not(#app-settings-modal)"
+    );
+    if (!otherModalIsOpen) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      toggleAppSettings();
+    }
+    return;
+  }
+
+  if (
+    currentActiveGameId === null ||
+    isCurrentUserSpectator ||
+    document.querySelector(".modal.show")
+  ) {
+    return;
+  }
+
+  const game = gameDefinitions.find((candidate) => candidate.id === currentActiveGameId);
+  const keybind = game?.keybinds?.find(
+    (candidate) => getAssignedKey(game.id, candidate) === event.code
+  );
+  if (!keybind) return;
+
+  const conflicts = findKeybindConflicts(getKeybindDefinitions());
+  if (conflicts.has(keybindConflictId(game.id, keybind.id))) {
+    event.preventDefault();
+    showToast(
+      `${formatKeyCode(event.code)} has overlapping keybinds. ` +
+      "Resolve the conflict before using it."
+    );
+    return;
+  }
+
+  const handlers = keybindSubscriptions.get(game.id)?.get(keybind.id);
+  if (!handlers || handlers.size === 0) return;
+  event.preventDefault();
+  for (const handler of [...handlers]) handler();
+}, true);
+
+renderKeybindSettings();
 
 function saveResumeSession(roomCode, resumeToken) {
   localStorage.setItem(
@@ -196,192 +566,20 @@ function clearResumeSession(roomCode = null) {
   }
 }
 
-function renderEgyptianWarSlapRules(settings) {
-  const rules = [
-    settings.includeJokers && "Joker: always slappable",
-    settings.allowDoubles && "Doubles: matching consecutive ranks",
-    settings.allowSandwiches && "Sandwich: matching ranks with one between",
-    settings.allowFourInARow && "Four in a row: ascending/descending sequence",
-    settings.allowTopBottom && "Top-bottom: newest matches the first card",
-    settings.allowTens && "Tens: number cards total 10",
-    settings.allowMarriage && "Marriage: King and Queen consecutively"
-  ].filter(Boolean);
+function requestGamePause(isPaused) {
+  return new Promise((resolve) => {
+    if (currentRoomCode === null) {
+      resolve({ success: false, message: "You are not in a room." });
+      return;
+    }
 
-  egyptianWarSlapRulesList.replaceChildren();
-
-  for (const rule of rules) {
-    const item = document.createElement("li");
-    item.textContent = rule;
-    egyptianWarSlapRulesList.appendChild(item);
-  }
-
-  if (rules.length === 0) {
-    const item = document.createElement("li");
-    item.textContent = "No slap patterns are enabled.";
-    egyptianWarSlapRulesList.appendChild(item);
-  }
-
-  const penalty = settings.falseSlapPenaltyCards ?? 2;
-  const penaltyItem = document.createElement("li");
-  penaltyItem.textContent =
-    `False slap: forfeit up to ${penalty} ` +
-    `${penalty === 1 ? "card" : "cards"}.`;
-  egyptianWarSlapRulesList.appendChild(penaltyItem);
-}
-
-function setEgyptianWarTimerHidden(isHidden) {
-  egyptianWarTurnTimer.classList.toggle("is-hidden", isHidden);
-  egyptianWarTurnTimer.setAttribute(
-    "aria-hidden",
-    String(isHidden)
-  );
-}
-
-function clearEgyptianWarSoundTimeouts() {
-  for (const timeout of egyptianWarSoundTimeouts) {
-    clearTimeout(timeout);
-  }
-
-  egyptianWarSoundTimeouts = [];
-}
-
-function queueEgyptianWarSound(effectName, delayMs = 0) {
-  if (delayMs <= 0) {
-    gameHubAudio.playEffect(effectName);
-    return;
-  }
-
-  const timeout = setTimeout(() => {
-    gameHubAudio.playEffect(effectName);
-    egyptianWarSoundTimeouts = egyptianWarSoundTimeouts.filter(
-      (candidate) => candidate !== timeout
+    socket.emit(
+      "toggle-game-pause",
+      { roomCode: currentRoomCode, isPaused },
+      resolve
     );
-  }, delayMs);
-  egyptianWarSoundTimeouts.push(timeout);
-}
-
-function renderEgyptianWarTurnTimer() {
-  if (egyptianWarTurnTimer.classList.contains("is-hidden")) {
-    return;
-  }
-
-  const remainingMs = egyptianWarTimerDeadline === null
-    ? egyptianWarTimerRemainingMs
-    : Math.max(0, egyptianWarTimerDeadline - performance.now());
-
-  if (remainingMs === null) {
-    setEgyptianWarTimerHidden(true);
-    return;
-  }
-
-  const percentRemaining = egyptianWarTimerDurationMs > 0
-    ? Math.max(0, Math.min(100,
-      remainingMs / egyptianWarTimerDurationMs * 100))
-    : 0;
-  const secondsRemaining = Math.ceil(remainingMs / 1000);
-
-  egyptianWarTurnTimerBar.style.width = `${percentRemaining}%`;
-  egyptianWarTurnTimerValue.textContent = `${secondsRemaining}s`;
-  const progress = egyptianWarTurnTimerBar.parentElement;
-  progress.setAttribute("aria-valuenow", String(Math.round(percentRemaining)));
-}
-
-function showEgyptianWarGame(game) {
-  gameHubAudio.setScene("egyptian-war");
-  lobbyView.classList.add("d-none");
-  gameplayView.classList.remove("d-none");
-  previousEgyptianWarState = null;
-  visibleEgyptianWarCards = [];
-  activeEgyptianWarAnimation = null;
-  lastEgyptianWarAnimationId = 0;
-  revealedEgyptianWarWinnerAnimationId = null;
-  clearTimeout(egyptianWarAnimationTimeout);
-  clearTimeout(egyptianWarTransferTimeout);
-  clearTimeout(egyptianWarWinnerRevealTimeout);
-  clearEgyptianWarSoundTimeouts();
-  egyptianWarAnimationLayer.replaceChildren();
-  egyptianWarVictory.hidden = true;
-  setEgyptianWarTimerHidden(true);
-  egyptianWarTimerRemainingMs = null;
-  egyptianWarTimerDeadline = null;
-  egyptianWarHostControls.classList.toggle(
-    "d-none",
-    !isCurrentUserHost
-  );
-  egyptianWarPauseButton.textContent =
-    game.isPaused ? "Resume" : "Pause";
-  egyptianWarPauseButton.setAttribute(
-    "aria-pressed",
-    String(game.isPaused === true)
-  );
-  currentGameSettings = game.settings ?? currentGameSettings;
-  renderEgyptianWarSlapRules(currentGameSettings);
-  setEgyptianWarSidePanelExpanded(false);
-  configureEgyptianWarSidePanel(game.chatEnabled === true);
-  egyptianWarChatMessages.replaceChildren();
-}
-
-function showEgyptianWarSidePanel(panel) {
-  const showChat =
-    panel === "chat" && !showGameChatButton.disabled;
-  egyptianWarChat.hidden = !showChat;
-  egyptianWarSpectators.hidden = showChat;
-  showGameChatButton.setAttribute("aria-selected", String(showChat));
-  showGameSpectatorsButton.setAttribute(
-    "aria-selected",
-    String(!showChat)
-  );
-  showGameChatButton.classList.toggle("btn-light", showChat);
-  showGameChatButton.classList.toggle("btn-outline-light", !showChat);
-  showGameSpectatorsButton.classList.toggle("btn-light", !showChat);
-  showGameSpectatorsButton.classList.toggle(
-    "btn-outline-light",
-    showChat
-  );
-}
-
-function configureEgyptianWarSidePanel(chatEnabled) {
-  showGameChatButton.disabled = !chatEnabled;
-  showEgyptianWarSidePanel(chatEnabled ? "chat" : "spectators");
-}
-
-function setEgyptianWarSidePanelExpanded(isExpanded) {
-  egyptianWarSidePanel.classList.toggle("is-expanded", isExpanded);
-  toggleGameSidePanelButton.setAttribute(
-    "aria-expanded",
-    String(isExpanded)
-  );
-  const actionLabel = isExpanded ? "Collapse panel" : "Expand panel";
-  toggleGameSidePanelButton.setAttribute("aria-label", actionLabel);
-  toggleGameSidePanelButton.title = actionLabel;
-  toggleGameSidePanelButton.classList.toggle("is-collapse", isExpanded);
-  const chevrons = Array.from({ length: 2 }, () => {
-    const line = document.createElement("span");
-    line.setAttribute("aria-hidden", "true");
-    return line;
   });
-  toggleGameSidePanelButton.replaceChildren(...chevrons);
 }
-
-function updateEgyptianWarTurnTimer(state) {
-  egyptianWarTimerDurationMs = state.turnTimerSeconds * 1000;
-  egyptianWarTimerRemainingMs = state.turnTimeRemainingMs;
-  egyptianWarTimerDeadline =
-    state.status === "playing" &&
-      !state.isPaused &&
-      !state.isAnimating &&
-      state.turnTimeRemainingMs !== null
-      ? performance.now() + state.turnTimeRemainingMs
-      : null;
-  setEgyptianWarTimerHidden(
-    state.status !== "playing" ||
-    state.isAnimating ||
-    state.turnTimeRemainingMs === null
-  );
-  renderEgyptianWarTurnTimer();
-}
-
-setInterval(renderEgyptianWarTurnTimer, 100);
 
 function setRoomRequestPending(isPending) {
   isRoomRequestPending = isPending;
@@ -429,6 +627,135 @@ function showToast(message) {
 
   toast.show();
 }
+
+function getFullscreenElement() {
+  return document.fullscreenElement ?? document.webkitFullscreenElement ?? null;
+}
+
+function updateFullscreenButton() {
+  if (!supportsFullscreen) {
+    fullscreenButton.disabled = true;
+    fullscreenButton.textContent = "Unavailable";
+    return;
+  }
+
+  const isFullscreen = getFullscreenElement() !== null;
+  const label = isFullscreen ? "Exit full screen" : "Enter full screen";
+
+  fullscreenButton.setAttribute("aria-label", label);
+  fullscreenButton.setAttribute("aria-pressed", String(isFullscreen));
+  fullscreenButton.title = label;
+  fullscreenButton.textContent = isFullscreen ? "Windowed" : "Full Screen";
+  fullscreenIconPath.setAttribute(
+    "d",
+    isFullscreen
+      ? "M8 3v3a2 2 0 0 1-2 2H3 M21 8h-3a2 2 0 0 1-2-2V3 M3 16h3a2 2 0 0 1 2 2v3 M16 21v-3a2 2 0 0 1 2-2h3"
+      : "M9 3H3v6 M15 3h6v6 M21 15v6h-6 M9 21H3v-6"
+  );
+}
+
+function updateGameSettingsControls() {
+  const hasActiveGame = currentActiveGameId !== null;
+
+  appGamePauseButton.textContent = activeGameIsPaused ? "Resume" : "Pause";
+  appGamePauseButton.disabled =
+    !hasActiveGame || !isCurrentUserHost || activeGameIsBusy;
+
+  const exitLabel = !hasActiveGame || isCurrentUserHost
+    ? "Exit Game"
+    : isCurrentUserSpectator
+      ? "Stop Spectating"
+      : "Leave Game";
+  appGameExitLabel.textContent = exitLabel;
+  appGameExitButton.textContent = !hasActiveGame || isCurrentUserHost
+    ? "Exit"
+    : "Leave";
+  appGameExitButton.disabled = !hasActiveGame;
+}
+
+function showLeaveGameConfirmation() {
+  const modalElement = isCurrentUserSpectator
+    ? leaveSpectatorModalElement
+    : leaveGameModalElement;
+  bootstrap.Modal.getOrCreateInstance(modalElement).show();
+}
+
+function updateLobbyGameAction() {
+  const canSpectate =
+    currentRoomCode !== null &&
+    !isCurrentUserHost &&
+    !isCurrentUserSpectator &&
+    roomHasActiveGame &&
+    currentActiveGameId === null;
+
+  spectateGameButton.classList.toggle("d-none", !canSpectate);
+  spectateGameButton.disabled = !canSpectate;
+}
+
+function placeAppUtilityControls(inGameplay = false) {
+  if (inGameplay) {
+    gameplayView.append(appUtilityControls);
+    return;
+  }
+
+  document.body.prepend(appUtilityControls);
+}
+
+async function toggleFullscreen() {
+  try {
+    if (getFullscreenElement() !== null) {
+      const exitFullscreen =
+        document.exitFullscreen ?? document.webkitExitFullscreen;
+      await exitFullscreen.call(document);
+    } else {
+      const requestFullscreen =
+        document.documentElement.requestFullscreen ??
+        document.documentElement.webkitRequestFullscreen;
+      await requestFullscreen.call(document.documentElement);
+    }
+  } catch {
+    showToast("Full screen could not be changed in this browser.");
+  }
+}
+
+const supportsFullscreen = Boolean(
+  document.documentElement.requestFullscreen ??
+  document.documentElement.webkitRequestFullscreen
+);
+fullscreenButton.disabled = !supportsFullscreen;
+fullscreenButton.addEventListener("click", toggleFullscreen);
+document.addEventListener("fullscreenchange", updateFullscreenButton);
+document.addEventListener("webkitfullscreenchange", updateFullscreenButton);
+updateFullscreenButton();
+
+appGamePauseButton.addEventListener("click", async () => {
+  if (appGamePauseButton.disabled) return;
+  const response = await requestGamePause(!activeGameIsPaused);
+  if (!response.success) showToast(response.message);
+});
+
+appGameExitButton.addEventListener("click", () => {
+  if (appGameExitButton.disabled) return;
+
+  bootstrap.Modal.getOrCreateInstance(appSettingsModalElement).hide();
+  const confirmationModal = isCurrentUserHost
+    ? exitGameModalElement
+    : isCurrentUserSpectator
+      ? leaveSpectatorModalElement
+      : leaveGameModalElement;
+  bootstrap.Modal.getOrCreateInstance(confirmationModal).show();
+});
+
+appSettingsModalElement.addEventListener(
+  "show.bs.modal",
+  updateGameSettingsControls
+);
+appSettingsModalElement.addEventListener("hidden.bs.modal", () => {
+  pendingKeybindCapture?.cancel();
+  expandedKeybindGroupIds.clear();
+  renderKeybindSettings();
+});
+updateGameSettingsControls();
 
 function createKickPlayerButton(player, className) {
   const kickButton = document.createElement("button");
@@ -496,6 +823,10 @@ function updateRoomLockDisplay() {
 }
 
 function showLobby(roomCode, isHost) {
+  placeAppUtilityControls(false);
+  currentActiveGameId = null;
+  activeGameIsPaused = false;
+  activeGameIsBusy = false;
   gameHubAudio.setScene("menu");
   entryView.classList.add("d-none");
   lobbyView.classList.remove("d-none");
@@ -508,11 +839,14 @@ function showLobby(roomCode, isHost) {
   isRoomLocked = false;
 
   closeLobbyButton.classList.toggle("d-none", !isHost);
+  leaveLobbyButton.classList.toggle("d-none", isHost);
   toggleRoomLockButton.classList.toggle("d-none", !isHost);
   startGameButton.classList.toggle("d-none", !isHost);
+  updateLobbyGameAction();
   updateGamePicker();
 
   updateRoomLockDisplay();
+  updateGameSettingsControls();
 
   if (
     isHost &&
@@ -524,12 +858,41 @@ function showLobby(roomCode, isHost) {
 }
 
 function showEntry() {
+  placeAppUtilityControls(false);
+  currentActiveGameId = null;
+  activeGameIsPaused = false;
+  activeGameIsBusy = false;
+  roomHasActiveGame = false;
+  currentSpectators = [];
+  returningGameMemberIds.clear();
+  updateGameSettingsControls();
   gameHubAudio.setScene("menu");
+  gameplayView.classList.add("d-none");
   lobbyView.classList.add("d-none");
   entryView.classList.remove("d-none");
 }
 
+function showLobbyAfterLeavingGame(hasActiveGame = true, wasSpectator = false) {
+  placeAppUtilityControls(false);
+  currentActiveGameId = null;
+  activeGameIsPaused = false;
+  activeGameIsBusy = false;
+  updateGameSettingsControls();
+  gameClientHost.unmount();
+  gameplayView.classList.add("d-none");
+  entryView.classList.add("d-none");
+  lobbyView.classList.remove("d-none");
+  gameHubAudio.setScene("menu");
+  isCurrentUserSpectator = false;
+  roomHasActiveGame = hasActiveGame;
+  updateLobbyGameAction();
+  gameStatus.textContent = wasSpectator
+    ? "You stopped spectating and returned to the lobby."
+    : "You left the game and returned to the lobby.";
+}
+
 function resetRoomState() {
+  gameClientHost.unmount();
   currentRoomCode = null;
   roomCodeHidden = false;
   isRoomLocked = false;
@@ -541,47 +904,18 @@ function resetRoomState() {
   isCurrentUserSpectator = false;
   isRoomRequestPending = false;
   isGameSelectionPending = false;
-  previousEgyptianWarState = null;
-  visibleEgyptianWarCards = [];
-  activeEgyptianWarAnimation = null;
-  lastEgyptianWarAnimationId = 0;
-  revealedEgyptianWarWinnerAnimationId = null;
-  clearTimeout(egyptianWarAnimationTimeout);
-  clearTimeout(egyptianWarTransferTimeout);
-  clearTimeout(egyptianWarWinnerRevealTimeout);
-  clearEgyptianWarSoundTimeouts();
-  egyptianWarAnimationLayer.replaceChildren();
-  gameplayView.classList.add("d-none");
-
-  createdRoom.textContent = "";
-  gameStatus.textContent = "";
-  playerList.replaceChildren();
-  egyptianWarPlayers.replaceChildren();
-  egyptianWarTurn.textContent = "";
-  setEgyptianWarTimerHidden(true);
-  egyptianWarTimerRemainingMs = null;
-  egyptianWarTimerDeadline = null;
-  egyptianWarChallenge.textContent = "";
-  egyptianWarPileCount.textContent = "0 cards";
-  egyptianWarTopCard.hidden = false;
-  egyptianWarPileStack.querySelectorAll(".playing-card").forEach(
-    (card) => card.remove()
-  );
-  egyptianWarMessage.textContent = "";
-  egyptianWarPlayCardButton.disabled = true;
-  egyptianWarSlapButton.disabled = true;
-  egyptianWarHostControls.classList.add("d-none");
-  closeLobbyButton.classList.add("d-none");
-  egyptianWarPauseButton.textContent = "Pause";
-  egyptianWarPauseButton.setAttribute("aria-pressed", "false");
-  egyptianWarVictory.hidden = true;
-  egyptianWarVictory.textContent = "";
-  egyptianWarChat.hidden = true;
-  egyptianWarChatMessages.replaceChildren();
-  egyptianWarSpectatorList.replaceChildren();
+  currentActiveGameId = null;
+  activeGameIsPaused = false;
+  activeGameIsBusy = false;
+  roomHasActiveGame = false;
+  currentSpectators = [];
+  returningGameMemberIds.clear();
+  updateGameSettingsControls();
 
   createRoomButton.disabled = false;
   startGameButton.disabled = true;
+  spectateGameButton.classList.add("d-none");
+  spectateGameButton.disabled = true;
   joinRoomButton.disabled = false;
   roomCodeInput.disabled = false;
   playerNameInput.disabled = false;
@@ -602,17 +936,16 @@ function createGamePreview(game) {
   preview.className = "game-picker-preview";
   preview.setAttribute("aria-hidden", "true");
 
-  if (game.id === "egyptian-war") {
-    preview.classList.add("is-egyptian-war");
+  if (game.preview?.videoPath && game.preview?.posterPath) {
+    preview.classList.add("has-media");
+    preview.style.backgroundImage = `url("${game.preview.posterPath}")`;
     const previewVideo = document.createElement("video");
     const prefersReducedPreviewMotion = window.matchMedia(
       "(prefers-reduced-motion: reduce)"
     ).matches;
     previewVideo.className = "game-picker-preview-video";
-    previewVideo.src =
-      "/assets/game-previews/egyptian-war.mp4";
-    previewVideo.poster =
-      "/assets/game-previews/egyptian-war-poster.webp";
+    previewVideo.src = game.preview.videoPath;
+    previewVideo.poster = game.preview.posterPath;
     previewVideo.muted = true;
     previewVideo.defaultMuted = true;
     previewVideo.loop = !prefersReducedPreviewMotion;
@@ -993,749 +1326,9 @@ function updateStartGameAvailability() {
     `${selectedGame.name} is ready to start.`;
 }
 
-function createEgyptianWarCard(card, offset = 0) {
-  const rankLabels = {
-    jack: "J",
-    queen: "Q",
-    king: "K",
-    ace: "A",
-    joker: "J"
-  };
-  const suitSymbols = {
-    clubs: "♣",
-    diamonds: "♦",
-    hearts: "♥",
-    spades: "♠"
-  };
-  const rankLabel = rankLabels[card.rank] ?? card.rank;
-  const suitSymbol = card.suit === null ? "★" : suitSymbols[card.suit];
-  const description = card.suit === null
-    ? "Joker"
-    : `${rankLabel} of ${card.suit}`;
-  const cardElement = document.createElement("div");
-
-  cardElement.className = "playing-card";
-  cardElement.dataset.cardId = card.id;
-  cardElement.setAttribute("role", "img");
-  cardElement.setAttribute("aria-label", description);
-  cardElement.style.setProperty("--stack-x", `${offset * 12}px`);
-  cardElement.style.setProperty("--stack-y", `${Math.abs(offset) * 2}px`);
-  cardElement.style.setProperty(
-    "--stack-rotation",
-    `${offset * 5}deg`
-  );
-
-  if (card.suit === "diamonds" || card.suit === "hearts") {
-    cardElement.classList.add("is-red");
-  }
-
-  if (card.suit === null) {
-    cardElement.classList.add("is-joker");
-  }
-
-  if (["jack", "queen", "king"].includes(card.rank)) {
-    cardElement.classList.add("is-face-card");
-  }
-
-  const corner = document.createElement("span");
-  corner.className = "playing-card-corner";
-  corner.textContent = card.suit === null
-    ? "JOKER"
-    : `${rankLabel}\n${suitSymbol}`;
-
-  const oppositeCorner = corner.cloneNode(true);
-  oppositeCorner.classList.add("is-opposite");
-
-  const center = document.createElement("span");
-  center.className = "playing-card-center";
-
-  if (card.suit === null) {
-    const jokerMonogram = document.createElement("span");
-    jokerMonogram.className = "playing-card-joker-monogram";
-    jokerMonogram.textContent = "J";
-
-    const jokerOrnament = document.createElement("span");
-    jokerOrnament.className = "playing-card-joker-ornament";
-    jokerOrnament.textContent = "★ ◆ ★";
-    center.append(jokerMonogram, jokerOrnament);
-  } else {
-    center.textContent = suitSymbol;
-  }
-
-  cardElement.append(corner, center, oppositeCorner);
-  return cardElement;
-}
-
-function getEgyptianWarCenter(element, within) {
-  const rect = element.getBoundingClientRect();
-  const parentRect = within.getBoundingClientRect();
-
-  return {
-    x: rect.left + rect.width / 2 - parentRect.left,
-    y: rect.top + rect.height / 2 - parentRect.top
-  };
-}
-
-function animateEgyptianWarOutcome(animation) {
-  const prefersReducedMotion = window.matchMedia(
-    "(prefers-reduced-motion: reduce)"
-  ).matches;
-  clearEgyptianWarSoundTimeouts();
-  egyptianWarAnimationLayer.replaceChildren();
-  const arena = document.querySelector("#egyptian-war-arena");
-  const center = getEgyptianWarCenter(
-    egyptianWarPileStack,
-    arena
-  );
-  const actorSeat = egyptianWarPlayers.querySelector(
-    `[data-player-id="${CSS.escape(animation.actorId)}"]`
-  );
-  const winnerSeat = animation.winnerId
-    ? egyptianWarPlayers.querySelector(
-      `[data-player-id="${CSS.escape(animation.winnerId)}"]`
-    )
-    : null;
-  const actorCenter = actorSeat
-    ? getEgyptianWarCenter(actorSeat, arena)
-    : center;
-  const winnerCenter = winnerSeat
-    ? getEgyptianWarCenter(winnerSeat, arena)
-    : center;
-
-  if (
-    animation.playedCard &&
-    actorSeat &&
-    animation.action !== "slap" &&
-    !prefersReducedMotion
-  ) {
-    const directionX = center.x - actorCenter.x;
-    const directionY = center.y - actorCenter.y;
-    const distance = Math.hypot(directionX, directionY) || 1;
-    const normalizedX = directionX / distance;
-    const normalizedY = directionY / distance;
-    const dealtCard = egyptianWarPileStack.querySelector(
-      ".playing-card.is-dealing"
-    );
-    const dealtCardRect = dealtCard?.getBoundingClientRect();
-    const dealtCardWidth = dealtCardRect?.width || 84;
-    const dealtCardHeight = dealtCardRect?.height || 120;
-    const horizontalEdgeDistance = Math.abs(normalizedX) > 0.001
-      ? dealtCardWidth / 2 / Math.abs(normalizedX)
-      : Number.POSITIVE_INFINITY;
-    const verticalEdgeDistance = Math.abs(normalizedY) > 0.001
-      ? dealtCardHeight / 2 / Math.abs(normalizedY)
-      : Number.POSITIVE_INFINITY;
-    const cardEdgeDistance = Math.min(
-      horizontalEdgeDistance,
-      verticalEdgeDistance
-    );
-    const handLandingOffset =
-      cardEdgeDistance + dealtCardWidth * 0.22;
-    const effectiveHandLandingOffset = Math.min(
-      handLandingOffset,
-      distance * 0.82
-    );
-    const handTargetX =
-      center.x - normalizedX * effectiveHandLandingOffset;
-    const handTargetY =
-      center.y - normalizedY * effectiveHandLandingOffset;
-    const handTravelX = handTargetX - actorCenter.x;
-    const handTravelY = handTargetY - actorCenter.y;
-    const rotation =
-      Math.atan2(directionY, directionX) * (180 / Math.PI) + 90;
-    const hand = document.createElement("span");
-    const handGlyph = document.createElement("span");
-
-    hand.className = "egyptian-war-card-play-hand";
-    handGlyph.className = "egyptian-war-card-play-hand-glyph";
-    handGlyph.textContent = "🖐️";
-    hand.appendChild(handGlyph);
-    hand.style.left = `${actorCenter.x}px`;
-    hand.style.top = `${actorCenter.y}px`;
-    hand.style.setProperty(
-      "--play-hand-x",
-      `${handTravelX}px`
-    );
-    hand.style.setProperty(
-      "--play-hand-y",
-      `${handTravelY}px`
-    );
-    hand.style.setProperty(
-      "--play-hand-retreat-x",
-      `${handTravelX * 0.82}px`
-    );
-    hand.style.setProperty(
-      "--play-hand-retreat-y",
-      `${handTravelY * 0.82}px`
-    );
-    hand.style.setProperty(
-      "--play-hand-rotation",
-      `${rotation}deg`
-    );
-    egyptianWarAnimationLayer.appendChild(hand);
-  }
-
-  if (animation.playedCard && animation.action !== "slap") {
-    queueEgyptianWarSound(
-      "card-play",
-      prefersReducedMotion ? 0 : 420
-    );
-  }
-
-  const slapAttempts =
-    Array.isArray(animation.slapAttempts) &&
-      animation.slapAttempts.length > 0
-      ? animation.slapAttempts
-      : [
-        {
-          playerId: animation.actorId,
-          delayMs: 0,
-          isWinner: true
-        }
-      ];
-
-  if (animation.action === "slap") {
-    slapAttempts.forEach((attempt, index) => {
-      const playerId = attempt.playerId;
-      const playerSeat = egyptianWarPlayers.querySelector(
-        `[data-player-id="${CSS.escape(playerId)}"]`
-      );
-
-      if (!playerSeat) {
-        return;
-      }
-
-      const playerCenter = getEgyptianWarCenter(
-        playerSeat,
-        arena
-      );
-
-      const directionX = center.x - playerCenter.x;
-      const directionY = center.y - playerCenter.y;
-
-      const distance =
-        Math.hypot(directionX, directionY) || 1;
-
-      const normalizedX = directionX / distance;
-      const normalizedY = directionY / distance;
-
-      // Leave each hand slightly toward its player's table position.
-      const visiblePileCard = egyptianWarPileStack.querySelector(
-        ".playing-card"
-      );
-      const renderedCardWidth =
-        visiblePileCard?.getBoundingClientRect().width ?? 0;
-      const pileOffset = Math.max(14, renderedCardWidth * 0.25);
-      const destinationX =
-        center.x - normalizedX * pileOffset;
-      const destinationY =
-        center.y - normalizedY * pileOffset;
-
-      const rotation =
-        Math.atan2(directionY, directionX) *
-        (180 / Math.PI) +
-        90;
-
-      const hand = document.createElement("span");
-      hand.className = "egyptian-war-flying-hand";
-      const handGlyph = document.createElement("span");
-      handGlyph.className = "egyptian-war-flying-hand-glyph";
-      handGlyph.textContent = "🖐️";
-      hand.appendChild(handGlyph);
-
-      hand.style.left = `${playerCenter.x}px`;
-      hand.style.top = `${playerCenter.y}px`;
-      hand.style.zIndex = String(5 + index);
-      const delayMs =
-        !prefersReducedMotion && Number.isFinite(attempt.delayMs)
-          ? Math.max(0, attempt.delayMs)
-          : 0;
-
-      hand.style.animationDelay = `${delayMs}ms`;
-
-      queueEgyptianWarSound(
-        "slap",
-        prefersReducedMotion ? 0 : delayMs + 520
-      );
-
-      hand.style.setProperty(
-        "--hand-x",
-        `${destinationX - playerCenter.x}px`
-      );
-
-      hand.style.setProperty(
-        "--hand-y",
-        `${destinationY - playerCenter.y}px`
-      );
-
-      hand.style.setProperty(
-        "--hand-rotation",
-        `${rotation}deg`
-      );
-
-      egyptianWarAnimationLayer.appendChild(hand);
-    });
-  }
-
-  const transferCount = animation.isFinalWin
-    ? 24
-    : Math.min(
-      animation.transferCardCount > 0
-        ? animation.transferCardCount
-        : animation.penaltyCardCount,
-      8
-    );
-  const isPileTransfer = animation.transferCardCount > 0;
-  const source = isPileTransfer
-    ? center
-    : actorCenter;
-  const destination = isPileTransfer
-    ? winnerCenter
-    : center;
-
-  const showTransfer = () => {
-    for (let index = 0; index < transferCount; index += 1) {
-      const back = document.createElement("span");
-      back.className =
-        animation.isFinalWin
-          ? "egyptian-war-flying-card is-final-card"
-          : isPileTransfer
-            ? "egyptian-war-flying-card is-transferring"
-            : "egyptian-war-flying-card is-penalty-card";
-      back.textContent = animation.isFinalWin ? "★" : "";
-      back.style.left = `${source.x + (index % 5) * 3}px`;
-      back.style.top = `${source.y + (index % 7) * 2}px`;
-      back.style.setProperty(
-        "--card-x",
-        `${destination.x - source.x}px`
-      );
-      back.style.setProperty(
-        "--card-y",
-        `${destination.y - source.y}px`
-      );
-      back.style.animationDelay = prefersReducedMotion
-        ? "0ms"
-        : `${animation.isFinalWin ? index * 45 : index * 35}ms`;
-      egyptianWarAnimationLayer.appendChild(back);
-    }
-  };
-
-  const latestSlapDelay = slapAttempts.reduce(
-    (latestDelay, attempt) =>
-      Math.max(
-        latestDelay,
-        Number.isFinite(attempt.delayMs)
-          ? Math.max(0, attempt.delayMs)
-          : 0
-      ),
-    0
-  );
-
-  const lastHandLandingDelay =
-    prefersReducedMotion ? 1 : latestSlapDelay + 520;
-
-  const transferDelay = animation.transferCardCount > 0
-    ? prefersReducedMotion
-      ? 0
-      : animation.action === "slap"
-        ? lastHandLandingDelay + 250
-        : animation.playedCard
-          ? 700
-          : 350
-    : 0;
-
-  clearTimeout(egyptianWarTransferTimeout);
-
-  if (transferCount > 0 && transferDelay > 0) {
-    egyptianWarTransferTimeout = setTimeout(
-      showTransfer,
-      transferDelay
-    );
-  } else if (transferCount > 0) {
-    showTransfer();
-  }
-
-  clearTimeout(egyptianWarWinnerRevealTimeout);
-
-  const revealPileWinner = () => {
-    revealedEgyptianWarWinnerAnimationId = animation.id;
-    const currentWinnerSeat = animation.winnerId
-      ? egyptianWarPlayers.querySelector(
-        `[data-player-id="${CSS.escape(animation.winnerId)}"]`
-      )
-      : null;
-    currentWinnerSeat?.classList.add("is-pile-winner");
-
-    if (
-      animation.action === "slap" &&
-      !animation.isFinalWin &&
-      typeof animation.activityMessage === "string"
-    ) {
-      egyptianWarMessage.textContent = animation.activityMessage;
-    }
-
-    if (animation.action === "slap") {
-      gameHubAudio.playEffect(
-        animation.isFinalWin ? "game-win" : "pile-win"
-      );
-    }
-  };
-
-  if (winnerSeat && animation.action === "slap") {
-    egyptianWarWinnerRevealTimeout = setTimeout(
-      revealPileWinner,
-      lastHandLandingDelay
-    );
-  } else if (winnerSeat) {
-    revealPileWinner();
-    queueEgyptianWarSound(
-      animation.isFinalWin ? "game-win" : "pile-win",
-      animation.playedCard && !prefersReducedMotion ? 620 : 0
-    );
-  }
-
-  if (animation.isFinalWin) {
-    const winner = animation.winnerId
-      ? animation.players?.find(
-        (player) => player.id === animation.winnerId
-      )
-      : null;
-    egyptianWarVictory.hidden = false;
-    const collected = document.createElement("span");
-    collected.className = "egyptian-war-victory-heading";
-    collected.textContent = "ALL CARDS COLLECTED";
-
-    const winnerAvatar = document.createElement("span");
-    winnerAvatar.className = "egyptian-war-victory-avatar";
-    winnerAvatar.textContent = winner?.avatar ?? "🏆";
-    winnerAvatar.setAttribute("aria-hidden", "true");
-
-    const winnerDetails = document.createElement("span");
-    winnerDetails.className = "egyptian-war-victory-details";
-
-    const winnerMessage = document.createElement("span");
-    winnerMessage.className = "egyptian-war-victory-winner";
-    winnerMessage.textContent = winner
-      ? `${winner.name} wins!`
-      : "Game won!";
-
-    const championLabel = document.createElement("span");
-    championLabel.className = "egyptian-war-victory-champion";
-    championLabel.textContent = winner
-      ? `🏆 Champion • ${winner.cardCount} cards`
-      : "🏆 Egyptian War champion";
-
-    winnerDetails.append(collected, winnerMessage, championLabel);
-    egyptianWarVictory.replaceChildren(winnerAvatar, winnerDetails);
-  }
-
-  const duration = animation.isFinalWin
-    ? 3600
-    : animation.transferCardCount > 0
-      ? 2400
-      : animation.action === "slap"
-        ? 1050
-        : animation.playedCard
-          ? 650
-          : 450;
-  const presentationDuration = prefersReducedMotion
-    ? 100
-    : duration;
-
-  clearTimeout(egyptianWarAnimationTimeout);
-  egyptianWarAnimationTimeout = setTimeout(() => {
-    egyptianWarAnimationLayer.replaceChildren();
-    clearTimeout(egyptianWarTransferTimeout);
-    clearTimeout(egyptianWarWinnerRevealTimeout);
-    clearEgyptianWarSoundTimeouts();
-    egyptianWarPlayers
-      .querySelectorAll(".is-pile-winner")
-      .forEach((seat) => seat.classList.remove("is-pile-winner"));
-    activeEgyptianWarAnimation = null;
-    if (!animation.isFinalWin) {
-      egyptianWarVictory.hidden = true;
-    }
-  }, presentationDuration);
-}
-
-function renderEgyptianWarState(state) {
-  const previousState = previousEgyptianWarState;
-  const animation = activeEgyptianWarAnimation;
-  const currentPlayer = state.players.find(
-    (player) => player.id === state.currentPlayerId
-  );
-  const winner = state.players.find(
-    (player) => player.id === state.winnerId
-  );
-  const isNewAnimation =
-    animation !== null &&
-    animation.id !== lastEgyptianWarAnimationId;
-  const isShowingCollectedPile =
-    state.isAnimating &&
-    animation?.transferCardCount > 0;
-  const isWaitingForSlapWinnerReveal =
-    animation?.action === "slap" &&
-    animation.winnerId !== null &&
-    revealedEgyptianWarWinnerAnimationId !== animation.id;
-
-  if (previousState === null) {
-    visibleEgyptianWarCards = state.recentCards.map((card) => ({
-      card,
-      playerId: null
-    }));
-  }
-
-  updateEgyptianWarTurnTimer(state);
-
-  egyptianWarTurn.textContent = state.isPaused
-    ? state.pauseMessage ?? "Game is paused"
-    : winner
-      ? `${winner.name} wins!`
-      : currentPlayer
-        ? `${currentPlayer.name}'s turn`
-        : "Game complete";
-
-  if (state.challenge) {
-    const challenger = state.players.find(
-      (player) => player.id === state.challenge.challengerId
-    );
-    const responder = state.players.find(
-      (player) => player.id === state.challenge.responderId
-    );
-
-    egyptianWarChallenge.textContent =
-      `${challenger?.name ?? "A player"} challenged ` +
-      `${responder?.name ?? "the next player"}: ` +
-      `${state.challenge.attemptsRemaining} ` +
-      `${state.challenge.attemptsRemaining === 1 ? "attempt" : "attempts"} remaining.`;
-  } else {
-    egyptianWarChallenge.textContent = "";
-  }
-
-  const displayedPileCardCount = isShowingCollectedPile
-    ? animation.pileCardCountBeforeTransfer
-    : state.pileCardCount;
-
-  egyptianWarPileCount.textContent =
-    `${displayedPileCardCount} ${displayedPileCardCount === 1 ? "card" : "cards"}`;
-
-  const pileWasCollected =
-    previousState !== null &&
-    state.pileCardCount < previousState.pileCardCount;
-
-  if (
-    !isShowingCollectedPile &&
-    (
-      state.pileCardCount === 0 ||
-      pileWasCollected ||
-      !state.hasFaceUpCards
-    )
-  ) {
-    visibleEgyptianWarCards = [];
-  }
-
-  const playedCard =
-    animation?.playedCard ??
-    state.topCard;
-
-  const hasNewCard =
-    playedCard !== null &&
-    playedCard !== undefined &&
-    animation?.playedCard !== null &&
-    animation?.playedCard !== undefined &&
-    (isNewAnimation || (
-      state.pileCardCount > 0 &&
-      (previousState === null ||
-        (
-          state.pileCardCount > previousState.pileCardCount &&
-          state.topCard?.id !== previousState.topCard?.id
-        ))
-    ));
-
-  if (hasNewCard) {
-    visibleEgyptianWarCards.push({
-      card: playedCard,
-      playerId: animation?.actorId ??
-        previousState?.currentPlayerId ??
-        null
-    });
-
-    if (visibleEgyptianWarCards.length > 5) {
-      visibleEgyptianWarCards.shift();
-    }
-  }
-
-  egyptianWarPlayers.replaceChildren();
-
-  const playerCount = state.players.length;
-
-  state.players.forEach((player, index) => {
-    const angle = -Math.PI / 2 + (2 * Math.PI * index) / playerCount;
-    const seat = document.createElement("div");
-    seat.className = "egyptian-war-seat";
-    seat.dataset.playerId = player.id;
-    seat.classList.toggle("is-current", player.isCurrentPlayer);
-    seat.classList.toggle("is-eliminated", player.isEliminated);
-    seat.classList.toggle("is-disconnected", !player.isConnected);
-    seat.classList.toggle(
-      "is-pile-winner",
-      animation?.winnerId === player.id &&
-      !isWaitingForSlapWinnerReveal
-    );
-    seat.style.left = `${50 + Math.cos(angle) * 40}%`;
-    seat.style.top = `${50 + Math.sin(angle) * 37}%`;
-
-    const avatar = document.createElement("span");
-    avatar.className = "player-avatar";
-    avatar.textContent = player.avatar;
-
-    const details = document.createElement("div");
-    details.className = "egyptian-war-seat-details";
-
-    const name = document.createElement("span");
-    name.className = "player-name";
-    name.textContent = player.name;
-
-    const cardCount = document.createElement("span");
-    cardCount.className = "egyptian-war-card-count";
-    cardCount.textContent =
-      `${player.cardCount} ${player.cardCount === 1 ? "card" : "cards"}`;
-    details.append(name, cardCount);
-
-    if (player.isEliminated) {
-      const eliminated = document.createElement("span");
-      eliminated.className = "badge text-bg-secondary";
-      eliminated.textContent = "Out";
-      details.appendChild(eliminated);
-    }
-
-    seat.append(avatar, details);
-    if (!player.isConnected) {
-      const disconnectedActions = document.createElement("div");
-      disconnectedActions.className =
-        "egyptian-war-disconnected-actions";
-
-      const disconnectedAlert = document.createElement("span");
-      disconnectedAlert.className = "badge text-bg-warning";
-      disconnectedAlert.textContent = "Disconnected";
-      disconnectedActions.appendChild(disconnectedAlert);
-
-      if (isCurrentUserHost) {
-        disconnectedActions.appendChild(
-          createKickPlayerButton(
-            player,
-            "btn btn-outline-danger btn-sm"
-          )
-        );
-      }
-
-      seat.appendChild(disconnectedActions);
-    }
-    egyptianWarPlayers.appendChild(seat);
-  });
-
-  egyptianWarPileStack
-    .querySelectorAll(".playing-card")
-    .forEach((card) => card.remove());
-
-  visibleEgyptianWarCards.forEach((visibleCard, index) => {
-    const cardElement = createEgyptianWarCard(
-      visibleCard.card,
-      index - (visibleEgyptianWarCards.length - 1) / 2
-    );
-    cardElement.style.zIndex = String(index + 1);
-
-    const isLatestCard =
-      index === visibleEgyptianWarCards.length - 1 && hasNewCard;
-
-    if (isLatestCard) {
-      cardElement.classList.add("is-dealing");
-    }
-
-    egyptianWarPileStack.appendChild(cardElement);
-
-    if (isLatestCard && visibleCard.playerId !== null) {
-      const sourceSeat = egyptianWarPlayers.querySelector(
-        `[data-player-id="${CSS.escape(visibleCard.playerId)}"]`
-      );
-
-      if (sourceSeat) {
-        const sourceCenter = getEgyptianWarCenter(
-          sourceSeat,
-          egyptianWarArena
-        );
-        const targetCenter = getEgyptianWarCenter(
-          egyptianWarPileStack,
-          egyptianWarArena
-        );
-        cardElement.style.setProperty(
-          "--fly-x",
-          `${sourceCenter.x - targetCenter.x}px`
-        );
-        cardElement.style.setProperty(
-          "--fly-y",
-          `${sourceCenter.y - targetCenter.y}px`
-        );
-      }
-    }
-  });
-
-  egyptianWarTopCard.hidden = visibleEgyptianWarCards.length > 0;
-  egyptianWarMessage.textContent = state.status === "finished"
-    ? ""
-    : isWaitingForSlapWinnerReveal
-      ? previousState?.activityMessage ?? ""
-      : state.activityMessage;
-  egyptianWarPlayCardButton.disabled =
-    isCurrentUserSpectator ||
-    state.status !== "playing" ||
-    state.isPaused ||
-    state.isAnimating ||
-    state.isSlapWindow ||
-    state.currentPlayerId !== socket.id;
-  egyptianWarSlapButton.disabled =
-    isCurrentUserSpectator ||
-    state.status !== "playing" ||
-    state.isPaused ||
-    state.isAnimating ||
-    !state.hasFaceUpCards;
-  egyptianWarHostControls.classList.toggle(
-    "d-none",
-    !isCurrentUserHost || state.status !== "playing"
-  );
-  egyptianWarPauseButton.textContent =
-    state.isPaused ? "Resume" : "Pause";
-  egyptianWarPauseButton.setAttribute(
-    "aria-pressed",
-    String(state.isPaused)
-  );
-
-  if (isNewAnimation) {
-    lastEgyptianWarAnimationId = animation.id;
-    animateEgyptianWarOutcome({
-      ...animation,
-      activityMessage: state.activityMessage,
-      players: state.players
-    });
-  }
-
-  previousEgyptianWarState = state;
-}
-
 toggleRoomCodeButton.addEventListener("click", () => {
   roomCodeHidden = !roomCodeHidden;
   updateRoomCodeDisplay();
-});
-
-toggleSlapRulesButton.addEventListener("click", () => {
-  const isExpanded =
-    toggleSlapRulesButton.getAttribute("aria-expanded") !== "true";
-  toggleSlapRulesButton.setAttribute(
-    "aria-expanded",
-    String(isExpanded)
-  );
-  toggleSlapRulesButton.textContent = isExpanded ? "Hide" : "Show";
-  egyptianWarSlapRulesList.hidden = !isExpanded;
 });
 
 toggleRoomLockButton.addEventListener("click", () => {
@@ -1817,14 +1410,14 @@ socket.on("latency-probe", (acknowledge) => {
 
 socket.on("latency-update", ({ rttMs }) => {
   if (Number.isFinite(rttMs) && rttMs >= 0) {
-    networkPing.textContent = `Ping: ${Math.round(rttMs)} ms`;
+    networkPing.textContent = `${Math.round(rttMs)} ms`;
   }
 });
 
 socket.on("disconnect", () => {
   isGameSelectionPending = false;
   gamePickerGrid.classList.remove("is-pending");
-  networkPing.textContent = "Ping: -- ms";
+  networkPing.textContent = "-- ms";
   connectionStatus.textContent = "Disconnected from server";
 
   connectionStatus.classList.remove(
@@ -1849,14 +1442,16 @@ socket.on("disconnect", () => {
 
 socket.on("room-resumed", (room) => {
   hasReceivedPlayerList = false;
+  returningGameMemberIds.clear();
   selectedGameId = room.selectedGameId;
   currentGameSettings = room.gameSettings ?? {};
   isRoomLocked = room.isLocked;
   isCurrentUserSpectator = room.role === "spectator";
+  roomHasActiveGame = room.hasActiveGame === true || room.activeGameId !== null;
   showLobby(room.roomCode, room.isHost);
   updateRoomLockDisplay();
-  if (room.activeGameId === "egyptian-war") {
-    showEgyptianWarGame({
+  if (room.activeGameId !== null) {
+    mountGameClient({
       gameId: room.activeGameId,
       chatEnabled: room.chatEnabled,
       settings: room.gameSettings,
@@ -1908,6 +1503,7 @@ socket.on("room-session-replaced", () => {
 socket.on("available-games", (games) => {
   gameDefinitions = games;
   updateGamePicker();
+  renderKeybindSettings();
 
   if (
     isCurrentUserHost &&
@@ -1929,6 +1525,7 @@ socket.on("player-list", (players) => {
   const hasNewLobbyPlayer =
     hasReceivedPlayerList &&
     players.some((player) =>
+      !returningGameMemberIds.has(player.id) &&
       !previousPlayerIds.has(player.id) &&
       !previousPlayerSignatures.has(
         `${player.name}\u0000${player.avatar}`
@@ -1937,6 +1534,11 @@ socket.on("player-list", (players) => {
 
   currentPlayers = players;
   hasReceivedPlayerList = true;
+  returningGameMemberIds = new Set(
+    [...returningGameMemberIds].filter(
+      (memberId) => !players.some((player) => player.id === memberId)
+    )
+  );
 
   if (hasNewLobbyPlayer) {
     gameHubAudio.playEffect("player-join");
@@ -1994,47 +1596,6 @@ socket.on("player-list", (players) => {
   updateStartGameAvailability();
 });
 
-socket.on("spectator-list", (spectators) => {
-  egyptianWarSpectatorList.replaceChildren();
-
-  for (const spectator of spectators) {
-    const listItem = document.createElement("li");
-    listItem.className =
-      "list-group-item d-flex align-items-center gap-3";
-
-    const avatar = document.createElement("span");
-    avatar.className = "player-avatar";
-    avatar.textContent = spectator.avatar;
-    avatar.setAttribute(
-      "aria-label",
-      `${spectator.name}'s avatar: ${spectator.avatar}`
-    );
-
-    const spectatorName = document.createElement("span");
-    spectatorName.className = "player-name";
-    spectatorName.textContent = spectator.name;
-    listItem.append(avatar, spectatorName);
-
-    if (!spectator.isConnected) {
-      const disconnectedLabel = document.createElement("span");
-      disconnectedLabel.className = "badge text-bg-warning";
-      disconnectedLabel.textContent = "Disconnected";
-      listItem.appendChild(disconnectedLabel);
-    }
-
-    if (isCurrentUserHost) {
-      listItem.appendChild(
-        createKickPlayerButton(
-          spectator,
-          "btn btn-outline-danger btn-sm ms-auto"
-        )
-      );
-    }
-
-    egyptianWarSpectatorList.appendChild(listItem);
-  }
-});
-
 socket.on("room-lock-changed", ({ isLocked }) => {
   isRoomLocked = isLocked;
   updateRoomLockDisplay();
@@ -2051,7 +1612,6 @@ socket.on("game-selected", ({ gameId, settings }) => {
 
   selectedGameId = gameId;
   currentGameSettings = settings;
-  egyptianWarChat.hidden = !selectedGame.chatEnabled;
 
   howToPlayButton.disabled = false;
   gameSettingsButton.disabled = false;
@@ -2089,72 +1649,85 @@ socket.on(
   }
 );
 
-socket.on("game-started", (game) => {
-  if (game.gameId !== "egyptian-war") {
+function mountGameClient(game) {
+  if (!gameClientHost.has(game.gameId)) {
+    showToast("This game's browser client is not installed.");
     return;
   }
 
-  showEgyptianWarGame(game);
+  lobbyView.classList.add("d-none");
+  gameplayView.classList.remove("d-none");
+  placeAppUtilityControls(true);
+  currentActiveGameId = game.gameId;
+  roomHasActiveGame = true;
+  activeGameIsPaused = game.isPaused === true;
+  activeGameIsBusy = false;
+  updateGameSettingsControls();
+  gameClientHost.mount(game.gameId, game);
+  gameClientHost.receivePlatformEvent({
+    type: "spectators",
+    payload: currentSpectators
+  });
+  updateLobbyGameAction();
+}
+
+socket.on("game-started", (game) => {
+  mountGameClient(game);
 });
 
-socket.on("egyptian-war-animation", (animation) => {
-  activeEgyptianWarAnimation = animation;
+socket.on("game-state", (envelope) => {
+  gameClientHost.receiveState(envelope);
 });
 
-socket.on("egyptian-war-state", (state) => {
-  renderEgyptianWarState(state);
+socket.on("game-event", (envelope) => {
+  gameClientHost.receiveEvent(envelope);
 });
 
-socket.on("game-ended", ({ message }) => {
-  clearTimeout(egyptianWarAnimationTimeout);
-  clearTimeout(egyptianWarTransferTimeout);
-  clearTimeout(egyptianWarWinnerRevealTimeout);
-  clearEgyptianWarSoundTimeouts();
-  activeEgyptianWarAnimation = null;
-  revealedEgyptianWarWinnerAnimationId = null;
-  egyptianWarAnimationLayer.replaceChildren();
-  egyptianWarVictory.hidden = true;
-  setEgyptianWarTimerHidden(true);
-  egyptianWarTimerRemainingMs = null;
-  egyptianWarTimerDeadline = null;
+socket.on("game-lifecycle", ({ gameId, isPaused, isBusy }) => {
+  if (gameId !== currentActiveGameId) return;
+  activeGameIsPaused = isPaused === true;
+  activeGameIsBusy = isBusy === true;
+  updateGameSettingsControls();
+});
+
+socket.on("spectator-list", (spectators) => {
+  currentSpectators = spectators;
+  gameClientHost.receivePlatformEvent({
+    type: "spectators",
+    payload: spectators
+  });
+});
+
+socket.on("game-chat-message", (chatMessage) => {
+  gameClientHost.receivePlatformEvent({
+    type: "chat-message",
+    payload: chatMessage
+  });
+});
+
+socket.on("game-ended", ({ message, returningMemberIds = [] }) => {
+  const wasWaitingInLobby = currentActiveGameId === null;
+  returningGameMemberIds = new Set(
+    Array.isArray(returningMemberIds) ? returningMemberIds : []
+  );
+  if (wasWaitingInLobby) {
+    gameHubAudio.playEffect("game-finished");
+  }
+  placeAppUtilityControls(false);
+  currentActiveGameId = null;
+  activeGameIsPaused = false;
+  activeGameIsBusy = false;
+  roomHasActiveGame = false;
+  currentSpectators = [];
+  updateGameSettingsControls();
+  gameClientHost.unmount();
   gameplayView.classList.add("d-none");
-  egyptianWarChat.hidden = true;
-  egyptianWarHostControls.classList.add("d-none");
   lobbyView.classList.remove("d-none");
   gameHubAudio.setScene("menu");
   isCurrentUserSpectator = false;
+  updateLobbyGameAction();
   updateStartGameAvailability();
   gameStatus.textContent = message;
-});
-
-socket.on("egyptian-war-pause-changed", ({ isPaused }) => {
-  egyptianWarPauseButton.textContent = isPaused ? "Resume" : "Pause";
-  egyptianWarPauseButton.setAttribute(
-    "aria-pressed",
-    String(isPaused)
-  );
-});
-
-if (typeof module !== "undefined" && module.exports) {
-  module.exports = {
-    animateEgyptianWarOutcome
-  };
-}
-
-socket.on("game-chat-message", (chatMessage) => {
-  const item = document.createElement("li");
-  item.className = "egyptian-war-chat-message";
-
-  const name = document.createElement("strong");
-  name.textContent = `${chatMessage.senderName}: `;
-
-  const message = document.createElement("span");
-  message.textContent = chatMessage.message;
-
-  item.append(name, message);
-  egyptianWarChatMessages.appendChild(item);
-  egyptianWarChatMessages.scrollTop =
-    egyptianWarChatMessages.scrollHeight;
 });
 
 socket.on("kicked-from-room", ({ message }) => {
@@ -2164,62 +1737,71 @@ socket.on("kicked-from-room", ({ message }) => {
   showToast(message);
 });
 
+function leaveActiveGame(confirmButton, modalElement) {
+  if (currentRoomCode === null || isCurrentUserHost) {
+    return;
+  }
+
+  const wasSpectator = isCurrentUserSpectator;
+  confirmButton.disabled = true;
+  socket.emit(
+    "leave-game",
+    { roomCode: currentRoomCode },
+    (response) => {
+      confirmButton.disabled = false;
+      if (!response.success) {
+        showToast(response.message);
+        return;
+      }
+
+      bootstrap.Modal
+        .getOrCreateInstance(modalElement)
+        .hide();
+      showLobbyAfterLeavingGame(
+        response.hasActiveGame !== false,
+        wasSpectator
+      );
+    }
+  );
+}
+
+confirmLeaveGameButton.addEventListener("click", () => {
+  leaveActiveGame(confirmLeaveGameButton, leaveGameModalElement);
+});
+
+confirmLeaveSpectatorButton.addEventListener("click", () => {
+  leaveActiveGame(confirmLeaveSpectatorButton, leaveSpectatorModalElement);
+});
+
+leaveLobbyButton.addEventListener("click", () => {
+  if (currentRoomCode === null || isCurrentUserHost) {
+    return;
+  }
+
+  leaveLobbyButton.disabled = true;
+  socket.emit(
+    "leave-lobby",
+    { roomCode: currentRoomCode },
+    (response) => {
+      leaveLobbyButton.disabled = false;
+
+      if (!response.success) {
+        showToast(response.message);
+        return;
+      }
+
+      clearResumeSession(currentRoomCode);
+      resetRoomState();
+      showEntry();
+    }
+  );
+});
+
 socket.on("room-closed", () => {
   clearResumeSession();
   resetRoomState();
   showEntry();
   showToast("The host closed the room.");
-});
-
-egyptianWarPlayCardButton.addEventListener("click", () => {
-  if (currentRoomCode === null) {
-    return;
-  }
-
-  socket.emit(
-    "play-card",
-    { roomCode: currentRoomCode },
-    (response) => {
-      if (!response.success) {
-        showToast(response.message);
-      }
-    }
-  );
-});
-
-egyptianWarSlapButton.addEventListener("click", () => {
-  if (currentRoomCode === null) {
-    return;
-  }
-
-  socket.emit(
-    "slap",
-    { roomCode: currentRoomCode },
-    (response) => {
-      if (!response.success) {
-        showToast(response.message);
-      }
-    }
-  );
-});
-
-egyptianWarPauseButton.addEventListener("click", () => {
-  if (currentRoomCode === null || !isCurrentUserHost) {
-    return;
-  }
-
-  const isPaused =
-    egyptianWarPauseButton.getAttribute("aria-pressed") !== "true";
-
-  socket.emit(
-    "toggle-game-pause",
-    { roomCode: currentRoomCode, isPaused },
-    (response) => {
-      if (!response.success) {
-        showToast(response.message);
-      }
-    }
-  );
 });
 
 confirmCloseLobbyButton.addEventListener("click", () => {
@@ -2265,43 +1847,6 @@ confirmExitGameButton.addEventListener("click", () => {
         .getOrCreateInstance(exitGameModalElement)
         .hide();
     }
-  );
-});
-
-egyptianWarChatForm.addEventListener("submit", (event) => {
-  event.preventDefault();
-
-  if (currentRoomCode === null) {
-    return;
-  }
-
-  const message = egyptianWarChatInput.value.trim();
-
-  socket.emit(
-    "game-chat-send",
-    { roomCode: currentRoomCode, message },
-    (response) => {
-      if (!response.success) {
-        showToast(response.message);
-        return;
-      }
-
-      egyptianWarChatInput.value = "";
-    }
-  );
-});
-
-showGameChatButton.addEventListener("click", () => {
-  showEgyptianWarSidePanel("chat");
-});
-
-showGameSpectatorsButton.addEventListener("click", () => {
-  showEgyptianWarSidePanel("spectators");
-});
-
-toggleGameSidePanelButton.addEventListener("click", () => {
-  setEgyptianWarSidePanelExpanded(
-    !egyptianWarSidePanel.classList.contains("is-expanded")
   );
 });
 
@@ -2417,6 +1962,34 @@ startGameButton.addEventListener("click", () => {
   );
 });
 
+spectateGameButton.addEventListener("click", () => {
+  if (
+    currentRoomCode === null ||
+    isCurrentUserHost ||
+    !roomHasActiveGame ||
+    currentActiveGameId !== null
+  ) {
+    return;
+  }
+
+  spectateGameButton.disabled = true;
+  socket.emit(
+    "spectate-game",
+    { roomCode: currentRoomCode },
+    (response) => {
+      if (!response.success) {
+        spectateGameButton.disabled = false;
+        showToast(response.message);
+        return;
+      }
+
+      isCurrentUserSpectator = true;
+      updateLobbyGameAction();
+      showToast("You joined the game as a spectator.");
+    }
+  );
+});
+
 joinRoomButton.addEventListener("click", () => {
   if (isRoomRequestPending || currentRoomCode !== null) {
     return;
@@ -2445,12 +2018,13 @@ joinRoomButton.addEventListener("click", () => {
 
       isRoomRequestPending = false;
       isCurrentUserSpectator = response.role === "spectator";
+      roomHasActiveGame = response.activeGameId !== null;
       showLobby(response.roomCode, false);
       saveResumeSession(response.roomCode, response.resumeToken);
 
       if (isCurrentUserSpectator) {
-        if (response.activeGameId === "egyptian-war") {
-          showEgyptianWarGame({
+        if (response.activeGameId !== null) {
+          mountGameClient({
             gameId: response.activeGameId,
             chatEnabled: response.chatEnabled,
             settings: response.gameSettings,

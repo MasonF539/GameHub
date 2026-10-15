@@ -3,6 +3,7 @@ node_modules/
 
 # Compiled TypeScript
 dist/
+dist-test/
 
 # Environment variables and secrets
 .env

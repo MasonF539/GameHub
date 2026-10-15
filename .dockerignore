@@ -1,8 +1,9 @@
 # Packages are installed inside the Docker image.
 node_modules
 
-# TypeScript creates this folder during the Docker build.
+# TypeScript creates these folders during the Docker build.
 dist
+dist-test
 
 # Version-control files are not needed inside the image.
 .git

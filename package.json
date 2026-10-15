@@ -3,10 +3,19 @@
   "version": "1.0.0",
   "description": "A self-hosted real-time browser game platform.",
   "main": "dist/server.js",
+  "workspaces": [
+    "packages/game-sdk",
+    "games/egyptian-war"
+  ],
   "scripts": {
-    "build": "tsc",
-    "check": "tsc --noEmit",
-    "test": "npm run build && node --test dist/*.test.js dist/games/egyptianWar/*.test.js test/*.test.js",
+    "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
+    "clean:test": "node -e \"require('node:fs').rmSync('dist-test',{recursive:true,force:true})\"",
+    "build:workspaces": "npm run build --workspaces --if-present",
+    "build": "npm run clean && npm run build:workspaces && tsc",
+    "build:test": "npm run clean:test && tsc -p tsconfig.test.json",
+    "check": "npm run build:workspaces && npm run check --workspaces --if-present && tsc --noEmit && tsc --noEmit -p tsconfig.test.json",
+    "test": "npm run build && npm run test --workspaces --if-present && npm run build:test && node --test dist-test/*.test.js test/*.test.js",
+    "verify:packages": "node scripts/verify-package-artifacts.mjs",
     "start": "node dist/server.js"
   },
   "keywords": [
@@ -15,9 +24,11 @@
     "typescript"
   ],
   "author": "Mason Fong",
-  "license": "ISC",
+  "license": "PolyForm-Noncommercial-1.0.0",
   "type": "commonjs",
   "dependencies": {
+    "@masonf539/egyptian-war": "1.0.0",
+    "@masonf539/game-sdk": "1.0.0",
     "bootstrap": "^5.3.8",
     "express": "^5.2.1",
     "socket.io": "^4.8.4"

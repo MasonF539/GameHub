@@ -1,4 +1,8 @@
-import type { GameDefinition } from "../gameDefinition.js";
+import {
+  gameHubGameApiVersion,
+  type GameDefinition,
+  type GamePluginManifest
+} from "@masonf539/game-sdk";
 
 export type CardSuit =
   | "clubs"
@@ -32,12 +36,32 @@ export const egyptianWar: GameDefinition = {
   id: "egyptian-war",
   name: "Egyptian War",
   description:
-    "Play cards into a central pile, survive face-card challenges, and race to slap special combinations. The last player holding all the cards wins.",
+    "Play cards into a central pile, survive face-card challenges, and race to slap enabled patterns. False slaps carry penalties, and eliminated players must skip the next card's slap opportunity after a false slap. The last player holding all the cards wins.",
   isPlayable: true,
   chatEnabled: true,
 
   minPlayers: 2,
   maxPlayers: 6,
+
+  preview: {
+    videoPath: "/games/egyptian-war/assets/game-previews/preview.mp4",
+    posterPath: "/games/egyptian-war/assets/game-previews/poster.webp"
+  },
+
+  keybinds: [
+    {
+      id: "play-card",
+      label: "Play a card",
+      description: "Play the top card when it is your turn.",
+      defaultKey: "KeyE"
+    },
+    {
+      id: "slap",
+      label: "Slap",
+      description: "Attempt to slap the central pile.",
+      defaultKey: "Space"
+    }
+  ],
 
   rules: [
     "The server shuffles the deck, deals every card face down, and randomly selects the first player.",
@@ -48,14 +72,14 @@ export const egyptianWar: GameDefinition = {
     "The next player must respond with another face card, Ace, or Joker. A Jack allows 1 attempt, a Queen 2 attempts, a King 3 attempts, an Ace 4 attempts, and a Joker 5 attempts.",
     "If the challenged player reveals another face card, Ace, or Joker, the challenge passes to the next player with the new number of attempts.",
     "If the challenged player uses every attempt without revealing a face card, Ace, or Joker, the player who most recently played a challenge card wins the pile unless the final card creates a valid slap combination.",
-    "When the final failed challenge card creates a valid slap combination, players may slap until the turn timer expires; if nobody slaps, the most recent challenge card player wins the pile.",
+    "When the final failed challenge card creates a valid slap combination, players get a short window of about four seconds to slap; if nobody slaps, the most recent challenge card player wins the pile.",
     "If the challenged player runs out of cards before completing their attempts, the next player with cards inherits the challenge with the remaining attempts.",
-    "A player who runs out of cards is skipped until they reenter by winning a valid slap.",
+    "A player who runs out of cards is skipped until they reenter by winning a valid slap. An eliminated player who false-slaps must miss the next card's slap opportunity before trying again.",
     "A player who wins the pile places all of its cards at the bottom of their deck without shuffling and begins the next pile.",
     "When a valid slap combination appears, the first player to slap wins the central pile.",
-    "Slapping without a valid combination forfeits the configured number of cards face down to the bottom of the pile, or all remaining cards if fewer remain. Penalty cards do not create slap combinations.",
+    "Slapping without a valid combination forfeits the configured number of cards face down to the bottom of the pile, or all remaining cards if fewer remain. Penalty cards do not create slap combinations. A player with no cards forfeits no cards for a false slap, but will miss the next card's slap opportunity before being able to try again.",
     "When only one player still has cards, that player wins unless the current face-up pile has a valid slap that allows an eliminated player to reenter.",
-    "If multiple slaps have no clear winner, nobody takes the pile and play continues.",
+    "If several players slap at nearly the same moment, the pile goes to one of them by weighted chance that favors the earlier slap. The others forfeit nothing.",
     "The winner is the player who collects every card."
   ],
 
@@ -92,10 +116,10 @@ export const egyptianWar: GameDefinition = {
       defaultValue: true
     },
     {
-      key: "allowFourInARow",
-      label: "Four in a Row",
+      key: "allowThreeInARow",
+      label: "Three in a Row",
       description:
-        "Allow a slap when four cards form an ascending or descending sequence.",
+        "Allow a slap when three cards form an ascending or descending sequence.",
       defaultValue: true
     },
     {
@@ -109,7 +133,7 @@ export const egyptianWar: GameDefinition = {
       key: "allowTens",
       label: "Tens",
       description:
-        "Allow a slap when two number cards total ten, either consecutively or with one face card between them. An Ace counts as one.",
+        "Allow a slap when the two most recent cards are adjacent number cards that total ten. An Ace counts as one.",
       defaultValue: false
     },
     {
@@ -124,7 +148,7 @@ export const egyptianWar: GameDefinition = {
       key: "falseSlapPenaltyCards",
       label: "False Slap Penalty",
       description:
-        "Cards forfeited to the bottom of the pile when a player slaps an invalid combination.",
+        "Cards forfeited to the bottom of the pile for an invalid slap. An eliminated player forfeits no cards, but must miss the next card's slap opportunity.",
       defaultValue: 2,
       options: [1, 2, 3],
       unit: "card"
@@ -143,4 +167,16 @@ export const egyptianWar: GameDefinition = {
       unit: "second"
     }
   ]
+};
+
+export const egyptianWarManifest: GamePluginManifest = {
+  apiVersion: gameHubGameApiVersion,
+  packageVersion: "1.0.0",
+  definition: egyptianWar,
+  client: {
+    delivery: "embedded",
+    markupPath: "template.html",
+    entryPaths: ["register.js", "client.js"],
+    stylePaths: ["style.css"]
+  }
 };
