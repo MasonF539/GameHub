@@ -36,7 +36,7 @@ Game events and game-specific sounds are sent only to people currently viewing t
 
 GameHub's replaceable platform sound files live in `public/assets/audio`. The lobby completion alert is `public/assets/audio/effects/game-finished.mp3`.
 
-Egyptian War is the first playable game. Its hidden decks, turns, challenges, slap validation, server-receipt-time arbitration, penalties, pile awards, timers, and win conditions are controlled by the server. An eliminated player who false-slaps must skip the next card's slap opportunity before trying again.
+Egyptian War is the first playable game. Its hidden decks, turns, challenges, slap validation, server-receipt-time arbitration, penalties, pile awards, timers, and win conditions are controlled by the server. A false slap by an eliminated player, or one that forfeits their last card, blocks another slap on the unchanged pile; the cooldown clears when the next card is played so that new card can be slapped immediately.
 
 ## Requirements
 
