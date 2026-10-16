@@ -26,7 +26,7 @@
   "license": "PolyForm-Noncommercial-1.0.0",
   "type": "commonjs",
   "dependencies": {
-    "@masonf539/egyptian-war": "1.0.0",
+    "@masonf539/egyptian-war": "1.0.1-beta.1",
     "@masonf539/game-sdk": "1.0.1",
     "bootstrap": "^5.3.8",
     "express": "^5.2.1",
