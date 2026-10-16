@@ -374,6 +374,12 @@ body {
   gap: 0.5rem;
 }
 
+.game-keybind-cancel {
+  min-height: 2.35rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
 .game-keybind-warning {
   display: grid;
   width: 1.35rem;

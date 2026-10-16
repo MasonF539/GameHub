@@ -44,7 +44,10 @@ export type GameKeybind = {
   id: string;
   label: string;
   description?: string;
-  /** KeyboardEvent.code value, so defaults follow physical key positions. */
+  /**
+   * Assignable KeyboardEvent.code value. Tab, function keys, and standalone
+   * modifier keys are reserved by GameHub.
+   */
   defaultKey: string;
 };
 

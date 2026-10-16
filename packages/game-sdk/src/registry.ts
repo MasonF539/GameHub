@@ -9,6 +9,19 @@ const settingKeyPattern = /^[A-Za-z][A-Za-z0-9]*$/;
 const actionIdPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const semanticVersionPattern =
   /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
+const assignableKeyCodes = new Set([
+  "Escape", "Space", "Enter",
+  "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight",
+  "Backquote", "Minus", "Equal", "BracketLeft", "BracketRight",
+  "Backslash", "Semicolon", "Quote", "Comma", "Period", "Slash",
+  "NumpadAdd", "NumpadSubtract", "NumpadMultiply", "NumpadDivide",
+  "NumpadDecimal", "NumpadEnter", "NumpadEqual", "NumpadComma"
+]);
+
+export function isAssignableKeyCode(code: string): boolean {
+  return /^(Key[A-Z]|Digit[0-9]|Numpad[0-9])$/.test(code) ||
+    assignableKeyCodes.has(code);
+}
 
 export class GamePluginValidationError extends Error {
   constructor(message: string) {
@@ -186,6 +199,11 @@ export function validateGamePluginManifest(manifest: GamePluginManifest): void {
       keybind.defaultKey,
       `${game.id}.${keybind.id} default keybind`
     );
+    if (!isAssignableKeyCode(keybind.defaultKey)) {
+      throw new GamePluginValidationError(
+        `${game.id}.${keybind.id} has an invalid default keybind: ${keybind.defaultKey}.`
+      );
+    }
     if (defaultKeys.has(keybind.defaultKey)) {
       throw new GamePluginValidationError(
         `${game.id} assigns ${keybind.defaultKey} to multiple actions.`

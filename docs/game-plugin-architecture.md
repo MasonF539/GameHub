@@ -12,10 +12,11 @@ configured list. The package lock and Docker build then select an exact,
 reproducible version.
 
 The Docker build runs `npm run verify:packages` after the test suite. That
-check packs the local SDK, downloads the exact published Egyptian War release,
-installs both archives into an empty temporary consumer, and loads the game.
-It guards against imports or required files that exist only in a development
-checkout.
+check packs the local SDK, reads every enabled game from `gamehub.config.json`,
+downloads each exact version declared in the root dependencies, installs all
+artifacts into an empty temporary consumer, and validates their exports and
+declared browser assets. It guards against missing package files and imports
+that exist only in a development checkout.
 
 Game packages execute trusted server code. They are not a sandbox for packages supplied by room hosts or browser clients.
 
@@ -62,7 +63,7 @@ The completed migration order was:
 
 ## Ownership boundary
 
-GameHub keeps its own `index.html`, core stylesheet, and client code. A game module controls only the game root that GameHub gives it. It must clean up event listeners, timers, and DOM state when `destroy()` is called.
+GameHub keeps its own `index.html`, core stylesheet, and client code. A game module controls only the game root that GameHub gives it. It must clean up event listeners, timers, and DOM state when `destroy()` is called. GameHub additionally scopes `GameClientContext.input` subscriptions to the current mount and clears them after unmount or a failed mount, so a package cannot leave duplicate key handlers behind.
 
 GameHub's page shell also owns the tabbed Settings interface. Its reusable
 Game tab exposes full-screen, lifecycle pause/resume, and confirmed exit/leave
@@ -78,6 +79,12 @@ that game is mounted. Text entry, spectators, and open modal dialogs suppress
 gameplay shortcuts. The interface marks both sides of a collision within one
 game or against a General shortcut; the same physical key may be reused by
 different games because only one game can be mounted at a time.
+Assignable defaults use `KeyboardEvent.code`: letters, numbers, arrows, Space,
+Enter, Escape, punctuation, and ordinary numpad keys are supported. Tab,
+function keys, and standalone modifiers remain reserved; Backspace clears a
+personal binding. Ctrl/Alt/Command combinations pass through to the browser.
+The SDK rejects invalid package defaults and the client rejects undeclared
+action IDs instead of silently ignoring package typos.
 
 The platform owns menu/lobby audio and the adjustable lobby alert category, which includes player-join notifications and the replaceable `public/assets/audio/effects/game-finished.mp3` alert heard by members already waiting in the lobby. Individual game packages own game music and action effects and register them through the shared audio service. The server routes package events only to active players and spectators, preventing lobby waiters from receiving delayed gameplay audio. GameHub identifies members returning from a finished game so their promotion back into the player list does not trigger the new-player sound.
 
@@ -92,3 +99,5 @@ required `entryPath` as an ES module.
 Platform request handlers accept missing Socket.IO acknowledgement callbacks
 without throwing. Room codes use cryptographically secure randomness, and
 repeated invalid room-code guesses are limited before room lookup continues.
+Active players must use the game-leave flow before leaving a lobby, which
+keeps authoritative sessions from retaining a player the room has removed.

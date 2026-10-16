@@ -194,21 +194,56 @@ const keybindSubscriptions = new Map();
 let keybindOverrides = loadKeybindOverrides();
 let pendingKeybindCapture = null;
 const expandedKeybindGroupIds = new Set(["general"]);
+const notifiedKeybindConflicts = new Set();
+const assignableSpecialKeyCodes = new Set([
+  "Escape", "Space", "Enter",
+  "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight",
+  "Backquote", "Minus", "Equal", "BracketLeft", "BracketRight",
+  "Backslash", "Semicolon", "Quote", "Comma", "Period", "Slash",
+  "NumpadAdd", "NumpadSubtract", "NumpadMultiply", "NumpadDivide",
+  "NumpadDecimal", "NumpadEnter", "NumpadEqual", "NumpadComma"
+]);
+
+function isAllowedKeybindCode(code) {
+  if (typeof code !== "string") return false;
+  if (/^(Key[A-Z]|Digit[0-9]|Numpad[0-9])$/.test(code)) return true;
+  return assignableSpecialKeyCodes.has(code);
+}
+
+function isStandaloneModifierCode(code) {
+  return /^(Shift|Control|Alt|Meta)(Left|Right)$/.test(code);
+}
 
 function loadKeybindOverrides() {
   try {
     const saved = JSON.parse(localStorage.getItem(keybindStorageKey) ?? "{}");
     if (saved && typeof saved === "object" && !Array.isArray(saved)) {
-      return saved;
+      const sanitized = Object.create(null);
+      for (const [groupId, bindings] of Object.entries(saved)) {
+        if (!bindings || typeof bindings !== "object" || Array.isArray(bindings)) {
+          continue;
+        }
+        for (const [actionId, code] of Object.entries(bindings)) {
+          if (code !== null && !isAllowedKeybindCode(code)) continue;
+          sanitized[groupId] ??= Object.create(null);
+          sanitized[groupId][actionId] = code;
+        }
+      }
+      return sanitized;
     }
   } catch {
     // Invalid local preferences should fall back to package defaults.
   }
-  return {};
+  return Object.create(null);
 }
 
 function saveKeybindOverrides() {
-  localStorage.setItem(keybindStorageKey, JSON.stringify(keybindOverrides));
+  try {
+    localStorage.setItem(keybindStorageKey, JSON.stringify(keybindOverrides));
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function getKeybindDefinitions() {
@@ -228,6 +263,7 @@ function getKeybindDefinition(groupId, actionId) {
 
 function getAssignedKey(groupId, keybind) {
   const override = keybindOverrides[groupId]?.[keybind.id];
+  if (override === null) return null;
   return typeof override === "string" && override !== ""
     ? override
     : keybind.defaultKey;
@@ -235,22 +271,44 @@ function getAssignedKey(groupId, keybind) {
 
 function formatKeyCode(code) {
   const labels = {
+    null: "Unbound",
     Escape: "Esc",
     Space: "Space",
+    Enter: "Enter",
     ArrowUp: "Up",
     ArrowDown: "Down",
     ArrowLeft: "Left",
-    ArrowRight: "Right"
+    ArrowRight: "Right",
+    Backquote: "`",
+    Minus: "-",
+    Equal: "=",
+    BracketLeft: "[",
+    BracketRight: "]",
+    Backslash: "\\",
+    Semicolon: ";",
+    Quote: "'",
+    Comma: ",",
+    Period: ".",
+    Slash: "/",
+    NumpadAdd: "Numpad +",
+    NumpadSubtract: "Numpad -",
+    NumpadMultiply: "Numpad *",
+    NumpadDivide: "Numpad /",
+    NumpadDecimal: "Numpad .",
+    NumpadEnter: "Numpad Enter",
+    NumpadEqual: "Numpad =",
+    NumpadComma: "Numpad ,"
   };
   if (labels[code]) return labels[code];
   if (/^Key[A-Z]$/.test(code)) return code.slice(3);
   if (/^Digit[0-9]$/.test(code)) return code.slice(5);
+  if (/^Numpad[0-9]$/.test(code)) return `Numpad ${code.slice(6)}`;
   return code;
 }
 
 function setKeybind(groupId, actionId, code) {
   const definition = getKeybindDefinition(groupId, actionId);
-  if (!definition) return;
+  if (!definition || (code !== null && !isAllowedKeybindCode(code))) return false;
 
   if (code === definition.defaultKey) {
     delete keybindOverrides[groupId]?.[actionId];
@@ -258,10 +316,11 @@ function setKeybind(groupId, actionId, code) {
       delete keybindOverrides[groupId];
     }
   } else {
-    keybindOverrides[groupId] ??= {};
+    keybindOverrides[groupId] ??= Object.create(null);
     keybindOverrides[groupId][actionId] = code;
   }
-  saveKeybindOverrides();
+  notifiedKeybindConflicts.clear();
+  return saveKeybindOverrides();
 }
 
 function createGameInput(gameId) {
@@ -269,6 +328,11 @@ function createGameInput(gameId) {
     onAction(actionId, handler) {
       if (typeof handler !== "function") {
         throw new TypeError("A game input action handler must be a function.");
+      }
+      if (!getKeybindDefinition(gameId, actionId)) {
+        throw new Error(
+          `Unknown keybind action "${actionId}" for game "${gameId}".`
+        );
       }
       let gameActions = keybindSubscriptions.get(gameId);
       if (!gameActions) {
@@ -300,6 +364,7 @@ function findKeybindConflicts(groups) {
     const actionsByCode = new Map();
     for (const keybind of group.keybinds) {
       const code = getAssignedKey(group.id, keybind);
+      if (code === null) continue;
       const actions = actionsByCode.get(code) ?? [];
       actions.push(keybind.id);
       actionsByCode.set(code, actions);
@@ -318,6 +383,7 @@ function findKeybindConflicts(groups) {
   if (general) {
     for (const generalKeybind of general.keybinds) {
       const generalCode = getAssignedKey(general.id, generalKeybind);
+      if (generalCode === null) continue;
       for (const group of groups) {
         if (group.id === general.id) continue;
         for (const keybind of group.keybinds) {
@@ -407,8 +473,14 @@ function createKeybindSection(group, expanded, conflicts) {
     keyButton.addEventListener("click", () => {
       pendingKeybindCapture?.cancel();
       const originalText = keyButton.textContent;
-      keyButton.textContent = "Press a key…";
+      keyButton.textContent = "Press a key";
       keyButton.classList.add("is-listening");
+      const cancelButton = document.createElement("button");
+      cancelButton.className = "game-keybind-cancel btn btn-outline-secondary btn-sm";
+      cancelButton.type = "button";
+      cancelButton.textContent = "Cancel";
+      cancelButton.setAttribute("aria-label", `Cancel changing ${keybind.label}`);
+      control.appendChild(cancelButton);
       pendingKeybindCapture = {
         groupId: group.id,
         actionId: keybind.id,
@@ -416,11 +488,15 @@ function createKeybindSection(group, expanded, conflicts) {
         cancel() {
           keyButton.textContent = originalText;
           keyButton.classList.remove("is-listening");
+          cancelButton.remove();
           if (pendingKeybindCapture?.button === keyButton) {
             pendingKeybindCapture = null;
           }
         }
       };
+      cancelButton.addEventListener("click", () => {
+        pendingKeybindCapture?.cancel();
+      });
     });
 
     row.append(copy, control);
@@ -435,7 +511,10 @@ function createKeybindSection(group, expanded, conflicts) {
   resetButton.textContent = "Reset defaults";
   resetButton.addEventListener("click", () => {
     delete keybindOverrides[group.id];
-    saveKeybindOverrides();
+    notifiedKeybindConflicts.clear();
+    if (!saveKeybindOverrides()) {
+      showToast("Keybind preferences could not be saved.");
+    }
     renderKeybindSettings();
   });
   actions.appendChild(resetButton);
@@ -489,13 +568,35 @@ document.addEventListener("keydown", (event) => {
   if (pendingKeybindCapture) {
     event.preventDefault();
     event.stopImmediatePropagation();
+    if (event.ctrlKey || event.metaKey || event.altKey) {
+      showToast("Key combinations with Ctrl, Alt, or Command are reserved.");
+      return;
+    }
+    if (event.code === "Backspace") {
+      const capture = pendingKeybindCapture;
+      if (!setKeybind(capture.groupId, capture.actionId, null)) {
+        showToast("Keybind preferences could not be saved.");
+      }
+      renderKeybindSettings();
+      return;
+    }
+    if (!isAllowedKeybindCode(event.code)) {
+      const reason = isStandaloneModifierCode(event.code)
+        ? "Modifier keys cannot be assigned by themselves."
+        : "That key is reserved. Choose a letter, number, arrow, Space, Enter, Escape, or punctuation key.";
+      showToast(reason);
+      return;
+    }
     const capture = pendingKeybindCapture;
-    setKeybind(capture.groupId, capture.actionId, event.code);
+    if (!setKeybind(capture.groupId, capture.actionId, event.code)) {
+      showToast("Keybind preferences could not be saved.");
+    }
     renderKeybindSettings();
     return;
   }
 
   if (event.repeat || isTextEntryTarget(event.target)) return;
+  if (event.ctrlKey || event.metaKey || event.altKey) return;
 
   const generalSettings = generalKeybindDefinition.keybinds[0];
   if (event.code === getAssignedKey("general", generalSettings)) {
@@ -527,10 +628,14 @@ document.addEventListener("keydown", (event) => {
   const conflicts = findKeybindConflicts(getKeybindDefinitions());
   if (conflicts.has(keybindConflictId(game.id, keybind.id))) {
     event.preventDefault();
-    showToast(
-      `${formatKeyCode(event.code)} has overlapping keybinds. ` +
-      "Resolve the conflict before using it."
-    );
+    const conflictId = keybindConflictId(game.id, keybind.id);
+    if (!notifiedKeybindConflicts.has(conflictId)) {
+      notifiedKeybindConflicts.add(conflictId);
+      showToast(
+        `${formatKeyCode(event.code)} has overlapping keybinds. ` +
+        "Resolve the conflict before using it."
+      );
+    }
     return;
   }
 
@@ -753,6 +858,7 @@ appSettingsModalElement.addEventListener(
 appSettingsModalElement.addEventListener("hidden.bs.modal", () => {
   pendingKeybindCapture?.cancel();
   expandedKeybindGroupIds.clear();
+  expandedKeybindGroupIds.add("general");
   renderKeybindSettings();
 });
 updateGameSettingsControls();
@@ -1394,12 +1500,14 @@ socket.on("connect", () => {
   );
 
   connectionStatus.classList.add("text-bg-success");
-  gameplayConnectionStatus.textContent = "Connected to server";
-  gameplayConnectionStatus.classList.remove(
-    "text-bg-warning",
-    "text-bg-danger"
-  );
-  gameplayConnectionStatus.classList.add("text-bg-success");
+  if (gameplayConnectionStatus) {
+    gameplayConnectionStatus.textContent = "Connected to server";
+    gameplayConnectionStatus.classList.remove(
+      "text-bg-warning",
+      "text-bg-danger"
+    );
+    gameplayConnectionStatus.classList.add("text-bg-success");
+  }
 });
 
 socket.on("latency-probe", (acknowledge) => {
@@ -1409,7 +1517,7 @@ socket.on("latency-probe", (acknowledge) => {
 });
 
 socket.on("latency-update", ({ rttMs }) => {
-  if (Number.isFinite(rttMs) && rttMs >= 0) {
+  if (networkPing && Number.isFinite(rttMs) && rttMs >= 0) {
     networkPing.textContent = `${Math.round(rttMs)} ms`;
   }
 });
@@ -1417,7 +1525,6 @@ socket.on("latency-update", ({ rttMs }) => {
 socket.on("disconnect", () => {
   isGameSelectionPending = false;
   gamePickerGrid.classList.remove("is-pending");
-  networkPing.textContent = "-- ms";
   connectionStatus.textContent = "Disconnected from server";
 
   connectionStatus.classList.remove(
@@ -1426,12 +1533,15 @@ socket.on("disconnect", () => {
   );
 
   connectionStatus.classList.add("text-bg-danger");
-  gameplayConnectionStatus.textContent = "Disconnected from server";
-  gameplayConnectionStatus.classList.remove(
-    "text-bg-warning",
-    "text-bg-success"
-  );
-  gameplayConnectionStatus.classList.add("text-bg-danger");
+  if (gameplayConnectionStatus) {
+    gameplayConnectionStatus.textContent = "Disconnected from server";
+    gameplayConnectionStatus.classList.remove(
+      "text-bg-warning",
+      "text-bg-success"
+    );
+    gameplayConnectionStatus.classList.add("text-bg-danger");
+  }
+  if (networkPing) networkPing.textContent = "-- ms";
 
   if (currentRoomCode !== null) {
     showToast(

@@ -41,5 +41,6 @@ export type {
 export {
   GamePluginRegistry,
   GamePluginValidationError,
+  isAssignableKeyCode,
   validateGamePluginManifest
 } from "./registry.js";

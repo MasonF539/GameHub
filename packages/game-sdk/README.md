@@ -17,6 +17,11 @@ routing through `GameClientContext.input`. GameHub treats installed packages
 as trusted code and does not expose its private room implementation through
 these contracts.
 
+Keybind defaults are validated `KeyboardEvent.code` values. Letters, numbers,
+arrows, Space, Enter, Escape, punctuation, and ordinary numpad keys are
+assignable; Tab, function keys, and standalone modifiers are reserved by the
+platform. Games must subscribe only to action IDs declared in their manifest.
+
 ## Releasing
 
 The package is configured for public npm publication. From the repository

@@ -46,10 +46,10 @@ to an independently versioned GameHub plugin.
 - Centralized the avatar catalog in server-rendered platform configuration and
   hardened room requests with optional acknowledgements, cryptographic room
   codes, and invalid-join throttling.
-- Added publish-safe package exports, package-local licenses, and an artifact
-  verification step that packs the local SDK, downloads the pinned published
-  game, installs both tarballs into a clean temporary consumer, and loads
-  Egyptian War without repository source.
+- Added publish-safe package exports, package-local licenses, and a generic
+  artifact verification step that packs the local SDK, discovers configured
+  games, downloads their pinned releases, installs everything into a clean
+  temporary consumer, and validates runtime exports and declared assets.
 - Generated and updated the `egyptian-war-standalone` subtree branch so the
   package sits at repository root with its relevant commit history, standalone
   ignore/attribute files, current rules, UI, assets, tests, and license.

@@ -22,6 +22,7 @@
       }
       this.activeGameId = null;
       this.activeInstance = null;
+      this.activeInputCleanups = new Set();
     }
 
     register(gameId, gameModule) {
@@ -59,27 +60,63 @@
         if (isActive) gameRoot = candidate;
       }
       this.setActiveStyles(gameId);
+      const baseContext = this.createContext(gameId) ?? {};
+      const inputCleanups = new Set();
+      let input = baseContext.input;
+      if (input && typeof input.onAction === "function") {
+        const registerAction = input.onAction.bind(input);
+        input = {
+          ...input,
+          onAction(actionId, handler) {
+            const unsubscribe = registerAction(actionId, handler);
+            if (typeof unsubscribe !== "function") {
+              throw new Error(
+                `Game client input subscription ${gameId}.${actionId} did not return a cleanup function.`
+              );
+            }
+            let isActive = true;
+            const cleanup = () => {
+              if (!isActive) return;
+              isActive = false;
+              inputCleanups.delete(cleanup);
+              unsubscribe();
+            };
+            inputCleanups.add(cleanup);
+            return cleanup;
+          }
+        };
+      }
       const context = {
-        ...this.createContext(gameId),
+        ...baseContext,
+        ...(input ? { input } : {}),
         root: gameRoot,
         gameId,
         launchData
       };
-      const instance = gameModule.mount(context);
-      if (
-        !instance ||
-        typeof instance.receiveState !== "function" ||
-        typeof instance.receiveEvent !== "function" ||
-        typeof instance.destroy !== "function"
-      ) {
-        throw new Error(
-          `Game client module ${gameId} returned an invalid instance.`
-        );
-      }
-
       this.activeGameId = gameId;
-      this.activeInstance = instance;
-      return instance;
+      this.activeInputCleanups = inputCleanups;
+      try {
+        const instance = gameModule.mount(context);
+        this.activeInstance = instance;
+        if (
+          !instance ||
+          typeof instance.receiveState !== "function" ||
+          typeof instance.receiveEvent !== "function" ||
+          typeof instance.destroy !== "function"
+        ) {
+          throw new Error(
+            `Game client module ${gameId} returned an invalid instance.`
+          );
+        }
+        return instance;
+      } catch (error) {
+        try {
+          this.unmount();
+        } catch {
+          // Preserve the original mount error after making a best-effort cleanup.
+        }
+        throw error;
+      }
     }
 
     receiveState({ gameId, state }) {
@@ -109,15 +146,30 @@
 
     unmount() {
       const instance = this.activeInstance;
+      const inputCleanups = this.activeInputCleanups;
       this.activeGameId = null;
       this.activeInstance = null;
-      instance?.destroy();
+      this.activeInputCleanups = new Set();
+      let cleanupError = null;
+      try {
+        instance?.destroy?.();
+      } catch (error) {
+        cleanupError = error;
+      }
+      for (const cleanup of [...inputCleanups]) {
+        try {
+          cleanup();
+        } catch (error) {
+          cleanupError ??= error;
+        }
+      }
       if (typeof this.root.querySelectorAll === "function") {
         for (const candidate of this.root.querySelectorAll("[data-game-plugin-root]")) {
           candidate.hidden = true;
         }
       }
       this.setActiveStyles(null);
+      if (cleanupError) throw cleanupError;
     }
   }
 

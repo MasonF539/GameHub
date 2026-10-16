@@ -3,6 +3,7 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readFileSync,
   rmSync,
   writeFileSync
 } from "node:fs";
@@ -18,6 +19,43 @@ const temporaryRoot = mkdtempSync(
 const artifactDirectory = path.join(temporaryRoot, "artifacts");
 const consumerDirectory = path.join(temporaryRoot, "consumer");
 const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
+const exactVersionPattern =
+  /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
+
+const rootPackage = JSON.parse(
+  readFileSync(path.join(workspaceRoot, "package.json"), "utf8")
+);
+const gameHubConfiguration = JSON.parse(
+  readFileSync(path.join(workspaceRoot, "gamehub.config.json"), "utf8")
+);
+assert.ok(
+  Array.isArray(gameHubConfiguration.gamePackages),
+  "gamehub.config.json must contain a gamePackages array."
+);
+const gamePackageNames = gameHubConfiguration.gamePackages;
+assert.equal(
+  gamePackageNames.every(
+    (packageName) =>
+      typeof packageName === "string" && packageName.trim() === packageName && packageName !== ""
+  ),
+  true,
+  "Every configured game package must be a non-empty, trimmed package name."
+);
+assert.equal(
+  new Set(gamePackageNames).size,
+  gamePackageNames.length,
+  "Configured game package names must be unique."
+);
+
+const gamePackageSpecs = gamePackageNames.map((packageName) => {
+  const version = rootPackage.dependencies?.[packageName];
+  assert.match(
+    version ?? "",
+    exactVersionPattern,
+    `${packageName} must be an exact version in GameHub dependencies.`
+  );
+  return { packageName, version, packageSpec: `${packageName}@${version}` };
+});
 
 function runNpm(arguments_, workingDirectory = workspaceRoot) {
   const result = spawnSync(npmCommand, arguments_, {
@@ -49,28 +87,48 @@ function pack(packageSpec) {
   };
 }
 
+function assertPublishSafe(artifact, packageSpec) {
+  assert.ok(
+    artifact.files.includes("dist/index.js"),
+    `${packageSpec} must publish dist/index.js.`
+  );
+  assert.ok(
+    artifact.files.includes("dist/index.d.ts"),
+    `${packageSpec} must publish dist/index.d.ts.`
+  );
+  assert.ok(
+    artifact.files.includes("LICENSE"),
+    `${packageSpec} must publish its LICENSE.`
+  );
+  assert.equal(
+    artifact.files.some(
+      (file) => file.startsWith("src/") || file.startsWith("test/")
+    ),
+    false,
+    `${packageSpec} must not publish source or test directories.`
+  );
+}
+
+function assertPublicFile(gamePackage, relativePath, field) {
+  assert.ok(
+    existsSync(path.join(gamePackage.publicDirectory, relativePath)),
+    `${gamePackage.manifest.definition.id} is missing ${field}: ${relativePath}.`
+  );
+}
+
 try {
   mkdirSync(artifactDirectory);
   mkdirSync(consumerDirectory);
   const sdk = pack(path.join(workspaceRoot, "packages", "game-sdk"));
-  const egyptianWar = pack("@masonf539/egyptian-war@1.0.0");
+  const gameArtifacts = gamePackageSpecs.map(({ packageSpec }) => ({
+    packageSpec,
+    artifact: pack(packageSpec)
+  }));
 
-  assert.ok(sdk.files.includes("dist/index.js"));
-  assert.ok(sdk.files.includes("dist/index.d.ts"));
-  assert.ok(sdk.files.includes("LICENSE"));
-  assert.ok(egyptianWar.files.includes("dist/index.js"));
-  assert.ok(egyptianWar.files.includes("dist/index.d.ts"));
-  assert.ok(egyptianWar.files.includes("LICENSE"));
-  assert.ok(egyptianWar.files.includes("public/template.html"));
-  assert.ok(egyptianWar.files.includes("public/client.js"));
-  assert.ok(egyptianWar.files.includes("public/style.css"));
-  assert.equal(
-    [...sdk.files, ...egyptianWar.files].some(
-      (file) => file.startsWith("src/") || file.startsWith("test/")
-    ),
-    false,
-    "Published artifacts must not contain source or test directories."
-  );
+  assertPublishSafe(sdk, "@masonf539/game-sdk workspace");
+  for (const { packageSpec, artifact } of gameArtifacts) {
+    assertPublishSafe(artifact, packageSpec);
+  }
 
   writeFileSync(
     path.join(consumerDirectory, "package.json"),
@@ -82,25 +140,77 @@ try {
     "--no-audit",
     "--no-fund",
     sdk.archivePath,
-    egyptianWar.archivePath
+    ...gameArtifacts.map(({ artifact }) => artifact.archivePath)
   ], consumerDirectory);
 
   const requireFromConsumer = createRequire(
     path.join(consumerDirectory, "package.json")
   );
-  const installedGame = requireFromConsumer("@masonf539/egyptian-war");
-  assert.equal(installedGame.gameHubPlugin.manifest.definition.id, "egyptian-war");
-  assert.equal(
-    installedGame.gameHubPlugin.server.manifest.definition.id,
-    "egyptian-war"
-  );
-  assert.ok(
-    existsSync(
-      path.join(installedGame.gameHubPlugin.publicDirectory, "template.html")
-    )
-  );
+  const { GamePluginRegistry } = requireFromConsumer("@masonf539/game-sdk");
+  const registry = new GamePluginRegistry();
+  for (const { packageName, version } of gamePackageSpecs) {
+    const installedGame = requireFromConsumer(packageName);
+    const gamePackage = installedGame.gameHubPlugin;
+    assert.ok(gamePackage, `${packageName} must export gameHubPlugin.`);
+    assert.equal(
+      typeof gamePackage.server?.createSession,
+      "function",
+      `${packageName} must export a server session factory.`
+    );
 
-  console.log("Verified the GameHub SDK artifact and published Egyptian War package.");
+    const manifest = gamePackage.manifest;
+    const gameId = manifest?.definition?.id;
+    assert.deepEqual(
+      gamePackage.server.manifest,
+      manifest,
+      `${packageName} has mismatched client and server manifests.`
+    );
+    assert.equal(
+      manifest.packageVersion,
+      version,
+      `${packageName} manifest version must match its installed version.`
+    );
+    registry.register(manifest);
+
+    assert.ok(
+      typeof gamePackage.publicDirectory === "string" &&
+        existsSync(gamePackage.publicDirectory),
+      `${packageName} must export an existing publicDirectory.`
+    );
+    if (manifest.client.markupPath) {
+      assertPublicFile(gamePackage, manifest.client.markupPath, "client markup");
+    }
+    for (const entryPath of manifest.client.entryPaths ?? []) {
+      assertPublicFile(gamePackage, entryPath, "classic client entry");
+    }
+    for (const stylePath of manifest.client.stylePaths ?? []) {
+      assertPublicFile(gamePackage, stylePath, "client stylesheet");
+    }
+    if (manifest.client.delivery === "module") {
+      assertPublicFile(gamePackage, manifest.client.entryPath, "module client entry");
+    }
+    if (manifest.definition.preview) {
+      const previewPrefix = `/games/${gameId}/`;
+      for (const previewPath of [
+        manifest.definition.preview.videoPath,
+        manifest.definition.preview.posterPath
+      ]) {
+        assert.ok(
+          previewPath.startsWith(previewPrefix),
+          `${packageName} preview must be inside ${previewPrefix}.`
+        );
+        assertPublicFile(
+          gamePackage,
+          previewPath.slice(previewPrefix.length),
+          "picker preview"
+        );
+      }
+    }
+  }
+
+  console.log(
+    `Verified the GameHub SDK artifact and ${gamePackageSpecs.length} configured game package(s).`
+  );
 } finally {
   rmSync(temporaryRoot, { recursive: true, force: true });
 }

@@ -442,6 +442,46 @@ test("a guest can leave a room, but the host cannot leave it", { timeout: 20_000
   }
 });
 
+test("an active player must leave the game before leaving the lobby", { timeout: 25_000 }, async () => {
+  const { server, url } = await startServer();
+  const host = await connect(url);
+  const guest = await connect(url);
+
+  try {
+    const created = await emitAck(host, "create-room", {
+      playerName: "Host",
+      avatar: catAvatar
+    });
+    const roomCode = created.roomCode;
+    assert.ok(roomCode);
+    assert.equal((await emitAck(guest, "join-room", {
+      roomCode,
+      playerName: "Guest",
+      avatar: dogAvatar
+    })).success, true);
+    assert.equal((await emitAck(host, "select-game", {
+      roomCode,
+      gameId: fixtureGameId
+    })).success, true);
+    assert.equal((await emitAck(host, "start-game", { roomCode })).success, true);
+
+    const rejected = await emitAck(guest, "leave-lobby", { roomCode });
+    assert.equal(rejected.success, false);
+    assert.match(rejected.message ?? "", /leave the active game/i);
+
+    const guestState = waitForFixtureState(
+      guest,
+      (state) => state.actionCount === 1
+    );
+    assert.equal((await emitGameAction(guest, roomCode, "advance")).success, true);
+    assert.equal((await guestState).viewerRole, "player");
+  } finally {
+    host.close();
+    guest.close();
+    await stopServer(server);
+  }
+});
+
 test("a guest can leave an active game and the host keeps playing", { timeout: 25_000 }, async () => {
   const { server, url } = await startServer();
   const host = await connect(url);

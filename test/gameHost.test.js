@@ -115,3 +115,71 @@ test("mounts a game inside its package root and hides inactive package markup", 
   assert.equal(secondRoot.hidden, true);
   assert.equal(secondStyle.disabled, true);
 });
+
+test("cleans input subscriptions even when a game forgets to unsubscribe", () => {
+  const handlers = new Set();
+  const host = new GameClientHost({
+    root: {},
+    createContext: () => ({
+      input: {
+        onAction(_actionId, handler) {
+          handlers.add(handler);
+          return () => handlers.delete(handler);
+        }
+      }
+    })
+  });
+  host.register("first", {
+    mount(context) {
+      context.input.onAction("act", () => {});
+      return {
+        receiveState() {},
+        receiveEvent() {},
+        destroy() {}
+      };
+    }
+  });
+
+  host.mount("first");
+  assert.equal(handlers.size, 1);
+  host.unmount();
+  assert.equal(handlers.size, 0);
+});
+
+test("cleans input subscriptions and presentation after mount throws", () => {
+  const handlers = new Set();
+  const gameRoot = {
+    hidden: true,
+    getAttribute: () => "first"
+  };
+  const gameStyle = {
+    disabled: true,
+    getAttribute: () => "first"
+  };
+  const host = new GameClientHost({
+    root: {
+      querySelectorAll: () => [gameRoot],
+      ownerDocument: { querySelectorAll: () => [gameStyle] }
+    },
+    createContext: () => ({
+      input: {
+        onAction(_actionId, handler) {
+          handlers.add(handler);
+          return () => handlers.delete(handler);
+        }
+      }
+    })
+  });
+  host.register("first", {
+    mount(context) {
+      context.input.onAction("act", () => {});
+      throw new Error("mount failed");
+    }
+  });
+
+  assert.throws(() => host.mount("first"), /mount failed/);
+  assert.equal(handlers.size, 0);
+  assert.equal(gameRoot.hidden, true);
+  assert.equal(gameStyle.disabled, true);
+  assert.equal(host.activeGameId, null);
+});

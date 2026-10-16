@@ -1441,6 +1441,18 @@ io.on("connection", (socket) => {
       return;
     }
 
+    if (
+      found.role === "player" &&
+      room.activeGameId !== null &&
+      room.activeGamePlayerIds.has(socket.id)
+    ) {
+      respond({
+        success: false,
+        message: "Leave the active game before leaving the lobby."
+      });
+      return;
+    }
+
     removeMemberFromRoom(roomCode, room, socket.id, found.role);
     console.log(`${found.member.name} left lobby ${roomCode}`);
     respond({ success: true });

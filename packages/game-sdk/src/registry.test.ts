@@ -156,6 +156,30 @@ test("validates game keybind action ids and defaults", () => {
     () => validateGamePluginManifest(duplicateDefault),
     /assigns Space to multiple actions/
   );
+
+  for (const invalidKey of [
+    "space", "not a key!", "Tab", "F5", "ShiftLeft", "ControlRight"
+  ]) {
+    const invalidDefault = createManifest();
+    invalidDefault.definition.keybinds = [{
+      id: "act",
+      label: "Action",
+      defaultKey: invalidKey
+    }];
+    assert.throws(
+      () => validateGamePluginManifest(invalidDefault),
+      /invalid default keybind/,
+      `${invalidKey} should be rejected`
+    );
+  }
+
+  const escapeDefault = createManifest();
+  escapeDefault.definition.keybinds = [{
+    id: "cancel",
+    label: "Cancel",
+    defaultKey: "Escape"
+  }];
+  assert.doesNotThrow(() => validateGamePluginManifest(escapeDefault));
 });
 
 test("preview media must live inside the game's own public folder", () => {

@@ -21,6 +21,7 @@ function createClient({ prefersReducedMotion = false } = {}) {
   const gameClientContexts = [];
   let modalHideCount = 0;
   let modalShowCount = 0;
+  let toastShowCount = 0;
 
   global.window = dom.window;
   global.document = dom.window.document;
@@ -42,7 +43,7 @@ function createClient({ prefersReducedMotion = false } = {}) {
   window.GameHubRegisterGameClientModule =
     global.GameHubRegisterGameClientModule;
   global.bootstrap = {
-    Toast: { getOrCreateInstance: () => ({ show() {} }) },
+    Toast: { getOrCreateInstance: () => ({ show() { toastShowCount += 1; } }) },
     Modal: {
       getInstance: () => null,
       getOrCreateInstance: () => ({
@@ -112,7 +113,8 @@ function createClient({ prefersReducedMotion = false } = {}) {
     gameClientPlatformEvents,
     gameClientContexts,
     getModalHideCount: () => modalHideCount,
-    getModalShowCount: () => modalShowCount
+    getModalShowCount: () => modalShowCount,
+    getToastShowCount: () => toastShowCount
   };
 }
 
@@ -239,7 +241,7 @@ test("renders collapsible package keybinds and routes a rebound action", () => {
   assert.deepEqual(
     [...document.querySelectorAll(".game-keybind-section-body")]
       .map((body) => body.hidden),
-    [true, true]
+    [false, true]
   );
 
   handlers.get("room-resumed")({
@@ -300,7 +302,12 @@ test("marks both invalid keybinds while allowing overlap across games", () => {
 });
 
 test("marks both bindings after a same-game overlap is assigned", () => {
-  const { close, handlers, gameClientContexts } = createClient();
+  const {
+    close,
+    handlers,
+    gameClientContexts,
+    getToastShowCount
+  } = createClient();
   handlers.get("available-games")([game({
     keybinds: [
       { id: "first", label: "First", defaultKey: "KeyQ" },
@@ -340,11 +347,17 @@ test("marks both bindings after a same-game overlap is assigned", () => {
   gameClientContexts[0].input.onAction("second", () => {
     actionCount += 1;
   });
+  const toastCountBeforeKeypress = getToastShowCount();
+  document.dispatchEvent(new window.KeyboardEvent("keydown", {
+    code: "KeyQ",
+    bubbles: true
+  }));
   document.dispatchEvent(new window.KeyboardEvent("keydown", {
     code: "KeyQ",
     bubbles: true
   }));
   assert.equal(actionCount, 0);
+  assert.equal(getToastShowCount() - toastCountBeforeKeypress, 1);
   close();
 });
 
@@ -377,6 +390,109 @@ test("allows Escape to be assigned and marks its General conflict", () => {
       .map((button) => button.classList.contains("btn-outline-danger")),
     [true, true]
   );
+  close();
+});
+
+test("rejects reserved captures, offers cancel, and lets Backspace clear", () => {
+  const { close, handlers } = createClient();
+  handlers.get("available-games")([game({
+    keybinds: [
+      { id: "primary-action", label: "Primary action", defaultKey: "Space" }
+    ]
+  })]);
+
+  let gameSection = [...document.querySelectorAll(".game-keybind-section")]
+    .find((section) => /Example Game/.test(section.textContent));
+  gameSection.querySelector(".game-keybind-section-toggle").click();
+  let bindingButton = gameSection.querySelector(".game-keybind-button");
+  bindingButton.click();
+  assert.equal(gameSection.querySelector(".game-keybind-cancel").textContent, "Cancel");
+
+  for (const code of ["ShiftLeft", "Tab", "F5"]) {
+    document.dispatchEvent(new window.KeyboardEvent("keydown", {
+      code,
+      bubbles: true
+    }));
+    assert.equal(bindingButton.classList.contains("is-listening"), true);
+  }
+
+  document.dispatchEvent(new window.KeyboardEvent("keydown", {
+    code: "Backspace",
+    bubbles: true
+  }));
+  assert.equal(
+    JSON.parse(localStorage.getItem("gamehub:keybinds"))["example-game"]["primary-action"],
+    null
+  );
+  gameSection = [...document.querySelectorAll(".game-keybind-section")]
+    .find((section) => /Example Game/.test(section.textContent));
+  bindingButton = gameSection.querySelector(".game-keybind-button");
+  assert.equal(bindingButton.textContent, "Unbound");
+
+  bindingButton.click();
+  document.dispatchEvent(new window.KeyboardEvent("keydown", {
+    code: "Backquote",
+    bubbles: true
+  }));
+  assert.equal(
+    [...document.querySelectorAll(".game-keybind-section")]
+      .find((section) => /Example Game/.test(section.textContent))
+      .querySelector(".game-keybind-button").textContent,
+    "`"
+  );
+  close();
+});
+
+test("ignores modified gameplay shortcuts and rejects unknown action ids", () => {
+  const { close, handlers, gameClientContexts } = createClient();
+  handlers.get("available-games")([game({
+    keybinds: [
+      { id: "primary-action", label: "Primary action", defaultKey: "KeyR" }
+    ]
+  })]);
+  handlers.get("room-resumed")({
+    roomCode: "ABC123",
+    isHost: true,
+    isLocked: false,
+    selectedGameId: "example-game",
+    gameSettings: {},
+    activeGameId: "example-game",
+    isPaused: false,
+    chatEnabled: true
+  });
+
+  let actionCount = 0;
+  gameClientContexts[0].input.onAction("primary-action", () => {
+    actionCount += 1;
+  });
+  assert.throws(
+    () => gameClientContexts[0].input.onAction("typo-action", () => {}),
+    /Unknown keybind action/
+  );
+  for (const modifier of ["ctrlKey", "altKey", "metaKey"]) {
+    document.dispatchEvent(new window.KeyboardEvent("keydown", {
+      code: "KeyR",
+      [modifier]: true,
+      bubbles: true
+    }));
+  }
+  assert.equal(actionCount, 0);
+  document.dispatchEvent(new window.KeyboardEvent("keydown", {
+    code: "KeyR",
+    bubbles: true
+  }));
+  assert.equal(actionCount, 1);
+  close();
+});
+
+test("updates connection state when installed game markup has no ping elements", () => {
+  const { close, handlers } = createClient();
+  assert.equal(document.querySelector("#network-ping"), null);
+  assert.doesNotThrow(() => handlers.get("latency-update")({ rttMs: 12 }));
+  assert.doesNotThrow(() => handlers.get("disconnect")());
+  const connectionStatus = document.querySelector("#connection-status");
+  assert.equal(connectionStatus.textContent, "Disconnected from server");
+  assert.equal(connectionStatus.classList.contains("text-bg-danger"), true);
   close();
 });
 
