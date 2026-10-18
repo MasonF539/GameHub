@@ -1564,6 +1564,7 @@ socket.on("room-resumed", (room) => {
     mountGameClient({
       gameId: room.activeGameId,
       chatEnabled: room.chatEnabled,
+      chatHistory: room.chatHistory,
       settings: room.gameSettings,
       isPaused: room.isPaused
     });
@@ -1774,6 +1775,12 @@ function mountGameClient(game) {
   activeGameIsBusy = false;
   updateGameSettingsControls();
   gameClientHost.mount(game.gameId, game);
+  for (const message of game.chatHistory ?? []) {
+    gameClientHost.receivePlatformEvent({
+      type: "chat-message",
+      payload: { ...message, isHistory: true }
+    });
+  }
   gameClientHost.receivePlatformEvent({
     type: "spectators",
     payload: currentSpectators
@@ -2137,6 +2144,7 @@ joinRoomButton.addEventListener("click", () => {
           mountGameClient({
             gameId: response.activeGameId,
             chatEnabled: response.chatEnabled,
+            chatHistory: response.chatHistory,
             settings: response.gameSettings,
             isPaused: response.isPaused
           });

@@ -21,6 +21,195 @@ body {
   display: contents;
 }
 
+/* Menu dimensions respond continuously to both viewport axes. */
+body:has(:is(#entry-view, #lobby-view):not(.d-none)) {
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+body:has(:is(#entry-view, #lobby-view):not(.d-none)) > .hub-shell {
+  --menu-growth: clamp(0px, min(calc(1vw + 2px), calc(4dvh - 24px)), 10.4px);
+  --menu-padding: calc(0.85rem + var(--menu-growth));
+  --menu-gap: calc(0.5rem + var(--menu-growth) * 0.77);
+  --phone-gap-extra: clamp(0px, min(calc(3rem - 8.333vw), calc(6dvh - 30px)), 1rem);
+  display: flex;
+  width: 100%;
+  max-width: 84rem;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+  gap: calc(clamp(0.5rem, min(6.5vw, calc(8.5dvh - 39px)), 4.25rem) + var(--phone-gap-extra));
+  padding-inline: max(clamp(0.75rem, 1.5vw, 1.5rem), env(safe-area-inset-left))
+    max(clamp(0.75rem, 1.5vw, 1.5rem), env(safe-area-inset-right));
+  padding-block: max(clamp(0.5rem, min(4vw, calc(6dvh - 26px)), 3rem), env(safe-area-inset-top))
+    max(clamp(0.5rem, min(4vw, calc(6dvh - 26px)), 3rem), env(safe-area-inset-bottom));
+}
+
+.hub-header {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  align-items: center;
+  padding-inline: clamp(3rem, 8vw, 6rem);
+}
+
+.hub-header h1 {
+  margin-bottom: 0.15rem;
+  font-size: clamp(1.75rem, min(11vw, 5.5dvh), 4rem);
+}
+
+#entry-view,
+#lobby-view {
+  width: 100%;
+  flex: 0 1 auto;
+  min-height: 0;
+}
+
+#entry-view > .card-body,
+#lobby-view > .card-body {
+  padding: var(--menu-padding) !important;
+}
+
+#lobby-view > .card-body {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+}
+
+#lobby-view > .card-body > :not(#player-list) {
+  flex-shrink: 0;
+}
+
+#entry-view .card-title,
+#lobby-view .card-title {
+  font-size: clamp(1.4rem, min(calc(1rem + 2vw), 3.8dvh), 2rem);
+}
+
+#lobby-view .card-title {
+  text-align: center;
+}
+
+#lobby-view #close-lobby,
+#lobby-view #leave-lobby {
+  top: var(--menu-padding);
+  right: var(--menu-padding);
+}
+
+#entry-view .mb-3,
+#lobby-view .mb-3 {
+  margin-bottom: var(--menu-gap) !important;
+}
+
+#entry-view .mb-4,
+#lobby-view .mb-4 {
+  margin-bottom: calc(0.65rem + var(--menu-growth) * 1.3) !important;
+}
+
+#entry-view .room-actions {
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: clamp(0.5rem, 1.5vw, 1.5rem);
+  margin-top: calc(0.65rem + var(--menu-growth) * 1.3);
+}
+
+#entry-view .room-action {
+  min-width: 0;
+}
+
+#entry-view .room-action h3 {
+  font-size: clamp(0.9rem, 2vw, 1.25rem);
+}
+
+#entry-view .room-action-divider {
+  width: 1px;
+  height: auto;
+}
+
+#entry-view .avatar-preview {
+  width: calc(3.25rem + var(--menu-growth) * 2.69);
+  height: calc(3.25rem + var(--menu-growth) * 2.69);
+  font-size: calc(2rem + var(--menu-growth) * 1.54);
+}
+
+#entry-view .form-control-lg,
+#entry-view .btn-lg,
+#lobby-view .btn-lg {
+  padding-block: calc(0.4rem + var(--menu-growth) * 0.154);
+  font-size: calc(1rem + var(--menu-growth) * 0.385);
+}
+
+#entry-view .form-control-lg,
+#entry-view .btn-lg {
+  padding-inline: clamp(0.45rem, 2vw, 1rem);
+}
+
+#entry-view .btn-lg {
+  white-space: nowrap;
+}
+
+#lobby-view hr {
+  margin-block: calc(0.6rem + var(--menu-growth) * 0.615);
+}
+
+#lobby-view .selected-game-panel {
+  min-height: 0;
+  padding: calc(0.6rem + var(--menu-growth) * 0.615);
+  flex-direction: row;
+  align-items: center;
+  gap: var(--menu-gap);
+}
+
+#lobby-view .selected-game-panel > div {
+  min-width: 0;
+}
+
+#lobby-view #selected-game-name {
+  font-size: calc(1rem + var(--menu-growth) * 0.308);
+}
+
+#lobby-view #open-game-picker {
+  flex-shrink: 0;
+  max-width: 9rem;
+  font-size: calc(0.85rem + var(--menu-growth) * 0.23);
+}
+
+#lobby-view .room-code {
+  font-size: clamp(1.1rem, 3.2vw, 1.4rem);
+}
+
+#lobby-view #game-status {
+  margin-top: var(--menu-gap) !important;
+  font-size: calc(0.85rem + var(--menu-growth) * 0.23);
+}
+
+#player-list {
+  flex: 0 1 auto;
+  min-height: 3rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+@media (max-width: 575.98px) {
+  body > .app-utility-controls .app-settings-label { display: none; }
+  body > .app-utility-controls .app-settings-button {
+    width: var(--hub-toolbar-button-size);
+    padding-inline: 0;
+  }
+}
+
+@media (max-width: 575.98px) and (orientation: portrait) {
+  #entry-view .room-actions {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  #entry-view .room-action-divider {
+    width: 100%;
+    height: 1px;
+  }
+}
+
+
 /*
  * A game's markup is wrapped in a plugin root. The wrapper must not create a
  * layout box of its own: the game's panel sizes itself (height: 100%) against
@@ -102,6 +291,15 @@ body {
 }
 
 @media (max-width: 575.98px) {
+  #gameplay-view > .app-utility-controls .app-settings-label {
+    display: none;
+  }
+
+  #gameplay-view > .app-utility-controls .app-settings-button {
+    width: var(--hub-toolbar-button-size);
+    padding-inline: 0;
+  }
+
   :root {
     --hub-toolbar-button-size: 2rem;
     --hub-toolbar-clearance: 4rem;
@@ -952,6 +1150,60 @@ body {
     width: 100%;
     height: 1px;
   }
+}
+
+@media (max-height: 500px) and (min-width: 576px) {
+  #entry-view > .card-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-areas: "title title" "name avatar-label" "input avatar" "actions actions";
+    column-gap: 1rem;
+    align-items: center;
+  }
+
+  #entry-view .card-title { grid-area: title; }
+  #entry-view label[for="player-name"] { grid-area: name; }
+  #entry-view #player-name { grid-area: input; }
+  #entry-view .card-body > label:not([for]) { grid-area: avatar-label; }
+  #entry-view .avatar-picker { grid-area: avatar; }
+
+  #entry-view .room-actions {
+    grid-area: actions;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  }
+
+  #entry-view .room-action h3 { display: none; }
+  #entry-view .room-action-divider { width: 1px; height: auto; }
+
+  #lobby-view > .card-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-rows: repeat(6, auto) minmax(0, 1fr);
+    grid-template-areas:
+      "title title"
+      "code choose"
+      "lock selected"
+      "players selected"
+      "list actions"
+      "list start"
+      "list status";
+    column-gap: 1rem;
+    row-gap: 0.2rem;
+  }
+
+  #lobby-view .card-title { grid-area: title; }
+  #lobby-view .room-code-container { grid-area: code; }
+  #lobby-view .room-code { font-size: 1.05rem; letter-spacing: 0.08em; }
+  #lobby-view .lobby-lock-controls { grid-area: lock; margin-top: 0 !important; }
+  #lobby-view hr { display: none; }
+  #lobby-view .lobby-players-title { grid-area: players; }
+  #lobby-view #player-list { grid-area: list; height: 100%; margin-bottom: 0 !important; }
+  #lobby-view .lobby-game-title { grid-area: choose; }
+  #lobby-view .selected-game-panel { grid-area: selected; margin-bottom: 0 !important; }
+  #lobby-view .lobby-game-actions { grid-area: actions; margin-bottom: 0 !important; }
+  #lobby-view #start-game,
+  #lobby-view #spectate-game { grid-area: start; }
+  #lobby-view #game-status { grid-area: status; margin-top: 0 !important; }
 }
 
 /* Honors the user's operating-system motion preference. */

@@ -1,6 +1,14 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
+const { createRequire } = require("node:module");
 const { GameClientHost } = require("../public/gameHost.js");
+
+test("configured games share the hub SDK installation", () => {
+  for (const packageName of require("../gamehub.config.json").gamePackages) {
+    const gameRequire = createRequire(require.resolve(packageName));
+    assert.equal(gameRequire.resolve("@masonf539/game-sdk"), require.resolve("@masonf539/game-sdk"));
+  }
+});
 
 test("mounts one registered game client and routes only its envelopes", () => {
   const receivedStates = [];

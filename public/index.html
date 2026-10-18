@@ -20,8 +20,8 @@
     </button>
   </div>
 
-  <main class="container py-5">
-    <header class="text-center mb-5">
+  <main class="container hub-shell">
+    <header class="hub-header text-center">
       <h1 class="display-3 fw-bold">GameHub</h1>
 
       <p id="connection-status" class="server-connection-status text-bg-warning">
@@ -126,7 +126,7 @@
           </button>
         </div>
 
-        <div class="d-flex align-items-center justify-content-center gap-2 mt-2">
+        <div class="lobby-lock-controls d-flex align-items-center justify-content-center gap-2 mt-2">
           <span id="room-lock-status" class="badge text-bg-success">
             Lobby Open
           </span>
@@ -138,11 +138,11 @@
 
         <hr>
 
-        <h3 class="h5">Players</h3>
+        <h3 class="lobby-players-title h5">Players</h3>
 
-        <ul id="player-list" class="list-group mb-4"></ul>
+        <ul id="player-list" class="list-group mb-4" tabindex="0" aria-label="Players"></ul>
 
-        <h3 class="h5">Choose a game</h3>
+        <h3 class="lobby-game-title h5">Choose a game</h3>
 
         <div class="selected-game-panel mb-3">
           <div>
@@ -157,7 +157,7 @@
           </button>
         </div>
 
-        <div class="row g-2 mb-3">
+        <div class="lobby-game-actions row g-2 mb-3">
           <div class="col">
             <button id="how-to-play" class="btn btn-outline-info w-100" type="button" data-bs-toggle="modal"
               data-bs-target="#rules-modal" disabled>

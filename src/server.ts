@@ -28,7 +28,15 @@ type Player = {
   isConnected: boolean;
 };
 
+type ChatMessage = {
+  senderId: string;
+  senderName: string;
+  message: string;
+  sentAt: number;
+};
+
 type Room = {
+  chatHistory: ChatMessage[];
   hostId: string;
   players: Map<string, Player>;
   spectators: Map<string, Player>;
@@ -517,6 +525,7 @@ function sendRoomResumed(
     gameSettings: room.gameSettings,
     hasActiveGame: room.activeGameId !== null,
     activeGameId: canViewActiveGame ? room.activeGameId : null,
+    chatHistory: canViewActiveGame ? room.chatHistory : [],
     isPaused: room.gameSession?.getLifecycleState().isPaused ?? false,
     chatEnabled: canViewActiveGame
       ? getGameDefinition(room.activeGameId)?.chatEnabled ?? false
@@ -976,6 +985,7 @@ io.on("connection", (socket) => {
     const roomCode = generateRoomCode();
 
     const room: Room = {
+      chatHistory: [],
       hostId: socket.id,
       players: new Map(),
       spectators: new Map(),
@@ -1135,6 +1145,7 @@ io.on("connection", (socket) => {
       resumeToken,
       role,
       activeGameId: room.activeGameId,
+      chatHistory: room.chatHistory,
       gameSettings: room.gameSettings,
       isPaused: room.gameSession?.getLifecycleState().isPaused ?? false,
       chatEnabled:
@@ -1554,6 +1565,7 @@ io.on("connection", (socket) => {
     const game = getGameDefinition(room.activeGameId);
     respond({ success: true, role: "spectator" });
     socket.emit("game-started", {
+      chatHistory: room.chatHistory,
       gameId: room.activeGameId,
       name: game?.name ?? "Game",
       chatEnabled: game?.chatEnabled ?? false,
@@ -1718,6 +1730,7 @@ io.on("connection", (socket) => {
     }
 
     emitToActiveGameViewers(room, "game-started", {
+      chatHistory: room.chatHistory,
       gameId: game.id,
       name: game.name,
       chatEnabled: game.chatEnabled,
@@ -1893,12 +1906,15 @@ io.on("connection", (socket) => {
     }
 
     socket.data.lastGameChatAt = now;
-    io.to(roomCode).emit("game-chat-message", {
+    const chatMessage: ChatMessage = {
       senderId: roomMember.member.id,
       senderName: roomMember.member.name,
       message,
       sentAt: now
-    });
+    };
+    room.chatHistory.push(chatMessage);
+    if (room.chatHistory.length > 50) room.chatHistory.shift();
+    emitToActiveGameViewers(room, "game-chat-message", chatMessage);
     respond({ success: true });
   });
 

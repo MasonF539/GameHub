@@ -36,7 +36,8 @@ The manifest API and package version are separate. `apiVersion` describes compat
 
 The SDK is part of the GameHub platform, not a game plugin. The `packages/`
 directory holds reusable platform packages. Playable games live in independent
-repositories and consume exact SDK versions from the public npm registry.
+repositories and declare a compatible SDK range as a peer dependency, so the
+host and its games share the platform's SDK installation.
 GameHub likewise installs exact game-package versions for reproducible builds.
 
 ## Current package boundary

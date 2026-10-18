@@ -5,7 +5,7 @@ const path = require("node:path");
 const { JSDOM } = require("jsdom");
 const { GameClientHost } = require("../public/gameHost.js");
 
-function createClient({ prefersReducedMotion = false } = {}) {
+function createClient({ prefersReducedMotion = false, mobile = false, fullscreenRequest } = {}) {
   const html = fs.readFileSync(
     path.join(__dirname, "..", "public", "index.html"),
     "utf8"
@@ -30,7 +30,8 @@ function createClient({ prefersReducedMotion = false } = {}) {
   if (!global.CSS.escape) {
     global.CSS.escape = (value) => String(value);
   }
-  window.matchMedia = () => ({ matches: prefersReducedMotion });
+  window.matchMedia = (query) => ({ matches: query.includes("prefers-reduced-motion") ? prefersReducedMotion : mobile });
+  if (fullscreenRequest) document.documentElement.requestFullscreen = fullscreenRequest;
   window.GameHubAudio = {
     playEffect(effectName) {
       playedEffects.push(effectName);
@@ -117,6 +118,52 @@ function createClient({ prefersReducedMotion = false } = {}) {
     getToastShowCount: () => toastShowCount
   };
 }
+
+test("mobile room actions stay windowed until fullscreen is explicitly selected", async () => {
+  let requests = 0;
+  const view = createClient({ mobile: true, fullscreenRequest() {
+    requests += 1;
+    assert.equal(this, document.documentElement);
+    return Promise.resolve();
+  } });
+  try {
+    assert.equal(requests, 0);
+    document.querySelector("#create-room").click();
+    assert.equal(requests, 0);
+    view.emitted.find((event) => event.event === "create-room").respond({ success: false });
+    document.querySelector("#join-room").click();
+    assert.equal(requests, 0);
+    document.querySelector("#app-game-fullscreen-toggle").click();
+    assert.equal(requests, 1);
+    await Promise.resolve();
+  } finally { view.close(); }
+});
+
+test("manual fullscreen denial reports the error without interrupting room actions", async () => {
+  for (const fail of [() => Promise.reject(new Error("Denied")), () => { throw new Error("Unsupported"); }]) {
+    const view = createClient({ mobile: true, fullscreenRequest: fail });
+    try {
+      document.querySelector("#app-game-fullscreen-toggle").click();
+      document.querySelector("#join-room").click();
+      assert.equal(view.emitted.some((event) => event.event === "join-room"), true);
+      await Promise.resolve();
+      await Promise.resolve();
+      assert.equal(view.getToastShowCount(), 1);
+    } finally { view.close(); }
+  }
+});
+
+test("desktop and mobile enter fullscreen only through the Settings control", () => {
+  for (const mobile of [false, true]) {
+    let requests = 0;
+    const view = createClient({ mobile, fullscreenRequest() { requests += 1; return Promise.resolve(); } });
+    try {
+      if (mobile) document.querySelector("#app-game-fullscreen-toggle").click();
+      document.querySelector("#create-room").click();
+      assert.equal(requests, mobile ? 1 : 0);
+    } finally { view.close(); }
+  }
+});
 
 function game(overrides = {}) {
   return {
@@ -804,6 +851,24 @@ test("a spectator can leave the board through the spectator confirmation", () =>
   assert.equal(document.querySelector("#lobby-view").classList.contains("d-none"), false);
   assert.equal(document.querySelector("#spectate-game").disabled, false);
   close();
+});
+
+test("chat history is replayed after mount and live messages follow it", () => {
+  const { close, handlers, gameClientPlatformEvents } = createClient();
+  const message = { senderId: "guest", senderName: "Guest", message: "Earlier", sentAt: 1 };
+  try {
+    handlers.get("room-resumed")({
+      roomCode: "ABC123", isHost: false, role: "player", isLocked: false,
+      selectedGameId: "example-game", gameSettings: {}, hasActiveGame: true,
+      activeGameId: "example-game", isPaused: false, chatEnabled: true,
+      chatHistory: [message]
+    });
+    handlers.get("game-chat-message")({ ...message, message: "Live", sentAt: 2 });
+    assert.deepEqual(gameClientPlatformEvents.filter((event) => event.type === "chat-message"), [
+      { type: "chat-message", payload: { ...message, isHistory: true } },
+      { type: "chat-message", payload: { ...message, message: "Live", sentAt: 2 } }
+    ]);
+  } finally { close(); }
 });
 
 test("a spectator list received before mounting is delivered to the game", () => {

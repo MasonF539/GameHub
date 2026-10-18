@@ -1,5 +1,7 @@
 # GameHub
 
+Current stable version: **1.1.0**. Egyptian War is pinned to **1.0.1-beta.5**.
+
 GameHub is a self-hosted, real-time browser game platform. A host creates a room, players join from their browsers, and the host chooses which game to start.
 
 The server runs locally in Docker and can optionally use a temporary Cloudflare Tunnel so players outside the host's Wi-Fi can connect.
@@ -33,6 +35,15 @@ The server runs locally in Docker and can optionally use a temporary Cloudflare 
 - A responsive tabbed GameHub Settings panel with reusable Game actions for full screen, pausing, and exiting; persistent independent audio controls; and locally saved keybinds grouped into collapsible General and per-game package sections with visible conflict warnings, safe browser-shortcut handling, and Backspace-to-clear rebinding
 
 Game events and game-specific sounds are sent only to people currently viewing the active board. A lobby member therefore cannot hear a delayed game-win effect. When a game ends, people already waiting in the lobby hear a separate GameHub completion chime; returning participants are not mistaken for new joins and do not trigger the player-join sound.
+
+Room chat keeps the latest 50 messages in server memory and restores them when
+joining, reconnecting, or returning as a spectator. History lasts until the room
+closes or the server restarts. Chat size, minimized state, and slap-rule visibility
+are saved locally in the browser; phones default to minimized chat and collapsed
+rules when there are no saved preferences.
+
+Browser fullscreen is available through Settings where supported and is enabled
+only when you choose it.
 
 GameHub's replaceable platform sound files live in `public/assets/audio`. The lobby completion alert is `public/assets/audio/effects/game-finished.mp3`.
 
@@ -198,6 +209,9 @@ GameHub/
 - PowerShell
 
 ## Development dependencies
+
+`npm ci` installs the pinned game release directly. Egyptian War declares the SDK
+as a compatible peer dependency so it shares the hub's SDK installation.
 
 Dependencies are installed inside Docker when GameHub builds.
 

@@ -58,14 +58,21 @@ const gamePackageSpecs = gamePackageNames.map((packageName) => {
 });
 
 function runNpm(arguments_, workingDirectory = workspaceRoot) {
-  const result = spawnSync(npmCommand, arguments_, {
-    cwd: workingDirectory,
-    encoding: "utf8",
-    shell: false
-  });
+  // npm.cmd cannot be spawned directly without a shell on Windows. Reuse the
+  // invoking npm CLI through Node, preserving paths and arguments literally.
+  const npmCliPath = process.env.npm_execpath;
+  const result = spawnSync(
+    npmCliPath ? process.execPath : npmCommand,
+    npmCliPath ? [npmCliPath, ...arguments_] : arguments_,
+    {
+      cwd: workingDirectory,
+      encoding: "utf8",
+      shell: false
+    }
+  );
   if (result.status !== 0) {
     throw new Error(
-      `npm ${arguments_.join(" ")} failed.\n${result.stdout}\n${result.stderr}`
+      `npm ${arguments_.join(" ")} failed.\n${result.error?.message ?? ""}\n${result.stdout ?? ""}\n${result.stderr ?? ""}`
     );
   }
   return result.stdout;

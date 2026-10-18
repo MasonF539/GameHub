@@ -1,5 +1,6 @@
 # Packages are installed inside the Docker image.
 node_modules
+.work
 
 # TypeScript creates these folders during the Docker build.
 dist

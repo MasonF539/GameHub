@@ -10,6 +10,7 @@ type Ack = {
   roomCode?: string;
   resumeToken?: string;
   role?: "player" | "spectator";
+  chatHistory?: Array<{ senderName: string; message: string; sentAt: number }>;
 };
 
 type FixtureState = {
@@ -365,6 +366,62 @@ test(
 
 const catAvatar = "\u{1F431}";
 const dogAvatar = "\u{1F436}";
+
+test("room chat restores only the last 50 messages on join, resume, and spectate", { timeout: 30_000 }, async () => {
+  const { server, url } = await startServer();
+  const clients: Socket[] = [];
+  try {
+    const host = await connect(url);
+    clients.push(host);
+    const created = await emitAck(host, "create-room", { playerName: "Host", avatar: catAvatar });
+    const roomCode = created.roomCode!;
+    const guest = await connect(url);
+    clients.push(guest);
+    assert.equal((await emitAck(guest, "join-room", { roomCode, playerName: "Guest", avatar: dogAvatar })).success, true);
+    assert.equal((await emitAck(host, "select-game", { roomCode, gameId: fixtureGameId })).success, true);
+    assert.equal((await emitAck(host, "start-game", { roomCode })).success, true);
+    for (let index = 0; index < 8; index += 1) {
+      const sender = await connect(url);
+      clients.push(sender);
+      assert.equal((await emitAck(sender, "join-room", { roomCode, playerName: `Sender ${index}`, avatar: catAvatar })).success, true);
+    }
+    for (let batch = 0; batch < 6; batch += 1) {
+      if (batch > 0) await new Promise((resolve) => setTimeout(resolve, 800));
+      for (const [index, sender] of clients.entries()) {
+        assert.equal((await emitAck(sender, "game-chat-send", { roomCode, message: `${batch}-${index}` })).success, true);
+      }
+    }
+    const viewer = await connect(url);
+    clients.push(viewer);
+    const joined = await emitAck(viewer, "join-room", { roomCode, playerName: "Viewer", avatar: catAvatar });
+    assert.equal(joined.chatHistory?.length, 50);
+    assert.equal(joined.chatHistory[0]?.message, "1-0");
+    assert.equal(joined.chatHistory[49]?.message, "5-9");
+    const disconnected = waitForEvent<Array<{ name: string; isConnected: boolean }>>(host, "spectator-list",
+      (members) => members.some((member) => member.name === "Viewer" && !member.isConnected));
+    viewer.disconnect();
+    await disconnected;
+    const resumed = await connect(url);
+    clients.push(resumed);
+    const snapshot = waitForEvent<{ chatHistory: Ack["chatHistory"] }>(resumed, "room-resumed");
+    assert.equal((await emitAck(resumed, "resume-room", { resumeToken: joined.resumeToken })).success, true);
+    assert.deepEqual((await snapshot).chatHistory, joined.chatHistory);
+    assert.equal((await emitAck(guest, "leave-game", { roomCode })).success, true);
+    const spectating = waitForEvent<{ chatHistory: Ack["chatHistory"] }>(guest, "game-started");
+    assert.equal((await emitAck(guest, "spectate-game", { roomCode })).success, true);
+    assert.deepEqual((await spectating).chatHistory, joined.chatHistory);
+
+    const outsider = await connect(url);
+    clients.push(outsider);
+    const separate = await emitAck(outsider, "create-room", { playerName: "Other host", avatar: catAvatar });
+    const ownSnapshot = waitForEvent<{ chatHistory: unknown[] }>(outsider, "room-resumed");
+    assert.equal((await emitAck(outsider, "resume-room", { resumeToken: separate.resumeToken })).success, true);
+    assert.deepEqual((await ownSnapshot).chatHistory, []);
+  } finally {
+    clients.forEach((client) => client.disconnect());
+    await stopServer(server);
+  }
+});
 
 test("responses carry security headers and hide the framework", async () => {
   const { server, url } = await startServer();
