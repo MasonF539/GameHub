@@ -106,10 +106,10 @@ normal player-join notification detection.
 
 `packages/game-sdk` stays in GameHub because it is the platform-owned contract
 used by every game, not a playable game itself. Egyptian War and future game
-repositories consume an exact SDK version published to the public npm registry
-instead of copying its source.
+repositories declare a compatible SDK peer range published to the public npm
+registry, sharing the host's installation instead of copying its source.
 
 Egyptian War is intentionally a GameHub plugin rather than a standalone web
-application. Its independent repository will contain the game implementation
+application. Its independent repository contains the game implementation
 and assets, while GameHub will continue to supply the page shell, lobby,
 rooms, networking, shared settings, and browser host.

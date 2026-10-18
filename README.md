@@ -1,10 +1,15 @@
 # GameHub
 
-Current stable version: **1.1.0**. Egyptian War is pinned to **1.0.1-beta.5**.
+First official GameHub release: **1.0.0**. Egyptian War is pinned to **1.0.1-beta.5**.
 
 GameHub is a self-hosted, real-time browser game platform. A host creates a room, players join from their browsers, and the host chooses which game to start.
 
 The server runs locally in Docker and can optionally use a temporary Cloudflare Tunnel so players outside the host's Wi-Fi can connect.
+
+GameHub's application version identifies the complete project distributed through
+GitHub and built with Docker. The application does not require an npm publication.
+The shared SDK and game plugins are published to npm and versioned independently;
+their versions do not need to match the GameHub application version.
 
 ## Current features
 

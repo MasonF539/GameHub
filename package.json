@@ -1,6 +1,6 @@
 {
   "name": "gamehub",
-  "version": "1.1.0",
+  "version": "1.0.0",
   "description": "A self-hosted real-time browser game platform.",
   "main": "dist/server.js",
   "workspaces": [

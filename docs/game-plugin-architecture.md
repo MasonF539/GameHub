@@ -1,6 +1,6 @@
 # Game Plugin Architecture
 
-GameHub is being separated into a reusable platform and independently versioned game packages. GameHub remains responsible for rooms, members, spectators, reconnects, transport, the lobby, the game picker, personal settings, and the page shell. A game package owns its rules, authoritative state, browser presentation, game-specific assets, and tests.
+GameHub separates the reusable platform from independently versioned game packages. GameHub is responsible for rooms, members, spectators, reconnects, transport, the lobby, the game picker, personal settings, and the page shell. A game package owns its rules, authoritative state, browser presentation, game-specific assets, and tests.
 
 ## Target installation model
 
@@ -21,6 +21,12 @@ that exist only in a development checkout.
 Game packages execute trusted server code. They are not a sandbox for packages supplied by room hosts or browser clients.
 
 ## Versioned contracts
+
+GameHub **1.0.0** is the first official application release, distributed through
+GitHub and built with Docker. Its version is independent of the npm package
+versions: this release uses `@masonf539/game-sdk@1.0.1` and
+`@masonf539/egyptian-war@1.0.1-beta.5`. Updating the application version does not
+require republishing either npm package unless that package itself changes.
 
 The independently buildable `@masonf539/game-sdk` workspace under
 `packages/game-sdk` contains the initial GameHub game API:
