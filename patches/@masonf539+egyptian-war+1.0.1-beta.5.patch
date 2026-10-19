@@ -1,0 +1,201 @@
+diff --git a/node_modules/@masonf539/egyptian-war/public/client.js b/node_modules/@masonf539/egyptian-war/public/client.js
+index a15141f..683af51 100644
+--- a/node_modules/@masonf539/egyptian-war/public/client.js
++++ b/node_modules/@masonf539/egyptian-war/public/client.js
+@@ -974,8 +974,15 @@ function renderEgyptianWarState(state) {
+       animation?.winnerId === player.id &&
+       !isWaitingForSlapWinnerReveal
+     );
+-    seat.style.left = `${50 + Math.cos(angle) * 40}%`;
+-    seat.style.top = `${50 + Math.sin(angle) * 37}%`;
++    const directionX = Math.cos(angle);
++    const directionY = Math.sin(angle);
++    // Project the same clockwise player order onto straight rectangular rails.
++    // Both positions are available to CSS, so resizing needs no state update.
++    const rectangleScale = Math.max(Math.abs(directionX), Math.abs(directionY));
++    seat.style.setProperty("--oval-seat-x", `${50 + directionX * 40}%`);
++    seat.style.setProperty("--oval-seat-y", `${50 + directionY * 37}%`);
++    seat.style.setProperty("--rectangle-seat-x", `${50 + directionX / rectangleScale * 32}%`);
++    seat.style.setProperty("--rectangle-seat-y", `${49 + directionY / rectangleScale * 41}%`);
+ 
+     const avatar = document.createElement("span");
+     avatar.className = "player-avatar";
+diff --git a/node_modules/@masonf539/egyptian-war/public/style.css b/node_modules/@masonf539/egyptian-war/public/style.css
+index 4cd7850..0f8fb33 100644
+--- a/node_modules/@masonf539/egyptian-war/public/style.css
++++ b/node_modules/@masonf539/egyptian-war/public/style.css
+@@ -160,6 +160,8 @@ body:has([data-game-plugin-root="egyptian-war"]:not([hidden])) #gameplay-view {
+ .egyptian-war-game-panel>.card-title {
+   padding-inline: 3rem;
+   flex: 0 0 auto;
++  /* Reserve one stable toolbar row for both table shapes and all widths. */
++  margin-top: 2.75rem;
+   margin-bottom: clamp(0.2rem, 0.8vh, 0.75rem);
+   font-size: clamp(1.2rem, 2.5vh, 2rem);
+ }
+@@ -285,6 +287,7 @@ body:has([data-game-plugin-root="egyptian-war"]:not([hidden])) #gameplay-view {
+ }
+ 
+ .egyptian-war-arena {
++  container: egyptian-war-board / size;
+   position: relative;
+   width: 100%;
+   min-height: 0;
+@@ -309,7 +312,7 @@ body:has([data-game-plugin-root="egyptian-war"]:not([hidden])) #gameplay-view {
+ 
+ .egyptian-war-felt {
+   position: absolute;
+-  inset: 5% 16% 12%;
++  inset: 7% clamp(3cqw, calc(50cqw - 350px), 16cqw) 12%;
+   display: grid;
+   place-items: center;
+   overflow: hidden;
+@@ -320,6 +323,7 @@ body:has([data-game-plugin-root="egyptian-war"]:not([hidden])) #gameplay-view {
+     linear-gradient(155deg, #2a8559 0%, #1b6a46 60%, #105136 100%);
+   border: 0.8rem solid #58351f;
+   border-radius: 50%;
++  transition: inset 220ms ease, border-radius 220ms ease, border-width 220ms ease;
+   box-shadow:
+     inset 0 0 0 0.28rem #c39150,
+     inset 0 0 0 0.52rem #2a1a11,
+@@ -340,6 +344,7 @@ body:has([data-game-plugin-root="egyptian-war"]:not([hidden])) #gameplay-view {
+   content: "";
+   border: 1px solid rgba(246, 211, 145, 0.32);
+   border-radius: 50%;
++  transition: inset 220ms ease, border-radius 220ms ease;
+   box-shadow:
+     inset 0 0.2rem 0.45rem rgba(255, 255, 255, 0.08),
+     inset 0 -0.75rem 1.3rem rgba(0, 0, 0, 0.2);
+@@ -356,6 +361,7 @@ body:has([data-game-plugin-root="egyptian-war"]:not([hidden])) #gameplay-view {
+     radial-gradient(circle at 68% 72%, rgba(0, 0, 0, 0.055) 0 1px, transparent 1.5px);
+   background-size: 9px 9px, 11px 11px;
+   border-radius: 50%;
++  transition: inset 220ms ease, border-radius 220ms ease;
+   opacity: 0.55;
+   pointer-events: none;
+ }
+@@ -630,6 +636,8 @@ body:has([data-game-plugin-root="egyptian-war"]:not([hidden])) #gameplay-view {
+ 
+ .egyptian-war-seat {
+   position: absolute;
++  left: var(--oval-seat-x);
++  top: var(--oval-seat-y);
+   display: flex;
+   width: clamp(8rem, 18vw, 10.5rem);
+   align-items: center;
+@@ -642,6 +650,9 @@ body:has([data-game-plugin-root="egyptian-war"]:not([hidden])) #gameplay-view {
+   box-shadow: 0 0.45rem 1rem rgba(0, 0, 0, 0.42);
+   transform: translate(-50%, -50%);
+   transition:
++    left 220ms ease,
++    top 220ms ease,
++    width 220ms ease,
+     border-color 150ms ease,
+     box-shadow 150ms ease,
+     opacity 150ms ease;
+@@ -1397,12 +1408,6 @@ body:has([data-game-plugin-root="egyptian-war"]:not([hidden])) #gameplay-view {
+     min-height: 0;
+   }
+ 
+-  .egyptian-war-felt {
+-    inset: 7% 3% 14%;
+-    border-width: 0.5rem;
+-    border-radius: 50%;
+-  }
+-
+   .egyptian-war-table-info {
+     width: 76%;
+     padding: 0.35rem;
+@@ -1455,12 +1460,6 @@ body:has([data-game-plugin-root="egyptian-war"]:not([hidden])) #gameplay-view {
+   }
+ }
+ 
+-@media (max-width: 575.98px) {
+-  .egyptian-war-game-panel > .card-title {
+-    margin-top: calc(var(--hub-toolbar-button-size, 2rem) + 0.5rem);
+-  }
+-}
+-
+ @media (max-width: 479.98px) {
+   .egyptian-war-side-panel {
+     width: min(20rem, 52vw);
+@@ -1494,8 +1493,66 @@ body:has([data-game-plugin-root="egyptian-war"]:not([hidden])) #gameplay-view {
+   }
+ }
+ 
+-@media (prefers-reduced-motion: reduce) {
++/* The board area excludes the turn label, timer, and action buttons. */
++@container egyptian-war-board (aspect-ratio < 1) {
++  .egyptian-war-felt {
++    inset: 8% 10% 10%;
++    border-width: clamp(0.45rem, 1.8cqw, 0.8rem);
++    border-radius: clamp(1.1rem, 5cqw, 2rem);
++    background:
++      linear-gradient(90deg, rgba(0, 0, 0, 0.14), transparent 18% 82%, rgba(0, 0, 0, 0.14)),
++      repeating-linear-gradient(22deg, rgba(255, 255, 255, 0.012) 0 2px, rgba(0, 0, 0, 0.012) 2px 4px),
++      radial-gradient(ellipse at 50% 35%, #3d9965, #21794f 62%, #145438);
++  }
++
++  .egyptian-war-felt::before {
++    inset: 0.4rem;
++    border-radius: clamp(0.55rem, 2.5cqw, 1.25rem);
++  }
++
++  .egyptian-war-felt::after {
++    inset: 0.8rem;
++    border-radius: clamp(0.35rem, 1.5cqw, 0.9rem);
++  }
++
++  .egyptian-war-table-info {
++    width: 52%;
++    padding-inline: 0.35rem;
++  }
++
++  .egyptian-war-felt .egyptian-war-pile-stack {
++    height: clamp(7.75rem, 32cqh, 13rem);
++  }
++
++  .egyptian-war-challenge:empty {
++    display: none;
++  }
++
++  .egyptian-war-pile-label,
++  .egyptian-war-challenge,
++  .egyptian-war-message {
++    font-size: clamp(0.72rem, min(4cqw, 3.5cqh), 0.95rem);
++    line-height: 1.3;
++  }
++
+   .egyptian-war-seat {
++    left: var(--rectangle-seat-x);
++    top: var(--rectangle-seat-y);
++    width: clamp(5rem, 28cqw, 10.5rem);
++  }
++
++  .egyptian-war-seat .player-avatar {
++    width: clamp(1.5rem, 8cqw, 3rem);
++    height: clamp(1.5rem, 8cqw, 3rem);
++    flex-basis: clamp(1.5rem, 8cqw, 3rem);
++  }
++}
++
++@media (prefers-reduced-motion: reduce) {
++  .egyptian-war-seat,
++  .egyptian-war-felt,
++  .egyptian-war-felt::before,
++  .egyptian-war-felt::after {
+     transition: none;
+   }
+ 
+@@ -1519,11 +1576,6 @@ body:has([data-game-plugin-root="egyptian-war"]:not([hidden])) #gameplay-view {
+ }
+ 
+ @media (max-height: 650px) {
+-  .egyptian-war-game-panel>.card-title {
+-    margin: 0;
+-    font-size: 1rem;
+-  }
+-
+   .egyptian-war-side-panel {
+     height: min(10rem, 24vh);
+   }

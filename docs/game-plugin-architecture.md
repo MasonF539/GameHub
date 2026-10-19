@@ -11,6 +11,12 @@ Installation requires adding the dependency and its package name to the
 configured list. The package lock and Docker build then select an exact,
 reproducible version.
 
+While testing unpublished changes to an installed game, the branch tracks a
+version-specific patch in `patches/`. The install hook applies it to the npm
+package, including in Docker, so normal build/start commands run the changes.
+The independent game repository remains the source for the next package release.
+Remove the patch once the dependency is updated to a release containing the fix.
+
 The Docker build runs `npm run verify:packages` after the test suite. That
 check packs the local SDK, reads every enabled game from `gamehub.config.json`,
 downloads each exact version declared in the root dependencies, installs all

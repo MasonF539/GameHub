@@ -4,6 +4,7 @@ WORKDIR /app
 
 COPY package.json package-lock.json ./
 COPY packages/game-sdk/package.json ./packages/game-sdk/package.json
+COPY patches ./patches
 RUN npm ci
 
 COPY tsconfig.json tsconfig.test.json ./
@@ -26,6 +27,7 @@ ENV NODE_ENV=production
 
 COPY package.json package-lock.json ./
 COPY packages/game-sdk/package.json ./packages/game-sdk/package.json
+COPY patches ./patches
 RUN npm ci --omit=dev
 
 COPY --from=build /app/dist ./dist
