@@ -2,6 +2,7 @@ import express from "express";
 import { randomBytes, randomInt } from "node:crypto";
 import { readFileSync } from "node:fs";
 import http from "http";
+import { tmpdir } from "node:os";
 import path from "path";
 import { Server, type Socket } from "socket.io";
 import {
@@ -36,6 +37,10 @@ type ChatMessage = {
 };
 
 type Room = {
+  requiresJoinApproval: boolean;
+  pendingJoinRequests: Map<string, {
+    name: string; avatar: string; timer: ReturnType<typeof setTimeout>; accept: (respond: SocketResponse) => void;
+  }>;
   chatHistory: ChatMessage[];
   hostId: string;
   players: Map<string, Player>;
@@ -241,6 +246,7 @@ const deterministicTestRandomInteger =
 const maxLobbyPlayers = 12;
 const rooms = new Map<string, Room>();
 const socketRoomCodes = new Map<string, string>();
+const pendingJoinRoomCodes = new Map<string, string>();
 const disconnectedPlayerTimers =
   new Map<string, ReturnType<typeof setTimeout>>();
 const playerResumeTokens = new Map<
@@ -538,8 +544,16 @@ function sendRoomResumed(
 }
 
 // Lock state, selected game and member lists: what a (re)joining browser needs.
+function sendJoinRequests(room: Room): void {
+  io.to(room.hostId).emit("join-requests", [...room.pendingJoinRequests].map(([id, request]) => ({
+    id, name: request.name, avatar: request.avatar
+  })));
+}
+
 function sendLobbyState(socket: Socket, roomCode: string, room: Room): void {
   socket.emit("room-lock-changed", { isLocked: room.isLocked });
+  socket.emit("room-approval-changed", { requiresJoinApproval: room.requiresJoinApproval });
+  sendJoinRequests(room);
 
   if (room.selectedGameId !== null) {
     socket.emit("game-selected", {
@@ -566,7 +580,24 @@ function sendRoomSnapshot(
   sendLobbyState(socket, roomCode, room);
 }
 
+function removeJoinRequest(id: string) {
+  const roomCode = pendingJoinRoomCodes.get(id);
+  const room = roomCode ? rooms.get(roomCode) : undefined;
+  const request = room?.pendingJoinRequests.get(id);
+  pendingJoinRoomCodes.delete(id);
+  if (request && room) {
+    clearTimeout(request.timer);
+    room.pendingJoinRequests.delete(id);
+    sendJoinRequests(room);
+  }
+  return request;
+}
+
 function closeRoom(roomCode: string, room: Room, logMessage: string): void {
+  for (const id of room.pendingJoinRequests.keys()) {
+    removeJoinRequest(id);
+    io.to(id).emit("join-request-result", { success: false, message: "That room closed." });
+  }
   disposeGameSession(room);
   io.to(roomCode).emit("room-closed");
 
@@ -799,9 +830,26 @@ function finishActiveGame(
   }
 }
 
+function getPublicInviteUrl(): string | null {
+  let publicUrl = process.env.GAMEHUB_PUBLIC_URL?.trim() ?? "";
+  if (!publicUrl) {
+    try {
+      publicUrl = readFileSync(path.join(tmpdir(), "gamehub-public-url"), "utf8").trim();
+    } catch { /* Local mode has no tunnel address. */ }
+  }
+  try {
+    const invite = new URL(publicUrl);
+    if (!/^https?:$/.test(invite.protocol) || invite.username || invite.password) return null;
+    invite.search = "";
+    invite.hash = "";
+    return invite.href;
+  } catch { return null; }
+}
+
 io.on("connection", (socket) => {
   monitorSocketLatency(socket);
   console.log(`Browser connected: ${socket.id}`);
+  socket.emit("public-invite-url", getPublicInviteUrl());
   socket.emit("available-games", availableGames);
 
   if (socket.recovered) {
@@ -906,6 +954,7 @@ io.on("connection", (socket) => {
     member.isConnected = true;
     memberMap.set(socket.id, member);
     socketRoomCodes.delete(oldPlayerId);
+    removeJoinRequest(socket.id);
     socketRoomCodes.set(socket.id, session.roomCode);
 
     if (role === "player" && room.hostId === oldPlayerId) {
@@ -985,6 +1034,8 @@ io.on("connection", (socket) => {
     const roomCode = generateRoomCode();
 
     const room: Room = {
+      requiresJoinApproval: false,
+      pendingJoinRequests: new Map(),
       chatHistory: [],
       hostId: socket.id,
       players: new Map(),
@@ -1005,6 +1056,7 @@ io.on("connection", (socket) => {
     });
 
     rooms.set(roomCode, room);
+    removeJoinRequest(socket.id);
     socketRoomCodes.set(socket.id, roomCode);
     socket.join(roomCode);
 
@@ -1024,7 +1076,8 @@ io.on("connection", (socket) => {
     });
   });
 
-  onSocketRequest(socket, "join-room", (data, respond) => {
+  function joinRoom(data: any, respond: SocketResponse, approved = false): void {
+    if (!socket.connected) { respond({ success: false, message: "That player disconnected." }); return; }
     if (socketRoomCodes.has(socket.id)) {
       respond({
         success: false,
@@ -1111,6 +1164,33 @@ io.on("connection", (socket) => {
     const role = room.activeGameId === null
       ? "player"
       : "spectator";
+    if (room.requiresJoinApproval && !approved) {
+      if (room.pendingJoinRequests.has(socket.id)) {
+        respond({ success: true, pendingApproval: true });
+        return;
+      }
+      if (room.pendingJoinRequests.size >= maxLobbyPlayers ||
+          pendingJoinRoomCodes.has(socket.id)) {
+        respond({ success: false, message: "A join request is already pending, or the waiting list is full." });
+        return;
+      }
+      const timer = setTimeout(() => {
+        removeJoinRequest(socket.id);
+        socket.emit("join-request-result", { success: false, message: "Your join request expired. Try again." });
+      }, 60_000);
+      room.pendingJoinRequests.set(socket.id, {
+        name: playerName, avatar, timer,
+        accept: (respond) => joinRoom(data, (response) => {
+          socket.emit("join-request-result", response);
+          const result = response as { success: boolean; message?: string };
+          respond({ success: result.success, ...(result.message ? { message: result.message } : {}) });
+        }, true)
+      });
+      pendingJoinRoomCodes.set(socket.id, roomCode);
+      sendJoinRequests(room);
+      respond({ success: true, pendingApproval: true });
+      return;
+    }
     const roomMember = {
       id: socket.id,
       name: playerName,
@@ -1126,6 +1206,7 @@ io.on("connection", (socket) => {
 
     // Failures are deliberately not cleared on success: otherwise a guesser
     // could reset their own counter by joining a room they created.
+    removeJoinRequest(socket.id);
     socketRoomCodes.set(socket.id, roomCode);
     socket.join(roomCode);
     sendLobbyState(socket, roomCode, room);
@@ -1154,6 +1235,43 @@ io.on("connection", (socket) => {
 
     if (role === "spectator" && room.activeGameId !== null) {
       sendActiveGameState(roomCode, room, socket);
+    }
+  }
+  onSocketRequest(socket, "join-room", joinRoom);
+
+
+  onSocketRequest(socket, "cancel-join-request", (_data, respond) => {
+    removeJoinRequest(socket.id);
+    respond({ success: true });
+  });
+
+  onSocketRequest(socket, "set-room-approval", (data, respond) => {
+    const roomCode = socketRoomCodes.get(socket.id);
+    const room = roomCode ? rooms.get(roomCode) : undefined;
+    if (!room || room.hostId !== socket.id || typeof data?.enabled !== "boolean") {
+      respond({ success: false, message: "Only the host can change join approval." });
+      return;
+    }
+    room.requiresJoinApproval = data.enabled;
+    io.to(roomCode!).emit("room-approval-changed", { requiresJoinApproval: room.requiresJoinApproval });
+    respond({ success: true });
+  });
+
+  onSocketRequest(socket, "review-join-request", (data, respond) => {
+    const roomCode = socketRoomCodes.get(socket.id);
+    const room = roomCode ? rooms.get(roomCode) : undefined;
+    if (!room || room.hostId !== socket.id || typeof data?.accept !== "boolean") {
+      respond({ success: false, message: "Only the host can review join requests." });
+      return;
+    }
+    const id = String(data?.memberId ?? "");
+    const request = room.pendingJoinRequests.get(id);
+    if (!request) { respond({ success: false, message: "That request is no longer waiting." }); return; }
+    removeJoinRequest(id);
+    if (data.accept) request.accept(respond);
+    else {
+      io.to(id).emit("join-request-result", { success: false, message: "The host declined your join request." });
+      respond({ success: true });
     }
   });
 
@@ -1342,6 +1460,12 @@ io.on("connection", (socket) => {
     }
 
     room.isLocked = data.isLocked;
+    if (room.isLocked) {
+      for (const id of room.pendingJoinRequests.keys()) {
+        removeJoinRequest(id);
+        io.to(id).emit("join-request-result", { success: false, message: "This lobby is locked by the host." });
+      }
+    }
 
     io.to(roomCode).emit("room-lock-changed", {
       isLocked: room.isLocked
@@ -1968,6 +2092,7 @@ io.on("connection", (socket) => {
   socket.on("disconnect", () => {
     console.log(`Browser disconnected: ${socket.id}`);
     socketRequestLimiter.forget(socket.id);
+    removeJoinRequest(socket.id);
 
     const roomCode = socketRoomCodes.get(socket.id);
     const room = roomCode ? rooms.get(roomCode) : undefined;

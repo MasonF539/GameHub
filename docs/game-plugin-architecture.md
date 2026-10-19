@@ -26,6 +26,45 @@ that exist only in a development checkout.
 
 Game packages execute trusted server code. They are not a sandbox for packages supplied by room hosts or browser clients.
 
+## Joining and personal display options
+
+Room invite links use `?room=CODE` to prefill the entry form; players still choose
+their own name and avatar. Room codes start hidden for everyone. The copy icon
+beside the eye copies the code without revealing it; a separate Copy link button
+copies the invite URL. Manual code entry and each viewer's reveal toggle remain.
+The server supplies the invite base URL: the Public launcher registers its
+detected TryCloudflare address, or an operator can set `GAMEHUB_PUBLIC_URL`.
+The host can stay on localhost while copying public invites. Without a public
+address, the copy action falls back to the current browser address.
+The address is sent on connection and cached in browser memory; copying a link
+does not make another server request. Reloading or reconnecting refreshes it.
+Locked rooms reject new join requests and dismiss any pending requests.
+The host can require approval for both players and
+spectators in Settings → Game → Joining. Pending visitors receive no membership,
+chat history, or game state. Requests expire after one minute, can be cancelled,
+and are checked again against the room lock, capacity, and names on acceptance.
+
+Games may declare `displayOptions` in their definition. Each option has a stable
+key, a default, and named choices with optional preview paths inside that game's
+public directory. GameHub renders per-game dropdowns in Settings → Game → Display
+Options and stores selections locally on the device. `context.display.get` and
+`onChange` let a game apply these personal preferences without changing shared
+rules. Keyboard hints use `context.input.getBinding`, `hasKeyboard`, and
+`onBindingsChanged` so labels follow remapping. Keyboard presence uses pointer
+capabilities and observed keyboard input because browsers do not expose a
+reliable list of connected keyboards.
+
+Egyptian War defaults to a 60-second offline waiting period, then auto-plays
+offline turns while preserving each player's hand for reconnection. Hosts can
+adjust the waiting period or disable takeover in the lobby's game settings.
+An explicit host pause remains paused when the wait ends. The existing host
+disconnect timeout still closes an abandoned room. Animation timing is shared;
+there is no personal animation-speed setting. System reduced-motion preferences
+remain supported.
+
+Private per-player events, spectator-isolated chat, a shared SDK turn timer,
+and named rule presets are not implemented by these changes.
+
 ## Versioned contracts
 
 GameHub **1.0.0** is the first official application release, distributed through

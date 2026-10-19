@@ -1091,6 +1091,7 @@ body:has(:is(#entry-view, #lobby-view):not(.d-none)) > .hub-shell {
   padding: 1.25rem 1.5rem;
   font-weight: 600;
   text-align: center;
+  white-space: pre-line;
 }
 
 .gamehub-toast-container {
@@ -1222,4 +1223,21 @@ body:has(:is(#entry-view, #lobby-view):not(.d-none)) > .hub-shell {
     display: none;
   }
 
+}
+/* Personal game display choices and host admission controls. */
+.game-display-options { margin-block: .65rem; border: 1px solid #495057; border-radius: .6rem; padding: .65rem; }
+.game-display-options summary { cursor: pointer; font-weight: 600; }
+.game-display-option { display: grid; grid-template-columns: minmax(0, 1fr) 6rem; gap: .4rem .75rem; align-items: center; margin-top: .8rem; }
+.game-display-option label { grid-column: 1; }
+.game-display-option select { grid-column: 1; width: 100%; }
+.game-display-preview { grid-column: 2; grid-row: 1 / span 2; width: 6rem; height: 4rem; object-fit: contain; border-radius: .5rem; }
+.game-display-preview[hidden] { display: none; }
+.lobby-lock-controls { flex-wrap: wrap; }
+.join-request-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .5rem; }
+.join-request-row > span { min-width: 0; overflow-wrap: anywhere; }
+.lobby-lock-controls:has(#review-joiners:not(.d-none)) { gap: clamp(.2rem, 1vw, .5rem) !important; }
+.lobby-lock-controls:has(#review-joiners:not(.d-none)) .btn {
+  min-height: 1.8rem;
+  padding-inline: clamp(.25rem, 1vw, .5rem);
+  font-size: clamp(.7rem, 3.2vw, .875rem);
 }

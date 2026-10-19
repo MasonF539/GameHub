@@ -112,6 +112,10 @@ https://example.trycloudflare.com
 
 The complete public address is copied to the Windows clipboard and verified before the browser opens. Quick Tunnel addresses are temporary and normally change each time the tunnel starts.
 
+Public mode also gives the detected tunnel address to the server. The host can
+stay on localhost; the lobby's **Copy link** button uses the public address for
+invites. Without a registered public address, it uses the current page address.
+
 ## Manual Docker commands
 
 Start locally:
@@ -259,4 +263,5 @@ These can be set as environment variables (the Docker compose file passes them t
 | --- | --- | --- |
 | `GAMEHUB_TRUST_CLOUDFLARE_IP` | `false` | Use Cloudflare's `cf-connecting-ip` header to identify visitors. The launcher's Public mode turns this on. Only enable it when GameHub is reached through the tunnel and untrusted people cannot reach port 3000 directly, because otherwise the header can be forged. |
 | `GAMEHUB_MAX_ROOMS` | `200` | Maximum number of rooms the server holds at once. |
+| `GAMEHUB_PUBLIC_URL` | Unset | Optional public base URL for copied room invites. The Windows Public launcher registers its detected TryCloudflare URL automatically; this override is useful for other launch methods or a fixed domain. |
 | `CLOUDFLARED_VERSION` | `latest` | Cloudflare tunnel image tag. Set it to a specific release to pin the tunnel version. |

@@ -45,6 +45,24 @@ function createManifest(): GamePluginManifest {
   };
 }
 
+test("display options validate defaults, unique choices, and package-owned previews", () => {
+  const manifest = createManifest();
+  manifest.definition.displayOptions = [{
+    key: "tableColor", label: "Table color", defaultValue: "green",
+    choices: [{ value: "green", label: "Green", previewPath: "/games/example-game/green.svg" }]
+  }];
+  assert.doesNotThrow(() => validateGamePluginManifest(manifest));
+  const option = manifest.definition.displayOptions[0]!;
+  option.defaultValue = "missing";
+  assert.throws(() => validateGamePluginManifest(manifest), /invalid display choices/);
+  option.defaultValue = "green";
+  option.choices.push({ value: "green", label: "Duplicate" });
+  assert.throws(() => validateGamePluginManifest(manifest), /invalid display choices/);
+  option.choices.pop();
+  option.choices[0]!.previewPath = "/games/another-game/preview.svg";
+  assert.throws(() => validateGamePluginManifest(manifest), /path inside/);
+});
+
 test("registers versioned game manifests and exposes public definitions", () => {
   const manifest = createManifest();
   const registry = new GamePluginRegistry([manifest]);

@@ -171,6 +171,24 @@ export function validateGamePluginManifest(manifest: GamePluginManifest): void {
   }
 
   const settingKeys = new Set<string>();
+  const displayKeys = new Set<string>();
+  for (const option of game.displayOptions ?? []) {
+    if (!settingKeyPattern.test(option.key) || displayKeys.has(option.key)) {
+      throw new GamePluginValidationError(`${game.id} has invalid display option keys.`);
+    }
+    displayKeys.add(option.key);
+    requireNonEmpty(option.label, `${game.id}.${option.key} label`);
+    if (!option.choices.length ||
+        new Set(option.choices.map((choice) => choice.value)).size !== option.choices.length ||
+        !option.choices.some((choice) => choice.value === option.defaultValue)) {
+      throw new GamePluginValidationError(`${game.id}.${option.key} has invalid display choices.`);
+    }
+    for (const choice of option.choices) {
+      requireNonEmpty(choice.value, `${game.id} display value`);
+      requireNonEmpty(choice.label, `${game.id} display label`);
+      if (choice.previewPath) validatePreviewPath(choice.previewPath, game.id, `${game.id} display preview`);
+    }
+  }
   for (const setting of game.settings) {
     if (settingKeys.has(setting.key)) {
       throw new GamePluginValidationError(

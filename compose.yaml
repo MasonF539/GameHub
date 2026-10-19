@@ -21,6 +21,8 @@ services:
 
       # The most rooms the server will hold at once.
       GAMEHUB_MAX_ROOMS: "${GAMEHUB_MAX_ROOMS:-200}"
+      # Optional public address for deployments not using the Windows launcher.
+      GAMEHUB_PUBLIC_URL: "${GAMEHUB_PUBLIC_URL:-}"
 
     init: true
 

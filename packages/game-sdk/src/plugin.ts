@@ -104,6 +104,11 @@ export type GameAudioApi = {
 };
 
 export type GameInputApi = {
+  /** Current formatted binding, or null when unbound. */
+  getBinding?(actionId: string): string | null;
+  /** Includes binding edits and keyboard availability changes. */
+  onBindingsChanged?(handler: () => void): () => void;
+  hasKeyboard?(): boolean;
   /** Subscribe to a named action declared by this game's manifest. */
   onAction(actionId: string, handler: () => void): () => void;
 };
@@ -117,6 +122,10 @@ export type GameClientContext = {
   launchData: unknown;
   audio: GameAudioApi;
   input: GameInputApi;
+  display?: {
+    get(key: string): string | null;
+    onChange(handler: () => void): () => void;
+  };
   submitAction(action: GameActionEnvelope): Promise<GameActionResult>;
   requestPause(isPaused: boolean): Promise<GameActionResult>;
   sendChat(message: string): Promise<GameActionResult>;

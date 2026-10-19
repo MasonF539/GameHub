@@ -5,12 +5,12 @@ const path = require("node:path");
 const { JSDOM } = require("jsdom");
 const { GameClientHost } = require("../public/gameHost.js");
 
-function createClient({ prefersReducedMotion = false, mobile = false, fullscreenRequest } = {}) {
+function createClient({ prefersReducedMotion = false, mobile = false, fullscreenRequest, savedRoom, url = "http://localhost" } = {}) {
   const html = fs.readFileSync(
     path.join(__dirname, "..", "public", "index.html"),
     "utf8"
   );
-  const dom = new JSDOM(html, { url: "http://localhost" });
+  const dom = new JSDOM(html, { url });
   const handlers = new Map();
   const emitted = [];
   const playedEffects = [];
@@ -26,6 +26,10 @@ function createClient({ prefersReducedMotion = false, mobile = false, fullscreen
   global.window = dom.window;
   global.document = dom.window.document;
   global.localStorage = dom.window.localStorage;
+  if (savedRoom) {
+    localStorage.setItem("gamehub:last-room", savedRoom);
+    localStorage.setItem(`gamehub:resume:${savedRoom}`, "saved-token");
+  }
   global.CSS = dom.window.CSS ?? { escape: (value) => String(value) };
   if (!global.CSS.escape) {
     global.CSS.escape = (value) => String(value);
@@ -183,6 +187,98 @@ function game(overrides = {}) {
     ...overrides
   };
 }
+
+test("invite links prefill joining and pending approval can be cancelled", () => {
+  const view = createClient({ url: "http://localhost/?room=abc123" });
+  try {
+    assert.equal(document.querySelector("#room-code").value, "ABC123");
+    document.querySelector("#join-room").click();
+    const join = view.emitted.find((event) => event.event === "join-room");
+    assert.equal(join.data.roomCode, "ABC123");
+    join.respond({ success: true, pendingApproval: true });
+    assert.equal(document.querySelector("#lobby-view").classList.contains("d-none"), true);
+    assert.equal(document.querySelector("#join-room").textContent, "Cancel Request");
+    document.querySelector("#join-room").click();
+    view.emitted.find((event) => event.event === "cancel-join-request").respond({ success: true });
+    assert.equal(document.querySelector("#join-room").disabled, false);
+    assert.equal(document.querySelector("#join-room").textContent, "Join Room");
+  } finally { view.close(); }
+});
+
+test("hosts and guests can copy a hidden room code and the link separately", async () => {
+  for (const isHost of [true, false]) {
+    const view = createClient();
+    try {
+      const copied = [];
+      Object.defineProperty(window.navigator, "clipboard", { value: { writeText: async (text) => copied.push(text) } });
+      view.handlers.get("room-resumed")({ roomCode: "ABC123", isHost, isLocked: false,
+        selectedGameId: null, gameSettings: {}, activeGameId: null, isPaused: false, chatEnabled: false });
+      const display = document.querySelector("#created-room");
+      assert.equal(display.textContent.includes("ABC123"), false);
+      assert.equal(document.querySelector("#copy-room-code").previousElementSibling.id, "toggle-room-code");
+      document.querySelector("#copy-room-code").click();
+      await Promise.resolve();
+      assert.equal(copied[0], "ABC123");
+      assert.equal(display.textContent.includes("ABC123"), false);
+      document.querySelector("#copy-invite-link").click();
+      await Promise.resolve();
+      assert.equal(copied[1], "http://localhost/?room=ABC123");
+      document.querySelector("#toggle-room-code").click();
+      assert.equal(display.textContent.includes("ABC123"), true);
+      assert.equal(document.querySelector("#room-copy-menu"), null);
+      assert.equal(document.querySelector("#copy-game-invite-link"), null);
+      assert.equal(document.querySelector("#copy-game-room-code"), null);
+    } finally { view.close(); }
+  }
+});
+
+test("Copy link prefers the server's tunnel URL while the page stays on localhost", async () => {
+  const view = createClient();
+  try {
+    const copied = [];
+    Object.defineProperty(window.navigator, "clipboard", { value: { writeText: async (text) => copied.push(text) } });
+    view.handlers.get("room-resumed")({ roomCode: "ABC123", isHost: true, isLocked: false,
+      selectedGameId: null, gameSettings: {}, activeGameId: null, isPaused: false, chatEnabled: false });
+    view.handlers.get("public-invite-url")("https://example.trycloudflare.com/");
+    const before = view.emitted.length;
+    document.querySelector("#copy-invite-link").click();
+    document.querySelector("#copy-invite-link").click();
+    assert.equal(view.emitted.length, before);
+    await Promise.resolve();
+    assert.equal(copied[0], "https://example.trycloudflare.com/?room=ABC123");
+    assert.equal(window.location.hostname, "localhost");
+  } finally { view.close(); }
+});
+
+test("personal display dropdowns update the mounted game, previews, and saved preferences", () => {
+  const view = createClient();
+  try {
+    view.handlers.get("available-games")([game({ displayOptions: [{
+      key: "tableColor", label: "Table", defaultValue: "green", choices: [
+        { value: "green", label: "Green", previewPath: "/games/example-game/green.svg" },
+        { value: "blue", label: "Blue", previewPath: "/games/example-game/blue.svg" }
+      ]
+    }] })]);
+    view.handlers.get("room-resumed")({ roomCode: "ABC123", isHost: true, isLocked: false,
+      selectedGameId: "example-game", gameSettings: {}, activeGameId: "example-game", isPaused: false, chatEnabled: true });
+    const display = view.gameClientContexts[0].display;
+    let changes = 0;
+    const stop = display.onChange(() => changes++);
+    assert.equal(display.get("tableColor"), "green");
+    const select = document.querySelector("#display-example-game-tableColor");
+    select.value = "blue";
+    select.dispatchEvent(new window.Event("change"));
+    assert.equal(display.get("tableColor"), "blue");
+    assert.equal(changes, 1);
+    assert.match(document.querySelector(".game-display-preview").src, /blue.svg$/);
+    assert.equal(JSON.parse(localStorage.getItem("gamehub:display-options"))["example-game"].tableColor, "blue");
+    stop();
+    select.value = "green";
+    select.dispatchEvent(new window.Event("change"));
+    assert.equal(changes, 1);
+    assert.equal(display.get("missing"), null);
+  } finally { view.close(); }
+});
 
 test("renders available games as preview cards for every player", () => {
   const { close, handlers } = createClient();
@@ -933,3 +1029,45 @@ test("a guest who leaves the lobby returns to entry and clears the saved room se
   assert.equal(localStorage.getItem("gamehub:resume:ABC123"), null);
   close();
 });
+
+test("explicit invite does not resume a different saved room", () => {
+  const client = createClient({ url: "http://localhost/?room=BBBBBB", savedRoom: "AAAAAA" });
+  try {
+    client.handlers.get("connect")();
+    client.handlers.get("room-resume-failed")(null);
+    assert.equal(client.emitted.some(({ event }) => event === "resume-room"), false);
+    assert.equal(document.querySelector("#room-code").value, "BBBBBB");
+  } finally { client.close(); }
+});
+test("an invite can resume its own saved session", () => {
+  const client = createClient({ url: "http://localhost/?room=AAAAAA", savedRoom: "AAAAAA" });
+  try {
+    client.handlers.get("connect")();
+    assert.equal(client.emitted.some(({ event }) => event === "resume-room"), true);
+  } finally { client.close(); }
+});
+
+for (const action of ["create-room", "join-room"]) {
+  test(`${action} consumes the invite so a refresh can resume the actual room`, () => {
+    let url;
+    const client = createClient({ url: "http://localhost/?room=BBBBBB&other=kept#details" });
+    try {
+      document.querySelector("#player-name").value = "Host";
+      document.querySelector("#room-code").value = "AAAAAA";
+      document.querySelector(`#${action}`).click();
+      client.emitted.find(({ event }) => event === action).respond({
+        success: true, roomCode: "AAAAAA", resumeToken: "token", role: "player", activeGameId: null
+      });
+      url = window.location.href;
+      assert.equal(new URL(url).searchParams.has("room"), false);
+      assert.equal(new URL(url).searchParams.get("other"), "kept");
+      assert.equal(new URL(url).hash, "#details");
+      assert.equal(localStorage.getItem("gamehub:last-room"), "AAAAAA");
+    } finally { client.close(); }
+    const refreshed = createClient({ url, savedRoom: "AAAAAA" });
+    try {
+      refreshed.handlers.get("connect")();
+      assert.ok(refreshed.emitted.some(({ event }) => event === "resume-room"));
+    } finally { refreshed.close(); }
+  });
+}

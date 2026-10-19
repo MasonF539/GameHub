@@ -10,6 +10,7 @@ type Ack = {
   roomCode?: string;
   resumeToken?: string;
   role?: "player" | "spectator";
+  pendingApproval?: boolean;
   chatHistory?: Array<{ senderName: string; message: string; sentAt: number }>;
 };
 
@@ -26,6 +27,71 @@ type FixtureState = {
 };
 
 const fixtureGameId = "fixture-game";
+
+test("connections receive a validated public invite URL for local caching", { timeout: 30_000 }, async () => {
+  for (const publicUrl of ["https://example.trycloudflare.com/?old=value#old", "javascript:alert(1)"]) {
+    const { server, url } = await startServer({ GAMEHUB_PUBLIC_URL: publicUrl });
+    const host = createClient(url, { autoConnect: false, transports: ["websocket"], reconnection: false });
+    try {
+      const address = waitForEvent<string | null>(host, "public-invite-url");
+      host.connect();
+      assert.equal(await address, publicUrl.startsWith("https:") ? "https://example.trycloudflare.com/" : null);
+    } finally { host.disconnect(); await stopServer(server); }
+  }
+});
+
+test("host approval gates players and spectators and rechecks room state", { timeout: 30_000 }, async () => {
+  const { server, url } = await startServer();
+  const host = await connect(url);
+  const guest = await connect(url);
+  const outsider = await connect(url);
+  try {
+    const created = await emitAck(host, "create-room", { playerName: "Host", avatar: "\u{1F431}" });
+    const roomCode = created.roomCode!;
+    assert.equal((await emitAck(host, "set-room-approval", { enabled: true })).success, true);
+    let leakedEvents = 0;
+    for (const event of ["player-list", "game-state", "game-chat-message", "game-selected"]) {
+      guest.on(event, () => leakedEvents++);
+    }
+    const requested = waitForEvent<Array<{ id: string }>>(host, "join-requests", (requests) => requests.length === 1);
+    const pending = await emitAck(guest, "join-room", { roomCode, playerName: "Guest", avatar: "\u{1F436}" });
+    assert.equal(pending.pendingApproval, true);
+    assert.equal((await requested)[0]!.id, guest.id);
+    assert.equal(leakedEvents, 0);
+    assert.equal((await emitAck(outsider, "review-join-request", { memberId: guest.id, accept: true })).success, false);
+    const joined = waitForEvent<Ack>(guest, "join-request-result");
+    const approved = await emitAck(host, "review-join-request", { memberId: guest.id, accept: true });
+    assert.equal(approved.success, true);
+    assert.equal(approved.resumeToken, undefined);
+    assert.equal((await joined).role, "player");
+    assert.equal((await emitAck(host, "select-game", { roomCode, gameId: fixtureGameId })).success, true);
+    assert.equal((await emitAck(host, "start-game", { roomCode })).success, true);
+    let spectatorStates = 0;
+    outsider.on("game-state", () => spectatorStates++);
+    const pendingSpectator = await emitAck(outsider, "join-room", { roomCode, playerName: "Viewer", avatar: "\u{1F431}" });
+    assert.equal(pendingSpectator.pendingApproval, true);
+    assert.equal(spectatorStates, 0);
+    const declined = waitForEvent<Ack>(outsider, "join-request-result");
+    await emitAck(host, "review-join-request", { memberId: outsider.id, accept: false });
+    assert.equal((await declined).success, false);
+    await emitAck(outsider, "join-room", { roomCode, playerName: "Viewer", avatar: "\u{1F431}" });
+    const locked = waitForEvent<Ack>(outsider, "join-request-result");
+    await emitAck(host, "set-room-locked", { roomCode, isLocked: true });
+    assert.equal((await emitAck(host, "review-join-request", { memberId: outsider.id, accept: true })).success, false);
+    const blocked = await emitAck(outsider, "join-room", { roomCode, playerName: "Viewer", avatar: "\u{1F431}" });
+    assert.equal(blocked.success, false);
+    assert.equal(blocked.pendingApproval, undefined);
+    assert.equal((await locked).success, false);
+    await emitAck(host, "set-room-locked", { roomCode, isLocked: false });
+    await emitAck(outsider, "join-room", { roomCode, playerName: "Viewer", avatar: "\u{1F431}" });
+    const accepted = waitForEvent<Ack>(outsider, "join-request-result");
+    await emitAck(host, "review-join-request", { memberId: outsider.id, accept: true });
+    assert.equal((await accepted).role, "spectator");
+  } finally {
+    host.disconnect(); guest.disconnect(); outsider.disconnect();
+    await stopServer(server);
+  }
+});
 
 function emitAck(socket: Socket, event: string, data: unknown): Promise<Ack> {
   return new Promise((resolve, reject) => {
@@ -845,5 +911,27 @@ test("players who dropped during a game expire once the game is over", { timeout
     host.close();
     guest.close();
     await stopServer(server);
+  }
+});
+
+test("host sees approval failures and cancelled requests release their socket index", async () => {
+  const { server, url } = await startServer();
+  const host = await connect(url), first = await connect(url), second = await connect(url);
+  try {
+    const { roomCode } = await emitAck(host, "create-room", { playerName: "Host", avatar: "\u{1F431}" });
+    await emitAck(host, "set-room-approval", { enabled: true });
+    const request = { roomCode, playerName: "Same name", avatar: "\u{1F431}" };
+    assert.equal((await emitAck(first, "join-room", request)).pendingApproval, true);
+    await emitAck(first, "cancel-join-request", {});
+    assert.equal((await emitAck(first, "join-room", request)).pendingApproval, true);
+    assert.equal((await emitAck(second, "join-room", request)).pendingApproval, true);
+    await emitAck(host, "review-join-request", { memberId: second.id, accept: true });
+    const rejected = waitForEvent<Ack>(first, "join-request-result");
+    const result = await emitAck(host, "review-join-request", { memberId: first.id, accept: true });
+    assert.equal(result.success, false);
+    assert.match(result.message ?? "", /name is already taken/);
+    assert.equal((await rejected).success, false);
+  } finally {
+    host.disconnect(); first.disconnect(); second.disconnect(); await stopServer(server);
   }
 });

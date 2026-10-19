@@ -62,33 +62,35 @@
       this.setActiveStyles(gameId);
       const baseContext = this.createContext(gameId) ?? {};
       const inputCleanups = new Set();
-      let input = baseContext.input;
-      if (input && typeof input.onAction === "function") {
-        const registerAction = input.onAction.bind(input);
-        input = {
-          ...input,
-          onAction(actionId, handler) {
-            const unsubscribe = registerAction(actionId, handler);
+      const trackSubscriptions = (api, methods) => {
+        if (!api) return api;
+        const wrapped = { ...api };
+        for (const method of methods) {
+          if (typeof api[method] !== "function") continue;
+          wrapped[method] = (...args) => {
+            const unsubscribe = api[method](...args);
             if (typeof unsubscribe !== "function") {
-              throw new Error(
-                `Game client input subscription ${gameId}.${actionId} did not return a cleanup function.`
-              );
+              throw new Error(`Game client subscription ${gameId}.${method} did not return a cleanup function.`);
             }
-            let isActive = true;
+            let active = true;
             const cleanup = () => {
-              if (!isActive) return;
-              isActive = false;
+              if (!active) return;
+              active = false;
               inputCleanups.delete(cleanup);
               unsubscribe();
             };
             inputCleanups.add(cleanup);
             return cleanup;
-          }
-        };
-      }
+          };
+        }
+        return wrapped;
+      };
+      const input = trackSubscriptions(baseContext.input, ["onAction", "onBindingsChanged"]);
+      const display = trackSubscriptions(baseContext.display, ["onChange"]);
       const context = {
         ...baseContext,
         ...(input ? { input } : {}),
+        ...(display ? { display } : {}),
         root: gameRoot,
         gameId,
         launchData

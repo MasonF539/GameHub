@@ -40,6 +40,7 @@ const gameClientHost = new window.GameHubGameClientHost({
     isHost: isCurrentUserHost,
     audio: gameHubAudio,
     input: createGameInput(gameId),
+    display: createGameDisplay(gameId),
     submitAction: (action) => new Promise((resolve) => {
       if (currentRoomCode === null) {
         resolve({ success: false, message: "You are not in a room." });
@@ -136,6 +137,8 @@ const leaveLobbyButton = document.querySelector("#leave-lobby");
 
 const joinRoomButton = document.querySelector("#join-room");
 const roomCodeInput = document.querySelector("#room-code");
+let inviteRoomCode = new URLSearchParams(window.location.search).get("room")?.trim().toUpperCase();
+if (/^[A-Z0-9]{6}$/.test(inviteRoomCode ?? "")) roomCodeInput.value = inviteRoomCode;
 const playerNameInput = document.querySelector("#player-name");
 const previousAvatarButton = document.querySelector("#previous-avatar");
 const avatarPreview = document.querySelector("#avatar-preview");
@@ -158,7 +161,8 @@ try {
 
 let selectedAvatarIndex = 0;
 let currentRoomCode = null;
-let roomCodeHidden = false;
+let roomCodeHidden = true;
+let publicInviteUrl = null;
 let isRoomLocked = false;
 let gameDefinitions = [];
 let isCurrentUserHost = false;
@@ -191,6 +195,19 @@ const generalKeybindDefinition = {
   ]
 };
 const keybindSubscriptions = new Map();
+const bindingChangeListeners = new Set();
+const keyboardMedia = window.matchMedia("(any-pointer: fine)");
+let keyboardSeen = false;
+keyboardMedia.addEventListener?.("change", () => {
+  for (const listener of bindingChangeListeners) listener();
+});
+document.addEventListener("keydown", (event) => {
+  const editing = event.target?.closest?.("input, textarea, select, [contenteditable='true']");
+  if (!keyboardSeen && event.code && !event.isComposing && !editing) {
+    keyboardSeen = true;
+    for (const listener of bindingChangeListeners) listener();
+  }
+});
 let keybindOverrides = loadKeybindOverrides();
 let pendingKeybindCapture = null;
 const expandedKeybindGroupIds = new Set(["general"]);
@@ -238,6 +255,7 @@ function loadKeybindOverrides() {
 }
 
 function saveKeybindOverrides() {
+  for (const listener of bindingChangeListeners) listener();
   try {
     localStorage.setItem(keybindStorageKey, JSON.stringify(keybindOverrides));
     return true;
@@ -325,6 +343,16 @@ function setKeybind(groupId, actionId, code) {
 
 function createGameInput(gameId) {
   return {
+    hasKeyboard: () => keyboardSeen || keyboardMedia.matches,
+    getBinding(actionId) {
+      const definition = getKeybindDefinition(gameId, actionId);
+      const code = definition ? getAssignedKey(gameId, definition) : null;
+      return code ? formatKeyCode(code) : null;
+    },
+    onBindingsChanged(handler) {
+      bindingChangeListeners.add(handler);
+      return () => bindingChangeListeners.delete(handler);
+    },
     onAction(actionId, handler) {
       if (typeof handler !== "function") {
         throw new TypeError("A game input action handler must be a function.");
@@ -695,6 +723,10 @@ function setRoomRequestPending(isPending) {
   playerNameInput.disabled = isPending;
   previousAvatarButton.disabled = isPending;
   nextAvatarButton.disabled = isPending;
+  if (!isPending) {
+    delete joinRoomButton.dataset.awaitingApproval;
+    joinRoomButton.textContent = "Join Room";
+  }
 }
 
 function updateAvatarPreview() {
@@ -929,6 +961,12 @@ function updateRoomLockDisplay() {
 }
 
 function showLobby(roomCode, isHost) {
+  if (inviteRoomCode != null) {
+    const url = new URL(window.location.href);
+    url.searchParams.delete("room");
+    window.history.replaceState(window.history.state, "", url);
+  }
+  inviteRoomCode = null;
   placeAppUtilityControls(false);
   currentActiveGameId = null;
   activeGameIsPaused = false;
@@ -938,10 +976,12 @@ function showLobby(roomCode, isHost) {
   lobbyView.classList.remove("d-none");
 
   currentRoomCode = roomCode;
-  roomCodeHidden = !isHost;
+  roomCodeHidden = true;
   updateRoomCodeDisplay();
 
   isCurrentUserHost = isHost;
+  document.querySelector("#room-join-controls").hidden = !isHost;
+  document.querySelector("#review-joiners").classList.toggle("d-none", !isHost || Number(document.querySelector("#join-request-count").textContent) === 0);
   isRoomLocked = false;
 
   closeLobbyButton.classList.toggle("d-none", !isHost);
@@ -964,6 +1004,10 @@ function showLobby(roomCode, isHost) {
 }
 
 function showEntry() {
+  document.querySelector("#room-join-controls").hidden = true;
+  document.querySelector("#join-request-count").textContent = "0";
+  document.querySelector("#pending-join-requests").replaceChildren();
+  document.querySelector("#require-join-approval").checked = false;
   placeAppUtilityControls(false);
   currentActiveGameId = null;
   activeGameIsPaused = false;
@@ -1000,7 +1044,7 @@ function showLobbyAfterLeavingGame(hasActiveGame = true, wasSpectator = false) {
 function resetRoomState() {
   gameClientHost.unmount();
   currentRoomCode = null;
-  roomCodeHidden = false;
+  roomCodeHidden = true;
   isRoomLocked = false;
   isCurrentUserHost = false;
   selectedGameId = null;
@@ -1483,7 +1527,8 @@ socket.on("connect", () => {
       ? localStorage.getItem(`gamehub:resume:${savedRoomCode}`)
       : null;
 
-    if (savedRoomCode && resumeToken) {
+    if (savedRoomCode && resumeToken &&
+        (!/^[A-Z0-9]{6}$/.test(inviteRoomCode ?? "") || savedRoomCode === inviteRoomCode)) {
       resumeSavedRoom(savedRoomCode, resumeToken);
     } else if (currentRoomCode !== null) {
       resetRoomState();
@@ -1523,6 +1568,7 @@ socket.on("latency-update", ({ rttMs }) => {
 });
 
 socket.on("disconnect", () => {
+  if (currentRoomCode === null) setRoomRequestPending(false);
   isGameSelectionPending = false;
   gamePickerGrid.classList.remove("is-pending");
   connectionStatus.textContent = "Disconnected from server";
@@ -1591,12 +1637,14 @@ socket.on("room-resume-failed", (message) => {
     const resumeToken = savedRoomCode
       ? localStorage.getItem(`gamehub:resume:${savedRoomCode}`)
       : null;
-    if (savedRoomCode && resumeToken) {
+    if (savedRoomCode && resumeToken &&
+        (!/^[A-Z0-9]{6}$/.test(inviteRoomCode ?? "") || savedRoomCode === inviteRoomCode)) {
       resumeSavedRoom(savedRoomCode, resumeToken);
       return;
     }
   }
 
+  if (currentRoomCode === null && /^[A-Z0-9]{6}$/.test(inviteRoomCode ?? "") && message == null) return;
   clearResumeSession();
   resetRoomState();
   showEntry();
@@ -1613,6 +1661,7 @@ socket.on("room-session-replaced", () => {
 
 socket.on("available-games", (games) => {
   gameDefinitions = games;
+  renderDisplayOptions();
   updateGamePicker();
   renderKeybindSettings();
 
@@ -2108,6 +2157,10 @@ spectateGameButton.addEventListener("click", () => {
 });
 
 joinRoomButton.addEventListener("click", () => {
+  if (joinRoomButton.dataset.awaitingApproval) {
+    socket.emit("cancel-join-request", {}, () => setRoomRequestPending(false));
+    return;
+  }
   if (isRoomRequestPending || currentRoomCode !== null) {
     return;
   }
@@ -2126,37 +2179,193 @@ joinRoomButton.addEventListener("click", () => {
       playerName,
       avatar: selectedAvatar
     },
-    (response) => {
-      if (!response.success) {
-        setRoomRequestPending(false);
-        showToast(response.message);
-        return;
-      }
-
-      isRoomRequestPending = false;
-      isCurrentUserSpectator = response.role === "spectator";
-      roomHasActiveGame = response.activeGameId !== null;
-      showLobby(response.roomCode, false);
-      saveResumeSession(response.roomCode, response.resumeToken);
-
-      if (isCurrentUserSpectator) {
-        if (response.activeGameId !== null) {
-          mountGameClient({
-            gameId: response.activeGameId,
-            chatEnabled: response.chatEnabled,
-            chatHistory: response.chatHistory,
-            settings: response.gameSettings,
-            isPaused: response.isPaused
-          });
-        }
-        showToast("You joined the game as a spectator.");
-      }
-
-      joinRoomButton.disabled = true;
-      roomCodeInput.disabled = true;
-      playerNameInput.disabled = true;
-      previousAvatarButton.disabled = true;
-      nextAvatarButton.disabled = true;
-    }
+    finishJoiningRoom
   );
 });
+
+function finishJoiningRoom(response) {
+  if (response.pendingApproval) {
+    joinRoomButton.dataset.awaitingApproval = "true";
+    joinRoomButton.disabled = false;
+    joinRoomButton.textContent = "Cancel Request";
+    showToast("Waiting for the host to approve your join request (up to 60 seconds).");
+    return;
+  }
+  if (!response.success) {
+    setRoomRequestPending(false);
+    showToast(response.message);
+    return;
+  }
+
+  isRoomRequestPending = false;
+  delete joinRoomButton.dataset.awaitingApproval;
+  joinRoomButton.textContent = "Join Room";
+  isCurrentUserSpectator = response.role === "spectator";
+  roomHasActiveGame = response.activeGameId !== null;
+  showLobby(response.roomCode, false);
+  saveResumeSession(response.roomCode, response.resumeToken);
+
+  if (isCurrentUserSpectator) {
+    if (response.activeGameId !== null) {
+      mountGameClient({
+        gameId: response.activeGameId,
+        chatEnabled: response.chatEnabled,
+        chatHistory: response.chatHistory,
+        settings: response.gameSettings,
+        isPaused: response.isPaused
+      });
+    }
+    showToast("You joined the game as a spectator.");
+  }
+
+  joinRoomButton.disabled = true;
+  roomCodeInput.disabled = true;
+  playerNameInput.disabled = true;
+  previousAvatarButton.disabled = true;
+  nextAvatarButton.disabled = true;
+}
+
+socket.on("join-request-result", (response) => {
+  finishJoiningRoom(response);
+  if (response.success) showToast("The host accepted your join request.");
+});
+socket.on("room-approval-changed", ({ requiresJoinApproval }) => {
+  document.querySelector("#require-join-approval").checked = requiresJoinApproval === true;
+});
+socket.on("join-requests", (requests) => {
+  const list = document.querySelector("#pending-join-requests");
+  const previousCount = Number(document.querySelector("#join-request-count").textContent);
+  document.querySelector("#join-request-count").textContent = String(requests.length);
+  document.querySelector("#review-joiners").classList.toggle("d-none", requests.length === 0);
+  list.replaceChildren();
+  if (requests.length > previousCount) showToast("A join request is waiting.\nOpen Settings → Game → Joining to review it.");
+  if (!requests.length) list.textContent = "No join requests waiting.";
+  for (const request of requests) {
+    const row = document.createElement("div");
+    row.className = "game-setting-row join-request-row";
+    const name = document.createElement("span");
+    name.textContent = request.avatar + " " + request.name;
+    row.append(name);
+    const actions = document.createElement("div");
+    actions.className = "d-flex gap-2 ms-auto flex-shrink-0";
+    for (const accept of [true, false]) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "btn btn-sm " + (accept ? "btn-success" : "btn-outline-danger");
+      button.textContent = accept ? "Accept" : "Decline";
+      button.setAttribute("aria-label", button.textContent + " " + request.name);
+      button.addEventListener("click", () => {
+        socket.emit("review-join-request", { memberId: request.id, accept }, (response) => {
+          if (!response.success) showToast(response.message);
+        });
+      });
+      actions.append(button);
+    }
+    row.append(actions);
+    list.append(row);
+  }
+});
+document.querySelector("#review-joiners").addEventListener("click", () => {
+  bootstrap.Tab.getOrCreateInstance(document.querySelector("#app-settings-game-tab")).show();
+});
+document.querySelector("#require-join-approval").addEventListener("change", (event) => {
+  socket.emit("set-room-approval", { enabled: event.target.checked }, (response) => {
+    if (!response.success) { event.target.checked = !event.target.checked; showToast(response.message); }
+  });
+});
+async function copyRoomInvite() {
+  const roomCode = currentRoomCode;
+  if (!roomCode) return;
+  const invite = new URL(publicInviteUrl ?? window.location.href);
+  invite.search = "";
+  invite.hash = "";
+  invite.searchParams.set("room", roomCode);
+  try {
+    await window.navigator.clipboard.writeText(invite.href);
+    showToast("Invite link copied.");
+  } catch {
+    window.prompt("Copy this invite link:", invite.href);
+  }
+}
+socket.on("public-invite-url", (url) => { publicInviteUrl = url; });
+async function copyRoomCode() {
+  if (!currentRoomCode) return;
+  try {
+    await window.navigator.clipboard.writeText(currentRoomCode);
+    showToast("Room code copied.");
+  } catch {
+    window.prompt("Copy this room code:", currentRoomCode);
+  }
+}
+document.querySelector("#copy-invite-link").addEventListener("click", copyRoomInvite);
+document.querySelector("#copy-room-code").addEventListener("click", copyRoomCode);
+
+const displayStorageKey = "gamehub:display-options";
+const displayChangeListeners = new Map();
+let displayPreferences = {};
+try {
+  const saved = JSON.parse(localStorage.getItem(displayStorageKey) ?? "{}");
+  if (saved && typeof saved === "object" && !Array.isArray(saved)) displayPreferences = saved;
+} catch { /* Browsing without storage still supports temporary preferences. */ }
+
+function displayValue(gameId, option) {
+  const saved = displayPreferences[gameId]?.[option.key];
+  return option.choices.some((choice) => choice.value === saved) ? saved : option.defaultValue;
+}
+function createGameDisplay(gameId) {
+  return {
+    get(key) {
+      const option = gameDefinitions.find((game) => game.id === gameId)?.displayOptions?.find((option) => option.key === key);
+      return option ? displayValue(gameId, option) : null;
+    },
+    onChange(handler) {
+      if (!displayChangeListeners.has(gameId)) displayChangeListeners.set(gameId, new Set());
+      const listeners = displayChangeListeners.get(gameId);
+      listeners.add(handler);
+      return () => listeners.delete(handler);
+    }
+  };
+}
+function renderDisplayOptions() {
+  const container = document.querySelector("#game-display-sections");
+  container.replaceChildren();
+  for (const game of gameDefinitions.filter((game) => game.displayOptions?.length)) {
+    const section = document.createElement("details");
+    section.className = "game-display-options";
+    const heading = document.createElement("summary");
+    heading.textContent = game.name;
+    section.append(heading);
+    for (const option of game.displayOptions) {
+      const row = document.createElement("div");
+      row.className = "game-display-option";
+      const label = document.createElement("label");
+      label.textContent = option.label;
+      const select = document.createElement("select");
+      select.className = "form-select form-select-sm";
+      select.id = "display-" + game.id + "-" + option.key;
+      label.htmlFor = select.id;
+      for (const choice of option.choices) select.add(new window.Option(choice.label, choice.value));
+      select.value = displayValue(game.id, option);
+      const image = document.createElement("img");
+      image.className = "game-display-preview";
+      const updatePreview = () => {
+        const choice = option.choices.find((choice) => choice.value === select.value);
+        image.hidden = !choice?.previewPath;
+        image.alt = choice ? option.label + ": " + choice.label : "";
+        if (choice?.previewPath) image.src = choice.previewPath;
+      };
+      select.addEventListener("change", () => {
+        const current = displayPreferences[game.id];
+        displayPreferences[game.id] = { ...(current && typeof current === "object" ? current : {}), [option.key]: select.value };
+        try { localStorage.setItem(displayStorageKey, JSON.stringify(displayPreferences)); }
+        catch { showToast("Display options will only last for this visit; browser storage is unavailable."); }
+        updatePreview();
+        for (const listener of displayChangeListeners.get(game.id) ?? []) listener();
+      });
+      updatePreview();
+      row.append(label, select, image);
+      section.append(row);
+    }
+    container.append(section);
+  }
+}

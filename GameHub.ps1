@@ -61,6 +61,13 @@ function Set-GameHubClipboard {
     }
 }
 
+function Set-GameHubPublicUrl {
+    param([string]$Value = "")
+    # Share tunnel discovery with the server without routing the host through it.
+    docker compose exec -T gamehub node -e "require('node:fs').writeFileSync(require('node:path').join(require('node:os').tmpdir(), 'gamehub-public-url'), process.argv[1] ?? '')" $Value
+    return $LASTEXITCODE -eq 0
+}
+
 function Start-LocalGameHub {
     if (-not (Test-Docker)) {
         return
@@ -87,6 +94,7 @@ function Start-LocalGameHub {
         return
     }
 
+    Set-GameHubPublicUrl | Out-Null
     Start-Process "http://localhost:3000"
 
     Write-Host
@@ -131,6 +139,7 @@ function Start-PublicGameHub {
     }
 
     $publicUrl = $null
+    Set-GameHubPublicUrl | Out-Null
 
     # Resolve the tunnel before opening the browser. Repeated Docker CLI polls
     # can briefly contend with desktop window activation on Windows.
@@ -140,13 +149,13 @@ function Start-PublicGameHub {
         $tunnelLogs = docker compose logs --no-color --tail 100 tunnel 2>&1 |
             Out-String
 
-        $urlMatch = [regex]::Match(
+        $urlMatches = [regex]::Matches(
             $tunnelLogs,
             "https://[a-z0-9-]+\.trycloudflare\.com"
         )
 
-        if ($urlMatch.Success) {
-            $publicUrl = ([string]$urlMatch.Value).Trim()
+        if ($urlMatches.Count -gt 0) {
+            $publicUrl = ([string]$urlMatches[$urlMatches.Count - 1].Value).Trim()
             break
         }
 
@@ -158,6 +167,9 @@ function Start-PublicGameHub {
     Write-Host
 
     if ($publicUrl) {
+        if (-not (Set-GameHubPublicUrl -Value $publicUrl)) {
+            Write-Host "Could not register the tunnel address for lobby invites. Share the player link below instead." -ForegroundColor Yellow
+        }
         $copiedPublicUrl = Set-GameHubClipboard -Value $publicUrl
 
         Write-Host "GameHub is public!" -ForegroundColor Green

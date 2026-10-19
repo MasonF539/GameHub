@@ -191,3 +191,24 @@ test("cleans input subscriptions and presentation after mount throws", () => {
   assert.equal(gameStyle.disabled, true);
   assert.equal(host.activeGameId, null);
 });
+
+for (const fails of [false, true]) {
+  test(`cleans binding and display subscriptions after ${fails ? "failed mount" : "unmount"}`, () => {
+    let subscriptions = 0;
+    let removals = 0;
+    const subscribe = () => { subscriptions++; return () => { subscriptions--; removals++; }; };
+    const host = new GameClientHost({ root: {}, createContext: () => ({
+      input: { onBindingsChanged: subscribe }, display: { onChange: subscribe }
+    }) });
+    host.register("preferences", { mount(context) {
+      const unsubscribe = context.input.onBindingsChanged(() => {});
+      context.display.onChange(() => {});
+      if (fails) throw new Error("mount failed");
+      return { receiveState() {}, receiveEvent() {}, destroy() { unsubscribe(); unsubscribe(); } };
+    } });
+    if (fails) assert.throws(() => host.mount("preferences"), /mount failed/);
+    else { host.mount("preferences"); assert.equal(subscriptions, 2); host.unmount(); }
+    assert.equal(subscriptions, 0);
+    assert.equal(removals, 2);
+  });
+}

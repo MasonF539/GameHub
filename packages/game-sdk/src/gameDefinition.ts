@@ -62,5 +62,14 @@ export type GameDefinition = {
   maxPlayers: number;
   settings: GameSetting[];
   keybinds?: GameKeybind[];
+  /** Personal browser preferences; never authoritative match rules. */
+  displayOptions?: GameDisplayOption[];
   preview?: GamePreview;
+};
+
+export type GameDisplayOption = {
+  key: string;
+  label: string;
+  defaultValue: string;
+  choices: Array<{ value: string; label: string; previewPath?: string }>;
 };

@@ -120,13 +120,23 @@
         <div class="room-code-container d-flex align-items-center justify-content-center gap-1">
           <p id="created-room" class="room-code fw-bold mb-0"></p>
 
-          <button id="toggle-room-code" class="room-code-eye btn" type="button" aria-label="Hide room code"
-            title="Hide room code">
+          <button id="toggle-room-code" class="room-code-eye btn" type="button" aria-label="Show room code"
+            title="Show room code">
             <span aria-hidden="true">👁</span>
+          </button>
+          <button id="copy-room-code" class="room-code-eye btn" type="button" aria-label="Copy room code"
+            title="Copy room code">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" focusable="false">
+              <rect x="8" y="8" width="12" height="13" rx="2" />
+              <path d="M5 16H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h11a1 1 0 0 1 1 1v1" />
+            </svg>
           </button>
         </div>
 
         <div class="lobby-lock-controls d-flex align-items-center justify-content-center gap-2 mt-2">
+          <button id="copy-invite-link" class="btn btn-outline-info btn-sm" type="button">Copy link</button>
+          <button id="review-joiners" class="btn btn-outline-light btn-sm d-none" type="button"
+            data-bs-toggle="modal" data-bs-target="#app-settings-modal" aria-label="Review join requests">Requests <span id="join-request-count">0</span></button>
           <span id="room-lock-status" class="badge text-bg-success">
             Lobby Open
           </span>
@@ -270,6 +280,20 @@
                     <button id="app-game-exit" class="btn btn-outline-danger btn-sm" type="button"
                       disabled>Exit</button>
                   </div>
+                </section>
+                <section class="game-settings-group" aria-labelledby="game-display-options-title">
+                  <h4 id="game-display-options-title" class="game-settings-group-title">Display Options</h4>
+                  <p class="text-body-secondary small">Personal card and table styles, saved on this device.</p>
+                  <div id="game-display-sections"></div>
+                </section>
+                <section id="room-join-controls" class="game-settings-group" aria-labelledby="room-join-title" hidden>
+                  <h4 id="room-join-title" class="game-settings-group-title">Joining</h4>
+                  <label class="game-setting-row" for="require-join-approval">
+                    <span>Host approves players and spectators</span>
+                    <input id="require-join-approval" class="form-check-input" type="checkbox">
+                  </label>
+                  <p class="small text-body-secondary">Requests expire after one minute. Approval does not bypass the lobby lock or room capacity.</p>
+                  <div id="pending-join-requests" aria-live="polite"></div>
                 </section>
               </div>
               </section>

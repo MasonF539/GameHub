@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import {
   existsSync,
+  cpSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -150,6 +151,15 @@ try {
     ...gameArtifacts.map(({ artifact }) => artifact.archivePath)
   ], consumerDirectory);
 
+  const patchesDirectory = path.join(workspaceRoot, "patches");
+  if (existsSync(patchesDirectory)) {
+    cpSync(patchesDirectory, path.join(consumerDirectory, "patches"), { recursive: true });
+    const patched = spawnSync(process.execPath, [
+      path.join(workspaceRoot, "node_modules/patch-package/index.js"), "--error-on-fail"
+    ], { cwd: consumerDirectory, encoding: "utf8" });
+    assert.equal(patched.status, 0, `Package patches failed: ${patched.stdout}\n${patched.stderr}`);
+  }
+
   const requireFromConsumer = createRequire(
     path.join(consumerDirectory, "package.json")
   );
@@ -195,6 +205,15 @@ try {
     }
     if (manifest.client.delivery === "module") {
       assertPublicFile(gamePackage, manifest.client.entryPath, "module client entry");
+    }
+    for (const option of manifest.definition.displayOptions ?? []) {
+      for (const choice of option.choices) {
+        if (choice.previewPath) {
+          const prefix = `/games/${gameId}/`;
+          assert.ok(choice.previewPath.startsWith(prefix));
+          assertPublicFile(gamePackage, choice.previewPath.slice(prefix.length), "display preview");
+        }
+      }
     }
     if (manifest.definition.preview) {
       const previewPrefix = `/games/${gameId}/`;
