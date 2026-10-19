@@ -11,7 +11,7 @@ Installation requires adding the dependency and its package name to the
 configured list. The package lock and Docker build then select an exact,
 reproducible version.
 
-While testing unpublished changes to an installed game, the branch tracks a
+When testing unpublished changes to an installed game, track a
 version-specific patch in `patches/`. The install hook applies it to the npm
 package, including in Docker, so normal build/start commands run the changes.
 The independent game repository remains the source for the next package release.
@@ -69,8 +69,8 @@ and named rule presets are not implemented by these changes.
 
 GameHub **1.0.0** is the first official application release, distributed through
 GitHub and built with Docker. Its version is independent of the npm package
-versions: this release uses `@masonf539/game-sdk@1.0.1` and
-`@masonf539/egyptian-war@1.0.1-beta.5`. Updating the application version does not
+versions: this branch uses `@masonf539/game-sdk@1.1.0-beta.0` and
+`@masonf539/egyptian-war@1.0.1-beta.6`. Updating the application version does not
 require republishing either npm package unless that package itself changes.
 
 The independently buildable `@masonf539/game-sdk` workspace under

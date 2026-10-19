@@ -28,8 +28,11 @@ The package is configured for public npm publication. From the repository
 root, first update its semantic version and verify the full suite, then run:
 
 ```powershell
-npm publish --workspace @masonf539/game-sdk
+npm publish --workspace @masonf539/game-sdk --tag beta
 ```
 
-Publishing requires npm access to the `@masonf539` scope. Game packages should
-pin a released SDK version so their supported GameHub API is reproducible.
+Use the beta tag for prereleases so the stable npm tag stays unchanged.
+Publishing requires npm access to the `@masonf539` scope. Games declare compatible
+SDK peer ranges, including an explicit prerelease range when testing an SDK beta,
+so the game and host share one installation. Pin the development dependency to
+the SDK release used for builds and tests.

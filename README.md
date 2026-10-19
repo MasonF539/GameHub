@@ -1,6 +1,7 @@
 # GameHub
 
-First official GameHub release: **1.0.0**. Egyptian War is pinned to **1.0.1-beta.5**.
+First official GameHub release: **1.0.0**. This branch pins Egyptian War to
+**1.0.1-beta.6** and the shared SDK to **1.1.0-beta.0**.
 
 GameHub is a self-hosted, real-time browser game platform. A host creates a room, players join from their browsers, and the host chooses which game to start.
 
