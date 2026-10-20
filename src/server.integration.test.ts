@@ -841,15 +841,16 @@ async function startFixtureGame(
   return { roomCode, host, guests };
 }
 
-test("a host who stays away mid-game closes the room instead of stranding it", { timeout: 25_000 }, async () => {
+test("a host who stays away mid-game hands control to a connected player", { timeout: 25_000 }, async () => {
   const { server, url } = await startServer({ GAMEHUB_TEST_RECONNECT_GRACE_MS: "500" });
-  const { host, guests } = await startFixtureGame(url);
+  const { host, guests, roomCode } = await startFixtureGame(url);
   const [guest] = guests;
 
   try {
-    const closed = waitForEvent(guest, "room-closed", () => true, 8_000);
+    const transferred = waitForEvent<{ hostId: string }>(guest, "room-host", (state) => state.hostId === guest.id, 8_000);
     host.close();
-    await closed;
+    await transferred;
+    assert.equal((await emitAck(guest, "toggle-game-pause", { roomCode, isPaused: false })).success, true);
   } finally {
     host.close();
     guest.close();
@@ -934,4 +935,83 @@ test("host sees approval failures and cancelled requests release their socket in
   } finally {
     host.disconnect(); first.disconnect(); second.disconnect(); await stopServer(server);
   }
+});
+
+type Scoreboard = { rows: Array<{ id: string; name: string; values: Record<string, number> }> };
+test("room scores survive reconnects and restarts; handoff updates permissions and reset stays host-only", async () => {
+  const { server, url } = await startServer();
+  const host = await connect(url), guest = await connect(url);
+  let restored: Socket | undefined;
+  try {
+    const created = await emitAck(host, "create-room", { playerName: "Host", avatar: catAvatar });
+    const roomCode = created.roomCode!;
+    const joined = await emitAck(guest, "join-room", { roomCode, playerName: "Guest", avatar: dogAvatar });
+    await emitAck(host, "select-game", { roomCode, gameId: fixtureGameId });
+    await emitAck(host, "start-game", { roomCode });
+    const scored = waitForEvent<Scoreboard>(host, "room-scoreboard", (board) => board.rows.some((row) => row.values.actions === 1));
+    await emitGameAction(guest, roomCode, "advance");
+    const scoreId = (await scored).rows.find((row) => row.name === "Guest")!.id;
+    assert.equal((await emitAck(guest, "transfer-host", { memberId: host.id })).success, false);
+    assert.equal((await emitAck(host, "transfer-host", { memberId: guest.id })).success, true);
+    assert.equal((await emitAck(host, "toggle-game-pause", { roomCode, isPaused: true })).success, false);
+    guest.disconnect();
+    restored = await connect(url);
+    const snapshot = waitForEvent<Scoreboard>(restored, "room-scoreboard", (board) => board.rows.some((row) => row.id === scoreId));
+    assert.equal((await emitAck(restored, "resume-room", { resumeToken: joined.resumeToken })).success, true);
+    assert.equal((await snapshot).rows.find((row) => row.id === scoreId)!.values.actions, 1);
+    assert.equal((await emitAck(restored, "toggle-game-pause", { roomCode, isPaused: false })).success, true);
+    const won = waitForEvent<Scoreboard>(host, "room-scoreboard", (board) => board.rows.some((row) => row.values.wins === 1));
+    await emitGameAction(restored, roomCode, "finish");
+    assert.equal((await won).rows.find((row) => row.id === scoreId)!.values.wins, 1);
+    const restarted = waitForEvent<Scoreboard>(host, "room-scoreboard", (board) => board.rows.some((row) => row.values.wins === 1));
+    assert.equal((await emitAck(restored, "start-game", { roomCode })).success, true);
+    await restarted;
+    assert.equal((await emitAck(host, "reset-room-scoreboard", { gameId: fixtureGameId })).success, false);
+    const cleared = waitForEvent<Scoreboard>(host, "room-scoreboard", (board) => board.rows.every((row) => row.values.wins === 0 && row.values.actions === 0));
+    assert.equal((await emitAck(restored, "reset-room-scoreboard", { gameId: fixtureGameId })).success, true);
+    await cleared;
+  } finally { host.disconnect(); guest.disconnect(); restored?.disconnect(); await stopServer(server); }
+});
+
+test("a host with no connected successor still expires the abandoned room", async () => {
+  const { server, url } = await startServer({ GAMEHUB_TEST_RECONNECT_GRACE_MS: "200" });
+  const host = await connect(url);
+  const created = await emitAck(host, "create-room", { playerName: "Host", avatar: catAvatar });
+  host.disconnect();
+  const visitor = await connect(url);
+  try {
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    assert.equal((await emitAck(visitor, "join-room", { roomCode: created.roomCode, playerName: "Visitor", avatar: dogAvatar })).success, false);
+  } finally { visitor.disconnect(); await stopServer(server); }
+});
+
+test("lobby handoff removes the expired host so the remaining players can start", async () => {
+  const { server, url } = await startServer({ GAMEHUB_TEST_RECONNECT_GRACE_MS: "200" });
+  const host = await connect(url), first = await connect(url), second = await connect(url);
+  try {
+    const { roomCode } = await emitAck(host, "create-room", { playerName: "Host", avatar: catAvatar });
+    await emitAck(first, "join-room", { roomCode, playerName: "First", avatar: dogAvatar });
+    await emitAck(second, "join-room", { roomCode, playerName: "Second", avatar: dogAvatar });
+    await emitAck(host, "select-game", { roomCode, gameId: fixtureGameId });
+    const transferred = waitForEvent<{ hostId: string }>(first, "room-host", (state) => state.hostId === first.id);
+    const cleaned = waitForEvent<Array<{ name: string }>>(first, "player-list", (players) => players.length === 2 && players.every((player) => player.name !== "Host"));
+    host.disconnect(); await transferred; await cleaned;
+    assert.equal((await emitAck(first, "start-game", { roomCode })).success, true);
+  } finally { host.disconnect(); first.disconnect(); second.disconnect(); await stopServer(server); }
+});
+
+
+test("host recovery announces the default 60-second handoff deadline", { timeout: 30_000 }, async () => {
+  const { server, url } = await startServer();
+  const host = await connect(url);
+  const guest = await connect(url);
+  try {
+    const created = await emitAck(host, "create-room", { playerName: "Host", avatar: "\u{1F431}" });
+    await emitAck(guest, "join-room", { roomCode: created.roomCode, playerName: "Guest", avatar: "\u{1F436}" });
+    const recovery = waitForEvent<{ recoveryDeadline: number; serverNow: number }>(guest, "room-host", data => data.recoveryDeadline !== null);
+    host.disconnect();
+    const { recoveryDeadline, serverNow } = await recovery;
+    assert.ok(recoveryDeadline - serverNow <= 60_000);
+    assert.ok(recoveryDeadline - serverNow >= 59_900);
+  } finally { host.disconnect(); guest.disconnect(); await stopServer(server); }
 });

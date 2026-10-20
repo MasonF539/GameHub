@@ -64,6 +64,8 @@ export type GameDefinition = {
   keybinds?: GameKeybind[];
   /** Personal browser preferences; never authoritative match rules. */
   displayOptions?: GameDisplayOption[];
+  /** Room-only totals. The host awards wins; games report other declared keys. */
+  scoreboard?: Array<{ key: string; label: string; sort?: "asc" | "desc" }>;
   preview?: GamePreview;
 };
 

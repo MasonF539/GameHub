@@ -12,7 +12,8 @@ const manifest = {
     rules: ["Submit an action to advance the fixture counter."],
     minPlayers: 2,
     maxPlayers: 12,
-    settings: []
+    settings: [],
+    scoreboard: [{ key: "wins", label: "Wins" }, { key: "actions", label: "Actions" }]
   },
   client: {
     delivery: "module",
@@ -52,6 +53,10 @@ class FixtureSession {
     if (action.type === "throw") {
       throw new Error("Fixture action failure");
     }
+    if (action.type === "finish") {
+      this.context.finish({ winnerId: memberId, reason: "Fixture winner" });
+      return { success: true };
+    }
     if (action.type !== "advance") {
       return { success: false, message: "That fixture action is unsupported." };
     }
@@ -59,6 +64,7 @@ class FixtureSession {
       return { success: false, message: "The fixture game is paused." };
     }
     this.actionCount += 1;
+    this.context.recordStat?.(memberId, "actions");
     this.context.emitEvent({
       type: "advanced",
       payload: { actionCount: this.actionCount }

@@ -241,7 +241,7 @@ The resulting `node_modules` folder is excluded from Git.
 - The public address changes when the tunnel restarts.
 - Egyptian War is currently the only playable game.
 - Accounts, persistent data, and moderation tools have not been implemented.
-- If the host disconnects for two minutes, the room is closed, even during a game.
+- A disconnected host has 60 seconds to return before control transfers to a connected player. If no eligible player is available, the room closes.
 
 ## Security model
 

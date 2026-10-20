@@ -227,3 +227,11 @@ test("preview media must live inside the game's own public folder", () => {
     );
   }
 });
+
+test("scoreboards are optional and validate their declared columns", () => {
+  const manifest = createManifest();
+  manifest.definition.scoreboard = [{ key: "wins", label: "Wins" }, { key: "mistakes", label: "Mistakes", sort: "asc" }];
+  assert.doesNotThrow(() => validateGamePluginManifest(manifest));
+  manifest.definition.scoreboard.push({ key: "wins", label: "Duplicate" });
+  assert.throws(() => validateGamePluginManifest(manifest), /Scoreboard keys/);
+});

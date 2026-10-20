@@ -22,6 +22,13 @@ arrows, Space, Enter, Escape, punctuation, and ordinary numpad keys are
 assignable; Tab, function keys, and standalone modifiers are reserved by the
 platform. Games must subscribe only to action IDs declared in their manifest.
 
+Optional scoreboard columns declare room-only counters. Games report resolved
+statistics with `GameSessionContext.recordStat`; the platform counts match wins.
+Clients receive scoreboard and host-change platform events. `context.isHost`
+reflects current ownership; update visible host controls on `host-changed`.
+Optional lifecycle disconnection deadlines support local countdown displays.
+These additions are being tested in the current branch and are not yet published.
+
 ## Releasing
 
 The package is configured for public npm publication. From the repository

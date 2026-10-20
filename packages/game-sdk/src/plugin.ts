@@ -52,6 +52,8 @@ export type GameSessionContext = {
   broadcastState: () => void;
   emitEvent: (event: GameEvent) => void;
   finish: (completion: GameCompletion) => void;
+  /** Optional room-only statistics. Keys must be declared in the game definition. */
+  recordStat?: (memberId: string, key: string) => void;
   now: () => number;
   randomInteger(maxExclusive: number): number;
 };
@@ -59,6 +61,7 @@ export type GameSessionContext = {
 export type GameLifecycleState = {
   isPaused: boolean;
   isBusy: boolean;
+  disconnections?: Array<{ id: string; name: string; autoPlayAt: number | null; autoPlaying: boolean }>;
 };
 
 export interface GameSession {
@@ -132,12 +135,13 @@ export type GameClientContext = {
   removeMember(memberId: string): Promise<GameActionResult>;
   /** Opens the confirmation flow for leaving the active game but staying in its room. */
   requestLeave(): void;
+  resetScoreboard?(): Promise<GameActionResult>;
   notify(message: string): void;
   requestExit(): void;
 };
 
 export type GamePlatformEvent = {
-  type: "spectators" | "chat-message";
+  type: "spectators" | "chat-message" | "host-changed" | "scoreboard" | "host-status";
   payload: unknown;
 };
 

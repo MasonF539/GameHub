@@ -37,7 +37,8 @@ const gameClientHost = new window.GameHubGameClientHost({
   createContext: (gameId) => ({
     memberId: socket.id ?? "",
     role: isCurrentUserSpectator ? "spectator" : "player",
-    isHost: isCurrentUserHost,
+    get isHost() { return isCurrentUserHost; },
+    resetScoreboard: () => resetRoomScoreboard(gameId),
     audio: gameHubAudio,
     input: createGameInput(gameId),
     display: createGameDisplay(gameId),
@@ -647,6 +648,7 @@ document.addEventListener("keydown", (event) => {
     return;
   }
 
+  if (event.target?.closest?.('[role="tab"]') || (event.code === "Space" && event.target?.closest?.("button"))) return;
   const game = gameDefinitions.find((candidate) => candidate.id === currentActiveGameId);
   const keybind = game?.keybinds?.find(
     (candidate) => getAssignedKey(game.id, candidate) === event.code
@@ -981,6 +983,7 @@ function showLobby(roomCode, isHost) {
 
   isCurrentUserHost = isHost;
   document.querySelector("#room-join-controls").hidden = !isHost;
+  updateHostTransferOptions();
   document.querySelector("#review-joiners").classList.toggle("d-none", !isHost || Number(document.querySelector("#join-request-count").textContent) === 0);
   isRoomLocked = false;
 
@@ -1005,6 +1008,7 @@ function showLobby(roomCode, isHost) {
 
 function showEntry() {
   document.querySelector("#room-join-controls").hidden = true;
+  document.querySelector("#host-transfer-controls").hidden = true;
   document.querySelector("#join-request-count").textContent = "0";
   document.querySelector("#pending-join-requests").replaceChildren();
   document.querySelector("#require-join-approval").checked = false;
@@ -1050,6 +1054,10 @@ function resetRoomState() {
   selectedGameId = null;
   currentGameSettings = {};
   currentPlayers = [];
+  roomScoreboards.clear();
+  hostRecovery = null;
+  gameDisconnections = [];
+  renderRoomStatus();
   hasReceivedPlayerList = false;
   isCurrentUserSpectator = false;
   isRoomRequestPending = false;
@@ -1238,7 +1246,8 @@ function requestGameSelection(gameId) {
     "select-game",
     {
       roomCode: currentRoomCode,
-      gameId
+      gameId,
+      ...(savedRuleSettings(selectedGame) ? { settings: savedRuleSettings(selectedGame) } : {})
     },
     (response) => {
       isGameSelectionPending = false;
@@ -1281,6 +1290,7 @@ function displayGameInformation(game, settings) {
 
   settingsModalTitle.textContent = `${game.name} Settings`;
   settingsModalBody.replaceChildren();
+  renderPresetControls(game);
 
   for (const setting of game.settings) {
     const settingContainer = document.createElement("div");
@@ -1693,6 +1703,7 @@ socket.on("player-list", (players) => {
     );
 
   currentPlayers = players;
+  updateHostTransferOptions();
   hasReceivedPlayerList = true;
   returningGameMemberIds = new Set(
     [...returningGameMemberIds].filter(
@@ -1742,12 +1753,21 @@ socket.on("player-list", (players) => {
     }
 
     if (isCurrentUserHost && !player.isHost) {
-      listItem.appendChild(
-        createKickPlayerButton(
-          player,
-          "btn btn-outline-danger btn-sm ms-auto"
-        )
-      );
+      const actions = document.createElement("div");
+      actions.className = "d-flex gap-1 ms-auto flex-shrink-0";
+      if (player.isConnected && (!roomHasActiveGame || player.isPlaying)) {
+        const hostButton = document.createElement("button");
+        hostButton.className = "btn btn-outline-primary btn-sm";
+        hostButton.type = "button";
+        hostButton.textContent = "Host";
+        hostButton.setAttribute("aria-label", `Make ${player.name} the host`);
+        hostButton.onclick = () => socket.emit("transfer-host", { memberId: player.id }, (result) => {
+          if (!result.success) showToast(result.message);
+        });
+        actions.appendChild(hostButton);
+      }
+      actions.appendChild(createKickPlayerButton(player, "btn btn-outline-danger btn-sm"));
+      listItem.appendChild(actions);
     }
 
     playerList.appendChild(listItem);
@@ -1772,6 +1792,7 @@ socket.on("game-selected", ({ gameId, settings }) => {
 
   selectedGameId = gameId;
   currentGameSettings = settings;
+  if (isCurrentUserHost) rememberRules(gameId, settings);
 
   howToPlayButton.disabled = false;
   gameSettingsButton.disabled = false;
@@ -1801,6 +1822,7 @@ socket.on(
     }
 
     currentGameSettings = settings;
+  if (isCurrentUserHost) rememberRules(gameId, settings);
 
     displayGameInformation(
       selectedGame,
@@ -1820,10 +1842,16 @@ function mountGameClient(game) {
   placeAppUtilityControls(true);
   currentActiveGameId = game.gameId;
   roomHasActiveGame = true;
+  updateHostTransferOptions();
   activeGameIsPaused = game.isPaused === true;
   activeGameIsBusy = false;
   updateGameSettingsControls();
   gameClientHost.mount(game.gameId, game);
+  gameClientHost.receivePlatformEvent({ type: "host-status", payload: {
+    recoveryDeadline: hostRecovery, serverNow: Date.now() + roomClockOffset
+  } });
+  const scores = roomScoreboards.get(game.gameId);
+  if (scores) gameClientHost.receivePlatformEvent({ type: "scoreboard", payload: scores });
   for (const message of game.chatHistory ?? []) {
     gameClientHost.receivePlatformEvent({
       type: "chat-message",
@@ -1849,10 +1877,13 @@ socket.on("game-event", (envelope) => {
   gameClientHost.receiveEvent(envelope);
 });
 
-socket.on("game-lifecycle", ({ gameId, isPaused, isBusy }) => {
+socket.on("game-lifecycle", ({ gameId, isPaused, isBusy, disconnections = [], serverNow }) => {
   if (gameId !== currentActiveGameId) return;
+  gameDisconnections = disconnections;
+  if (Number.isFinite(serverNow)) roomClockOffset = serverNow - Date.now();
   activeGameIsPaused = isPaused === true;
   activeGameIsBusy = isBusy === true;
+  renderRoomStatus();
   updateGameSettingsControls();
 });
 
@@ -1885,6 +1916,8 @@ socket.on("game-ended", ({ message, returningMemberIds = [] }) => {
   activeGameIsBusy = false;
   roomHasActiveGame = false;
   currentSpectators = [];
+  gameDisconnections = [];
+  renderRoomStatus();
   updateGameSettingsControls();
   gameClientHost.unmount();
   gameplayView.classList.add("d-none");
@@ -2369,3 +2402,172 @@ function renderDisplayOptions() {
     container.append(section);
   }
 }
+
+// Presets are browser-only and always validated against the current game's schema.
+const ruleStorageKey = "gamehub:rule-presets";
+let rulePreferences = {};
+try {
+  const saved = JSON.parse(localStorage.getItem(ruleStorageKey) ?? "{}");
+  if (saved && typeof saved === "object" && !Array.isArray(saved)) rulePreferences = saved;
+} catch { /* Continue with memory-only preferences. */ }
+function storeRules(notify = false) {
+  try { localStorage.setItem(ruleStorageKey, JSON.stringify(rulePreferences)); }
+  catch { if (notify) showToast("Browser storage is unavailable. Presets will last only for this visit."); }
+}
+function validSavedRules(game, source) {
+  if (!source || typeof source !== "object") return null;
+  return Object.fromEntries(game.settings.map((setting) => {
+    const value = source[setting.key];
+    const valid = setting.type !== "number" ? typeof value === "boolean"
+      : Number.isFinite(value) && (setting.control === "range"
+        ? value >= setting.min && value <= setting.max : setting.options.includes(value));
+    return [setting.key, valid ? value : setting.defaultValue];
+  }));
+}
+function savedRuleSettings(game) { return validSavedRules(game, rulePreferences[game.id]?.last); }
+function rememberRules(gameId, settings) {
+  const previous = rulePreferences[gameId];
+  rulePreferences[gameId] = { ...(previous && typeof previous === "object" ? previous : {}), last: settings };
+  storeRules();
+}
+function readRuleDraft() {
+  return Object.fromEntries([...settingsModalBody.querySelectorAll("[data-setting-key]")].map((input) => [
+    input.dataset.settingKey, input.dataset.settingType === "number" ? Number(input.value) : input.checked
+  ]));
+}
+function renderPresetControls(game) {
+  if (!isCurrentUserHost || roomHasActiveGame) return;
+  const toolbar = document.createElement("div");
+  toolbar.className = "rule-presets mb-4";
+  toolbar.innerHTML = '<label class="form-label" for="rule-preset">Load a preset</label><div class="d-flex gap-2 mb-3"><select id="rule-preset" class="form-select form-select-sm" aria-label="Saved rule preset"></select><button class="btn btn-outline-danger btn-sm" type="button" data-preset-action="delete">Delete</button></div><label class="form-label" for="rule-preset-name">Create a preset</label><div class="d-flex gap-2"><input id="rule-preset-name" class="form-control form-control-sm" maxlength="40" placeholder="Preset name" aria-label="Preset name"><button class="btn btn-outline-primary btn-sm" type="button" data-preset-action="save">Save preset</button></div><p class="small text-body-secondary mb-0 mt-1">Saved in this browser. Selecting a preset loads this draft. Use Save Settings to apply it to the room.</p>';
+  const select = toolbar.querySelector("select"), name = toolbar.querySelector("input");
+  const presets = () => {
+    const saved = rulePreferences[game.id]?.presets;
+    return Array.isArray(saved) ? saved.filter((preset) => typeof preset?.name === "string" && preset.settings && typeof preset.settings === "object" && !Array.isArray(preset.settings)).slice(0, 20) : [];
+  };
+  const refresh = () => {
+    select.replaceChildren();
+    for (const preset of presets()) select.add(new window.Option(preset.name, preset.name));
+    select.disabled = select.options.length === 0;
+    toolbar.querySelector('[data-preset-action="delete"]').disabled = select.disabled;
+    select.selectedIndex = -1;
+  };
+  select.onchange = () => {
+    const preset = presets().find((preset) => preset.name === select.value);
+    if (!preset) return;
+    const settings = validSavedRules(game, preset.settings);
+    for (const input of settingsModalBody.querySelectorAll("[data-setting-key]")) {
+      if (input.dataset.settingType === "number") input.value = settings[input.dataset.settingKey];
+      else input.checked = settings[input.dataset.settingKey];
+      input.dispatchEvent(new window.Event("input", { bubbles: true }));
+    }
+  };
+  toolbar.querySelector('[data-preset-action="save"]').onclick = () => {
+    const title = name.value.trim();
+    if (!title) { name.focus(); return; }
+    const saved = presets().filter((preset) => preset.name !== title);
+    if (saved.length >= 20) { showToast("Delete a preset before adding another (maximum 20 per game)."); return; }
+    saved.push({ name: title, settings: validSavedRules(game, readRuleDraft()) });
+    rulePreferences[game.id] = { ...rulePreferences[game.id], presets: saved };
+    storeRules(true); refresh(); select.value = title; showToast("Preset saved in this browser.");
+  };
+  toolbar.querySelector('[data-preset-action="delete"]').onclick = () => {
+    if (!select.value) return;
+    rulePreferences[game.id] = { ...rulePreferences[game.id], presets: presets().filter((preset) => preset.name !== select.value) };
+    storeRules(true); refresh();
+  };
+  refresh(); settingsModalBody.appendChild(toolbar);
+}
+
+const roomScoreboards = new Map();
+let hostRecovery = null;
+let roomClockOffset = 0;
+let gameDisconnections = [];
+function updateHostTransferOptions() {
+  const section = document.querySelector("#host-transfer-controls");
+  section.hidden = !isCurrentUserHost || currentRoomCode === null;
+  const select = document.querySelector("#host-transfer-player");
+  const previous = select.value;
+  select.replaceChildren();
+  for (const player of currentPlayers.filter(player => !player.isHost && player.isConnected && (!roomHasActiveGame || player.isPlaying))) {
+    select.add(new window.Option(player.name, player.id));
+  }
+  if ([...select.options].some(option => option.value === previous)) select.value = previous;
+  select.disabled = select.options.length === 0;
+  document.querySelector("#transfer-host").disabled = select.disabled;
+}
+document.querySelector("#transfer-host").onclick = () => {
+  const memberId = document.querySelector("#host-transfer-player").value;
+  if (memberId) socket.emit("transfer-host", { memberId }, result => {
+    if (!result.success) showToast(result.message);
+  });
+};
+function renderRoomStatus() {
+  const now = Date.now() + roomClockOffset;
+  const seconds = (deadline) => Math.max(0, Math.ceil((deadline - now) / 1000));
+  document.querySelector("#room-host-status").hidden = !hostRecovery;
+  document.querySelector("#room-host-status").textContent = hostRecovery
+    ? `Host disconnected. Control transfers to a connected player in ${seconds(hostRecovery)}s; the room closes if nobody is available.` : "";
+  document.querySelector("#app-disconnect-status").textContent = gameDisconnections.length
+    ? `${activeGameIsPaused ? "Paused" : "Running"}: ` + gameDisconnections.map((member) => `${member.name}: ${member.autoPlaying ? "auto-playing" : member.autoPlayAt ? `auto-play in ${seconds(member.autoPlayAt)}s` : "waiting for reconnection"}`).join("; ") : "";
+}
+setInterval(renderRoomStatus, 1000);
+socket.on("room-host", ({ hostId, recoveryDeadline, serverNow }) => {
+  if (recoveryDeadline && !hostRecovery) showToast("The room host disconnected. Control transfers after 60 seconds if they do not return.");
+  hostRecovery = recoveryDeadline;
+  if (Number.isFinite(serverNow)) roomClockOffset = serverNow - Date.now();
+  const changed = isCurrentUserHost !== (hostId === socket.id);
+  isCurrentUserHost = hostId === socket.id;
+  if (changed && currentRoomCode !== null) {
+    closeLobbyButton.classList.toggle("d-none", !isCurrentUserHost);
+    leaveLobbyButton.classList.toggle("d-none", isCurrentUserHost);
+    toggleRoomLockButton.classList.toggle("d-none", !isCurrentUserHost);
+    startGameButton.classList.toggle("d-none", !isCurrentUserHost);
+    document.querySelector("#room-join-controls").hidden = !isCurrentUserHost;
+    document.querySelector("#review-joiners").classList.toggle("d-none", !isCurrentUserHost || Number(document.querySelector("#join-request-count").textContent) === 0);
+    updateGameSettingsControls(); updateGamePicker(); updateStartGameAvailability();
+    const game = gameDefinitions.find((game) => game.id === selectedGameId);
+    if (game) displayGameInformation(game, currentGameSettings);
+    gameClientHost.receivePlatformEvent({ type: "host-changed", payload: { isHost: isCurrentUserHost } });
+    showToast(isCurrentUserHost ? "You are now the room host." : "Room host changed.");
+  }
+  updateHostTransferOptions();
+  renderRoomStatus();
+  gameClientHost.receivePlatformEvent({ type: "host-status", payload: { recoveryDeadline, serverNow } });
+});
+let pendingScoreReset = null;
+function resetRoomScoreboard(gameId) {
+  if (pendingScoreReset) return pendingScoreReset;
+  const element = document.querySelector("#reset-scoreboard-modal");
+  const button = document.querySelector("#confirm-reset-scoreboard");
+  const modal = bootstrap.Modal.getOrCreateInstance(element);
+  pendingScoreReset = new Promise(resolve => {
+    let finished = false;
+    const finish = result => {
+      if (finished) return;
+      finished = true;
+      button.removeEventListener("click", confirm);
+      element.removeEventListener("hidden.bs.modal", cancel);
+      button.disabled = false;
+      pendingScoreReset = null;
+      resolve(result);
+    };
+    const cancel = () => finish({ success: true });
+    const confirm = () => {
+      if (button.disabled) return;
+      button.disabled = true;
+      socket.emit("reset-room-scoreboard", { gameId }, result => {
+        finish(result);
+        modal.hide();
+      });
+    };
+    button.addEventListener("click", confirm);
+    element.addEventListener("hidden.bs.modal", cancel);
+    modal.show();
+  });
+  return pendingScoreReset;
+}
+socket.on("room-scoreboard", (scores) => {
+  roomScoreboards.set(scores.gameId, scores);
+  if (scores.gameId === currentActiveGameId) gameClientHost.receivePlatformEvent({ type: "scoreboard", payload: scores });
+});

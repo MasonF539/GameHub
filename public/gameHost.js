@@ -89,6 +89,7 @@
       const display = trackSubscriptions(baseContext.display, ["onChange"]);
       const context = {
         ...baseContext,
+        get isHost() { return baseContext.isHost; },
         ...(input ? { input } : {}),
         ...(display ? { display } : {}),
         root: gameRoot,

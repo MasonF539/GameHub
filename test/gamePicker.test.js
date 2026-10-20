@@ -5,7 +5,7 @@ const path = require("node:path");
 const { JSDOM } = require("jsdom");
 const { GameClientHost } = require("../public/gameHost.js");
 
-function createClient({ prefersReducedMotion = false, mobile = false, fullscreenRequest, savedRoom, url = "http://localhost" } = {}) {
+function createClient({ prefersReducedMotion = false, mobile = false, fullscreenRequest, savedRoom, savedRules, url = "http://localhost" } = {}) {
   const html = fs.readFileSync(
     path.join(__dirname, "..", "public", "index.html"),
     "utf8"
@@ -30,6 +30,7 @@ function createClient({ prefersReducedMotion = false, mobile = false, fullscreen
     localStorage.setItem("gamehub:last-room", savedRoom);
     localStorage.setItem(`gamehub:resume:${savedRoom}`, "saved-token");
   }
+  if (savedRules) localStorage.setItem("gamehub:rule-presets", JSON.stringify(savedRules));
   global.CSS = dom.window.CSS ?? { escape: (value) => String(value) };
   if (!global.CSS.escape) {
     global.CSS.escape = (value) => String(value);
@@ -1071,3 +1072,101 @@ for (const action of ["create-room", "join-room"]) {
     } finally { refreshed.close(); }
   });
 }
+
+test("presets stay in this browser, normalize old values, and apply only through Save Settings", () => {
+  const view = createClient({ savedRules: { "example-game": {
+    last: { fast: true, seconds: 999 }, presets: [{ name: "Chaos", settings: { fast: true, seconds: 20 } }]
+  } } });
+  const definition = game({ settings: [
+    { key: "fast", label: "Fast", description: "Fast rules", defaultValue: false },
+    { type: "number", control: "range", key: "seconds", label: "Timer", description: "Seconds", defaultValue: 15, min: 5, max: 120, step: 1 }
+  ] });
+  try {
+    view.handlers.get("available-games")([definition]);
+    document.querySelector("#create-room").click();
+    view.emitted.find(({ event }) => event === "create-room").respond({ success: true, roomCode: "ABC123", resumeToken: "token" });
+    const selected = view.emitted.find(({ event }) => event === "select-game");
+    assert.deepEqual(selected.data.settings, { fast: true, seconds: 15 });
+    view.handlers.get("game-selected")({ gameId: definition.id, settings: selected.data.settings });
+    assert.deepEqual([...document.querySelector("#rule-preset").options].map(option => option.textContent), ["Chaos"]);
+    document.querySelector("#rule-preset").value = "Chaos";
+    document.querySelector("#rule-preset").dispatchEvent(new window.Event("change"));
+    assert.equal(document.querySelector('[data-setting-key="seconds"]').value, "20");
+    assert.equal(view.emitted.some(({ event }) => event === "update-game-settings"), false);
+    document.querySelector("#rule-preset-name").value = "My custom rules";
+    document.querySelector('[data-preset-action="save"]').click();
+    let saved = JSON.parse(localStorage.getItem("gamehub:rule-presets"));
+    assert.equal(saved[definition.id].presets.length, 2);
+    document.querySelector("#save-game-settings").click();
+    assert.deepEqual(view.emitted.find(({ event }) => event === "update-game-settings").data.settings, { fast: true, seconds: 20 });
+    view.handlers.get("game-settings-updated")({ gameId: definition.id, settings: { fast: true, seconds: 20 } });
+    saved = JSON.parse(localStorage.getItem("gamehub:rule-presets"));
+    assert.equal(saved[definition.id].last.seconds, 20);
+    document.querySelector("#rule-preset").value = "My custom rules";
+    document.querySelector('[data-preset-action="delete"]').click();
+    assert.equal(JSON.parse(localStorage.getItem("gamehub:rule-presets"))[definition.id].presets.length, 1);
+    view.handlers.get("room-host")({ hostId: "another-player", recoveryDeadline: null, serverNow: Date.now() });
+    assert.equal(document.querySelector("#rule-preset"), null);
+    view.handlers.get("room-host")({ hostId: undefined, recoveryDeadline: null, serverNow: Date.now() });
+    assert.ok(document.querySelector("#rule-preset"), "new host gets presets immediately");
+  } finally { view.close(); }
+});
+
+test("Space on a panel button activates that control without triggering a gameplay slap", () => {
+  const view = createClient(); let slaps = 0;
+  try {
+    view.handlers.get("available-games")([game({ keybinds: [{ id: "slap", label: "Slap", defaultKey: "Space" }] })]);
+    view.handlers.get("room-resumed")({ roomCode: "ABC123", isHost: false, selectedGameId: "example-game", gameSettings: {},
+      activeGameId: "example-game", role: "player", isLocked: false, isPaused: false, chatEnabled: true });
+    view.gameClientContexts[0].input.onAction("slap", () => slaps++);
+    document.querySelector("#app-settings-button").dispatchEvent(new window.KeyboardEvent("keydown", { code: "Space", bubbles: true }));
+    assert.equal(slaps, 0);
+    document.body.dispatchEvent(new window.KeyboardEvent("keydown", { code: "Space", bubbles: true }));
+    assert.equal(slaps, 1);
+  } finally { view.close(); }
+});
+
+
+test("lobby Host buttons sit before Kick and only target eligible connected players", () => {
+  const view = createClient();
+  try {
+    view.handlers.get("available-games")([game()]);
+    document.querySelector("#create-room").click();
+    view.emitted.find(({ event }) => event === "create-room").respond({ success: true, roomCode: "ABC123", resumeToken: "token" });
+    view.handlers.get("player-list")([
+      { id: "host", name: "Host", avatar: "H", isHost: true, isConnected: true },
+      { id: "guest", name: "Guest", avatar: "G", isHost: false, isConnected: true },
+      { id: "offline", name: "Offline", avatar: "O", isHost: false, isConnected: false }
+    ]);
+    const buttons = [...document.querySelectorAll("#player-list li:nth-child(2) button")];
+    assert.deepEqual(buttons.map(button => button.textContent), ["Host", "Kick"]);
+    assert.equal(document.querySelectorAll("#player-list li:nth-child(3) button").length, 1);
+    buttons[0].click();
+    assert.deepEqual(view.emitted.find(({ event }) => event === "transfer-host").data, { memberId: "guest" });
+    assert.equal(document.querySelector("#host-transfer-controls").hidden, false);
+    assert.deepEqual([...document.querySelector("#host-transfer-player").options].map(option => option.value), ["guest"]);
+    assert.equal(document.querySelector("#view-room-scoreboard"), null);
+  } finally { view.close(); }
+});
+
+
+test("score reset uses a repeatable in-app confirmation and cancellation sends nothing", async () => {
+  const view = createClient();
+  try {
+    view.handlers.get("available-games")([game()]);
+    view.handlers.get("room-resumed")({ roomCode: "ABC123", isHost: true, selectedGameId: "example-game", gameSettings: {},
+      activeGameId: "example-game", role: "player", isLocked: false, isPaused: false, chatEnabled: true });
+    const context = view.gameClientContexts[0];
+    const first = context.resetScoreboard();
+    assert.equal(view.emitted.some(({event}) => event === "reset-room-scoreboard"), false);
+    document.querySelector("#reset-scoreboard-modal").dispatchEvent(new window.Event("hidden.bs.modal"));
+    assert.equal((await first).success, true);
+    const second = context.resetScoreboard();
+    document.querySelector("#confirm-reset-scoreboard").click();
+    const request = view.emitted.find(({event}) => event === "reset-room-scoreboard");
+    assert.deepEqual(request.data, { gameId: "example-game" });
+    request.respond({ success: true });
+    assert.equal((await second).success, true);
+    assert.equal(document.querySelector("#confirm-reset-scoreboard").disabled, false);
+  } finally { view.close(); }
+});

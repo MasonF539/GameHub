@@ -191,7 +191,12 @@
           Spectate Game
         </button>
 
-        <p id="game-status" class="status-message mt-3 mb-0"></p>
+        <div class="lobby-status-area">
+          <p id="room-host-status" class="small mb-2" aria-live="off" hidden></p>
+          <div class="d-flex align-items-center gap-2">
+            <p id="game-status" class="status-message mb-0 flex-grow-1"></p>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -285,6 +290,15 @@
                   <h4 id="game-display-options-title" class="game-settings-group-title">Display Options</h4>
                   <p class="text-body-secondary small">Personal card and table styles, saved on this device.</p>
                   <div id="game-display-sections"></div>
+                </section>
+                <p id="app-disconnect-status" class="small" aria-live="off"></p>
+                <section id="host-transfer-controls" class="game-settings-group" hidden>
+                  <h4 class="game-settings-group-title">Host control</h4>
+                  <label for="host-transfer-player">Transfer to a connected player</label>
+                  <div class="d-flex gap-2 mt-2">
+                    <select id="host-transfer-player" class="form-select form-select-sm"></select>
+                    <button id="transfer-host" class="btn btn-outline-primary btn-sm" type="button">Transfer</button>
+                  </div>
                 </section>
                 <section id="room-join-controls" class="game-settings-group" aria-labelledby="room-join-title" hidden>
                   <h4 id="room-join-title" class="game-settings-group-title">Joining</h4>
@@ -411,6 +425,20 @@
           <div id="rules-modal-body" class="modal-body"></div>
         </div>
       </div>
+    </div>
+
+    <div id="reset-scoreboard-modal" class="modal fade" data-bs-theme="dark" tabindex="-1" aria-labelledby="reset-scoreboard-title" aria-describedby="reset-scoreboard-description" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered"><div class="modal-content app-settings-modal-content">
+        <div class="modal-header">
+          <h2 id="reset-scoreboard-title" class="modal-title fs-4">Reset totals?</h2>
+          <button class="btn-close" type="button" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body" id="reset-scoreboard-description">Clear all player totals for this game in this room? This cannot be undone.</div>
+        <div class="modal-footer">
+          <button class="btn btn-outline-light" type="button" data-bs-dismiss="modal">Cancel</button>
+          <button id="confirm-reset-scoreboard" class="btn btn-danger" type="button">Reset totals</button>
+        </div>
+      </div></div>
     </div>
 
     <div id="settings-modal" class="modal fade" tabindex="-1" aria-labelledby="settings-modal-title" aria-hidden="true">

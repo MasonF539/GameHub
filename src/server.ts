@@ -1,5 +1,5 @@
 import express from "express";
-import { randomBytes, randomInt } from "node:crypto";
+import { randomBytes, randomInt, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import http from "http";
 import { tmpdir } from "node:os";
@@ -24,6 +24,7 @@ type GameSettingValue = boolean | number;
 
 type Player = {
   id: string;
+  scoreId: string;
   name: string;
   avatar: string;
   isConnected: boolean;
@@ -36,7 +37,11 @@ type ChatMessage = {
   sentAt: number;
 };
 
+type ScoreRow = { id: string; name: string; avatar: string; values: Record<string, number> };
+
 type Room = {
+  hostRecoveryDeadline: number | null;
+  scores: Map<string, Map<string, ScoreRow>>;
   requiresJoinApproval: boolean;
   pendingJoinRequests: Map<string, {
     name: string; avatar: string; timer: ReturnType<typeof setTimeout>; accept: (respond: SocketResponse) => void;
@@ -224,6 +229,10 @@ const reconnectGracePeriodMs =
   process.env.NODE_ENV === "test" && testReconnectGracePeriodMs > 0
     ? testReconnectGracePeriodMs
     : 120_000;
+const hostTransferDelayMs =
+  process.env.NODE_ENV === "test" && testReconnectGracePeriodMs > 0
+    ? testReconnectGracePeriodMs
+    : 60_000;
 const io = new Server(server, {
   connectionStateRecovery: {
     maxDisconnectionDuration: reconnectGracePeriodMs,
@@ -334,6 +343,7 @@ function generateRoomCode(): string {
 function sendRoomMemberLists(roomCode: string, room: Room): void {
   const players = Array.from(room.players.values()).map((player) => ({
     ...player,
+    isPlaying: room.activeGamePlayerIds.has(player.id),
     isHost: player.id === room.hostId
   }));
   const spectators = Array.from(room.spectators.values());
@@ -544,6 +554,65 @@ function sendRoomResumed(
 }
 
 // Lock state, selected game and member lists: what a (re)joining browser needs.
+function sendRoomHost(roomCode: string, room: Room, target?: Socket): void {
+  const payload = { hostId: room.hostId, recoveryDeadline: room.hostRecoveryDeadline, serverNow: Date.now() };
+  if (target) target.emit("room-host", payload);
+  else io.to(roomCode).emit("room-host", payload);
+}
+
+function transferRoomHost(roomCode: string, room: Room, memberId: string): void {
+  const oldHost = room.hostId;
+  room.hostId = memberId;
+  room.hostRecoveryDeadline = null;
+  clearDisconnectTimer(oldHost);
+  io.to(oldHost).emit("join-requests", []);
+  sendRoomHost(roomCode, room);
+  sendJoinRequests(room);
+  sendRoomMemberLists(roomCode, room);
+  const oldMember = room.players.get(oldHost);
+  if (oldMember && !oldMember.isConnected && !room.activeGamePlayerIds.has(oldHost)) {
+    removeMemberFromRoom(roomCode, room, oldHost, "player");
+  }
+}
+
+function ensureScore(room: Room, gameId: string, memberId: string): ScoreRow | null {
+  const member = room.players.get(memberId);
+  const columns = getGameDefinition(gameId)?.scoreboard;
+  if (!member || !columns?.length) return null;
+  if (!room.scores.has(gameId)) room.scores.set(gameId, new Map());
+  const scores = room.scores.get(gameId)!;
+  let row = scores.get(member.scoreId);
+  if (!row && scores.size < 200) {
+    row = { id: member.scoreId, name: member.name, avatar: member.avatar,
+      values: Object.fromEntries(columns.map((column) => [column.key, 0])) };
+    scores.set(member.scoreId, row);
+  }
+  return row ?? null;
+}
+
+function sendScoreboard(roomCode: string, room: Room, gameId: string, target?: Socket): void {
+  const columns = getGameDefinition(gameId)?.scoreboard;
+  if (!columns?.length) return;
+  const rows = [...(room.scores.get(gameId)?.values() ?? [])].sort((a, b) => {
+    for (const column of columns) {
+      const difference = ((b.values[column.key] ?? 0) - (a.values[column.key] ?? 0)) * (column.sort === "asc" ? -1 : 1);
+      if (difference) return difference;
+    }
+    return a.name.localeCompare(b.name);
+  });
+  const payload = { gameId, columns, rows };
+  if (target) target.emit("room-scoreboard", payload);
+  else io.to(roomCode).emit("room-scoreboard", payload);
+}
+
+function recordRoomStat(roomCode: string, room: Room, gameId: string, memberId: string, key: string): void {
+  if (!getGameDefinition(gameId)?.scoreboard?.some((column) => column.key === key)) return;
+  const row = ensureScore(room, gameId, memberId);
+  if (!row) return;
+  row.values[key] = Math.min(Number.MAX_SAFE_INTEGER, (row.values[key] ?? 0) + 1);
+  sendScoreboard(roomCode, room, gameId);
+}
+
 function sendJoinRequests(room: Room): void {
   io.to(room.hostId).emit("join-requests", [...room.pendingJoinRequests].map(([id, request]) => ({
     id, name: request.name, avatar: request.avatar
@@ -551,6 +620,8 @@ function sendJoinRequests(room: Room): void {
 }
 
 function sendLobbyState(socket: Socket, roomCode: string, room: Room): void {
+  sendRoomHost(roomCode, room, socket);
+  for (const gameId of room.scores.keys()) sendScoreboard(roomCode, room, gameId, socket);
   socket.emit("room-lock-changed", { isLocked: room.isLocked });
   socket.emit("room-approval-changed", { requiresJoinApproval: room.requiresJoinApproval });
   sendJoinRequests(room);
@@ -571,6 +642,8 @@ function sendRoomSnapshot(
   room: Room,
   rotatedResumeToken?: string
 ): void {
+  if (room.hostId === socket.id) room.hostRecoveryDeadline = null;
+  sendRoomHost(roomCode, room);
   sendRoomResumed(socket, roomCode, room);
 
   if (rotatedResumeToken !== undefined) {
@@ -678,6 +751,12 @@ function scheduleDisconnectExpiry(
     }
 
     if (found.role === "player" && room.hostId === memberId) {
+      const successor = [...room.players.values()].find((player) => player.isConnected && player.id !== memberId &&
+        (room.activeGameId === null || room.activeGamePlayerIds.has(player.id)));
+      if (successor) {
+        transferRoomHost(roomCode, room, successor.id);
+        return;
+      }
       closeRoom(
         roomCode,
         room,
@@ -698,7 +777,7 @@ function scheduleDisconnectExpiry(
     console.log(
       `Removed disconnected ${found.role} ${found.member.name} from room ${roomCode}`
     );
-  }, reconnectGracePeriodMs);
+  }, room.hostId === memberId ? hostTransferDelayMs : reconnectGracePeriodMs);
 
   disconnectedPlayerTimers.set(memberId, timer);
 }
@@ -788,6 +867,7 @@ function sendActiveGameState(
       state: room.gameSession.getPublicState(viewer)
     });
     target.emit("game-lifecycle", {
+      serverNow: Date.now(),
       gameId: room.activeGameId,
       ...room.gameSession.getLifecycleState()
     });
@@ -811,6 +891,7 @@ function finishActiveGame(
 ): void {
   if (rooms.get(roomCode) !== room || room.activeGameId === null) return;
   const returningMemberIds = Array.from(room.spectators.keys());
+  if (winnerId !== null) recordRoomStat(roomCode, room, room.activeGameId, winnerId, "wins");
   disposeGameSession(room);
   room.activeGameId = null;
   room.activeGamePlayerIds.clear();
@@ -959,6 +1040,7 @@ io.on("connection", (socket) => {
 
     if (role === "player" && room.hostId === oldPlayerId) {
       room.hostId = socket.id;
+      room.hostRecoveryDeadline = null;
     }
 
     if (room.activeGamePlayerIds.delete(oldPlayerId)) {
@@ -1034,6 +1116,8 @@ io.on("connection", (socket) => {
     const roomCode = generateRoomCode();
 
     const room: Room = {
+      hostRecoveryDeadline: null,
+      scores: new Map(),
       requiresJoinApproval: false,
       pendingJoinRequests: new Map(),
       chatHistory: [],
@@ -1050,6 +1134,7 @@ io.on("connection", (socket) => {
 
     room.players.set(socket.id, {
       id: socket.id,
+      scoreId: randomUUID(),
       name: playerName,
       avatar,
       isConnected: true
@@ -1193,6 +1278,7 @@ io.on("connection", (socket) => {
     }
     const roomMember = {
       id: socket.id,
+      scoreId: randomUUID(),
       name: playerName,
       avatar,
       isConnected: true
@@ -1242,6 +1328,32 @@ io.on("connection", (socket) => {
 
   onSocketRequest(socket, "cancel-join-request", (_data, respond) => {
     removeJoinRequest(socket.id);
+    respond({ success: true });
+  });
+
+  onSocketRequest(socket, "transfer-host", (data, respond) => {
+    const roomCode = socketRoomCodes.get(socket.id);
+    const room = roomCode ? rooms.get(roomCode) : undefined;
+    const target = room?.players.get(String(data?.memberId ?? ""));
+    if (!room || room.hostId !== socket.id || !target?.isConnected || target.id === socket.id ||
+        (room.activeGameId !== null && !room.activeGamePlayerIds.has(target.id))) {
+      respond({ success: false, message: "Only the host can transfer control to a connected player in this game." });
+      return;
+    }
+    transferRoomHost(roomCode!, room, target.id);
+    respond({ success: true });
+  });
+
+  onSocketRequest(socket, "reset-room-scoreboard", (data, respond) => {
+    const roomCode = socketRoomCodes.get(socket.id);
+    const room = roomCode ? rooms.get(roomCode) : undefined;
+    const gameId = String(data?.gameId ?? "");
+    if (!room || room.hostId !== socket.id || !getGameDefinition(gameId)?.scoreboard?.length) {
+      respond({ success: false, message: "Only the host can reset the room scoreboard." }); return;
+    }
+    room.scores.delete(gameId);
+    if (room.activeGameId === gameId) for (const id of room.activeGamePlayerIds) ensureScore(room, gameId, id);
+    sendScoreboard(roomCode!, room, gameId);
     respond({ success: true });
   });
 
@@ -1326,6 +1438,13 @@ io.on("connection", (socket) => {
     }
 
     room.selectedGameId = game.id;
+    if (data?.settings !== undefined) {
+      if (!data.settings || typeof data.settings !== "object" ||
+          game.settings.some((setting) => !validateGameSetting(setting, data.settings[setting.key]))) {
+        respond({ success: false, message: "The saved settings are incompatible with this game." }); return;
+      }
+      for (const setting of game.settings) defaultSettings[setting.key] = data.settings[setting.key];
+    }
     room.gameSettings = defaultSettings;
 
     io.to(roomCode).emit("game-selected", {
@@ -1823,6 +1942,11 @@ io.on("connection", (socket) => {
             finishActiveGame(roomCode, room, winnerId, reason);
           }
         },
+        recordStat: (memberId, key) => {
+          if (createdSession !== null && room.gameSession === createdSession && room.activeGamePlayerIds.has(memberId) && key !== "wins") {
+            recordRoomStat(roomCode, room, game.id, memberId, key);
+          }
+        },
         now: Date.now,
         randomInteger: deterministicTestRandomInteger
       }, room.gameSettings);
@@ -1853,6 +1977,9 @@ io.on("connection", (socket) => {
       return;
     }
 
+    for (const memberId of room.activeGamePlayerIds) ensureScore(room, game.id, memberId);
+    sendScoreboard(roomCode, room, game.id);
+    sendRoomMemberLists(roomCode, room);
     emitToActiveGameViewers(room, "game-started", {
       chatHistory: room.chatHistory,
       gameId: game.id,
@@ -2104,6 +2231,10 @@ io.on("connection", (socket) => {
     }
 
     found.member.isConnected = false;
+    if (room.hostId === socket.id) {
+      room.hostRecoveryDeadline = Date.now() + hostTransferDelayMs;
+      sendRoomHost(roomCode, room);
+    }
 
     if (
       found.role === "player" &&

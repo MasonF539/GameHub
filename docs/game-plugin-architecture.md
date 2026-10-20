@@ -57,13 +57,43 @@ reliable list of connected keyboards.
 Egyptian War defaults to a 60-second offline waiting period, then auto-plays
 offline turns while preserving each player's hand for reconnection. Hosts can
 adjust the waiting period or disable takeover in the lobby's game settings.
-An explicit host pause remains paused when the wait ends. The existing host
-disconnect timeout still closes an abandoned room. Animation timing is shared;
+An explicit host pause remains paused when the wait ends. After the host
+disconnects, a two-minute recovery window precedes automatic transfer to a connected
+active player (or a connected lobby player when no game is running). With no
+eligible successor, the abandoned room closes. Hosts can transfer control manually
+in Settings > Game. Ownership changes notify mounted clients without resetting the game. Animation timing is shared;
 there is no personal animation-speed setting. System reduced-motion preferences
 remain supported.
 
 Private per-player events, spectator-isolated chat, a shared SDK turn timer,
-and named rule presets are not implemented by these changes.
+are not implemented by these changes.
+
+## Presets and room scores
+
+Hosts can save up to 20 named rule presets per game in their browser. The host's
+last confirmed configuration is restored on game selection. Saved values are
+validated against the current game schema; missing or incompatible values fall
+back to defaults. Loading a preset edits the draft; Save Settings applies it.
+Presets never go into server storage and remain specific to the browser origin.
+
+Games may optionally declare scoreboard columns and report authoritative counters
+through `context.recordStat(memberId, key)`. The platform awards declared `wins`
+on game completion. Totals live only in room memory, survive game restarts and
+socket-ID changes, and disappear when the room closes or the process stops.
+Members have server-generated score identities that survive reconnection; fresh
+joins receive new identities. A host-only reset clears totals. Scoreboards retain
+at most 200 participant rows per game per room. Pending joiners receive no scores.
+
+The browser receives optional `scoreboard`, `host-changed`, and `host-status`
+platform events. `context.isHost` reflects current ownership; games should update
+their visible host controls on ownership changes. Optional lifecycle disconnection
+metadata includes server deadlines so clients render countdowns locally. Egyptian
+War exposes its game-specific scoreboard only beside Chat and Spectators.
+Manual host transfer is available beside Kick in the lobby and in GameHub
+settings during a game. A disconnected host
+hands control to a connected player after 60 seconds; a returning former host
+does not automatically reclaim control. Slap rule explanations appear only after resolution;
+no live slap-validity hints or client-reported scores are accepted.
 
 ## Versioned contracts
 

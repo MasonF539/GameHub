@@ -212,3 +212,14 @@ for (const fails of [false, true]) {
     assert.equal(removals, 2);
   });
 }
+
+test("mounted games observe host handoff without being remounted", () => {
+  let isHost = false, context;
+  const host = new GameClientHost({ root: {}, createContext: () => ({ get isHost() { return isHost; } }) });
+  host.register("handoff", { mount(value) {
+    context = value; return { receiveState() {}, receiveEvent() {}, destroy() {} };
+  } });
+  host.mount("handoff");
+  assert.equal(context.isHost, false); isHost = true;
+  assert.equal(context.isHost, true); host.unmount();
+});

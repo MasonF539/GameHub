@@ -170,6 +170,18 @@ export function validateGamePluginManifest(manifest: GamePluginManifest): void {
     );
   }
 
+  if (game.scoreboard) {
+    const keys = new Set<string>();
+    if (game.scoreboard.length > 8) throw new GamePluginValidationError("At most eight scoreboard columns are supported.");
+    for (const column of game.scoreboard) {
+      if (!identifierPattern.test(column.key) || keys.has(column.key) ||
+          (column.sort !== undefined && column.sort !== "asc" && column.sort !== "desc")) {
+        throw new GamePluginValidationError("Scoreboard keys must be valid and unique.");
+      }
+      requireNonEmpty(column.label, "Scoreboard label");
+      keys.add(column.key);
+    }
+  }
   const settingKeys = new Set<string>();
   const displayKeys = new Set<string>();
   for (const option of game.displayOptions ?? []) {
