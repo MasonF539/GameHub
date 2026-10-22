@@ -1249,3 +1249,21 @@ body:has(:is(#entry-view, #lobby-view):not(.d-none)) > .hub-shell {
 .rule-presets .form-select, .rule-presets .form-control { min-width: 0; }
 
 #app-disconnect-status:empty { display: none; }
+
+.reconnecting-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgba(0, 0, 0, 0.75);
+}
+.reconnecting-overlay[hidden] { display: none; }
+#rejoin-room-modal .modal-footer {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+#rejoin-room-modal .modal-footer > button { margin: 0; min-width: 0; height: 100%; }
+#rejoin-room { max-width: 100%; overflow-wrap: anywhere; }

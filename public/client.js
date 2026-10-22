@@ -173,6 +173,10 @@ let currentGameSettings = {};
 let currentPlayers = [];
 let hasReceivedPlayerList = false;
 let isRoomRequestPending = false;
+let pendingEntryRequest = null;
+let lifecycleGeneration = 0;
+let pendingSettingsSave = null;
+let pendingGameSelection = null;
 let isGameSelectionPending = false;
 let currentActiveGameId = null;
 let activeGameIsPaused = false;
@@ -181,7 +185,31 @@ let roomHasActiveGame = false;
 let currentSpectators = [];
 let returningGameMemberIds = new Set();
 
-const lastRoomStorageKey = "gamehub:last-room";
+const lastRoomStorageKey = "gamehub:last-room"; // Legacy browser-wide session.
+const tabSessionStorageKey = "gamehub:tab-session";
+const savedSessionsStorageKey = "gamehub:saved-sessions";
+let activeResumeSession = readResumeStorage("sessionStorage", tabSessionStorageKey, null);
+if (!isResumeSession(activeResumeSession)) activeResumeSession = null;
+const resumeNavigationType = window.performance.getEntriesByType?.("navigation")[0]?.type;
+if (activeResumeSession && resumeNavigationType && resumeNavigationType !== "reload") {
+  activeResumeSession = null;
+  writeResumeStorage("sessionStorage", tabSessionStorageKey, null);
+}
+let resumeRequestPending = false;
+let resumeRequestGeneration = 0;
+let pendingResumeClaim = null;
+let resumeClaimKey = null;
+let releaseResumeClaim = null;
+const rejoinRoomButton = document.querySelector("#rejoin-room");
+const rejoinModalElement = document.querySelector("#rejoin-room-modal");
+const newPlayerButton = document.querySelector("#rejoin-as-new-player");
+const reconnectingOverlay = document.querySelector("#reconnecting-overlay");
+let rejoinCandidate = null;
+let rejoinPromptShown = false;
+let rejoinCheckPending = false;
+let rejoinCheckComplete = false;
+let rejoinCheckGeneration = 0;
+let reconnectTimeout = null;
 const keybindStorageKey = "gamehub:keybinds";
 const generalKeybindDefinition = {
   id: "general",
@@ -677,29 +705,237 @@ document.addEventListener("keydown", (event) => {
 
 renderKeybindSettings();
 
-function saveResumeSession(roomCode, resumeToken) {
-  localStorage.setItem(
-    `gamehub:resume:${roomCode}`,
-    resumeToken
-  );
-  localStorage.setItem(lastRoomStorageKey, roomCode);
+function readResumeStorage(storage, key, fallback) {
+  try { return JSON.parse(window[storage].getItem(key) ?? "null") ?? fallback; }
+  catch { return fallback; }
 }
 
-function clearResumeSession(roomCode = null) {
-  const storedRoomCode =
-    roomCode ?? localStorage.getItem(lastRoomStorageKey);
+function writeResumeStorage(storage, key, value) {
+  try {
+    if (value === null) window[storage].removeItem(key);
+    else window[storage].setItem(key, JSON.stringify(value));
+  } catch { /* The current page can still reconnect from memory. */ }
+}
 
-  if (storedRoomCode) {
-    localStorage.removeItem(`gamehub:resume:${storedRoomCode}`);
+function isResumeSession(value) {
+  return value && /^[A-Z0-9]{6}$/.test(value.roomCode) &&
+    typeof value.resumeToken === "string" && value.resumeToken.length > 0 &&
+    typeof value.playerName === "string" && value.playerName.length <= 20;
+}
+
+function readSavedSessions() {
+  const saved = readResumeStorage("localStorage", savedSessionsStorageKey, []);
+  return Array.isArray(saved) ? saved.filter(session => isResumeSession(session) &&
+    Number.isFinite(session.savedAt) && Date.now() < (session.expiresAt ?? session.savedAt + 24 * 60 * 60 * 1000)).slice(0, 20) : [];
+}
+
+function resumeSessionKey(session) {
+  return `${session.roomCode}:${session.playerName.toLocaleLowerCase()}`;
+}
+
+function useResumeClaim(session, onClaim) {
+  const key = resumeSessionKey(session);
+  if (!window.navigator.locks?.request || resumeClaimKey === key) { onClaim(); return; }
+  if (pendingResumeClaim?.key === key) { pendingResumeClaim.callbacks.push(onClaim); return; }
+  releaseResumeClaim?.();
+  const request = { key, callbacks: [onClaim] };
+  pendingResumeClaim = request;
+  window.navigator.locks.request(`gamehub:player:${key}`, { ifAvailable: true }, async lock => {
+    if (pendingResumeClaim !== request) return;
+    pendingResumeClaim = null;
+    if (!lock) {
+      resumeRequestPending = false;
+      activeResumeSession = null;
+      writeResumeStorage("sessionStorage", tabSessionStorageKey, null);
+      setRoomRequestPending(false);
+      renderSavedSessions();
+      stopReconnecting();
+      dismissRejoinOffer();
+      return;
+    }
+    resumeClaimKey = key;
+    await new Promise(resolve => {
+      releaseResumeClaim = () => { resumeClaimKey = null; releaseResumeClaim = null; resolve(); };
+      for (const callback of request.callbacks) callback();
+    });
+  }).catch(() => {
+    if (pendingResumeClaim === request) pendingResumeClaim = null;
+    resumeRequestPending = false;
+    setRoomRequestPending(false);
+    showToast("Unable to restore that player. Try again.");
+  });
+}
+
+function saveResumeSession(roomCode, resumeToken, playerName = playerNameInput.value.trim()) {
+  const previousToken = activeResumeSession?.resumeToken;
+  const session = { roomCode, resumeToken, playerName, savedAt: Date.now(), lastSeen: Date.now() };
+  activeResumeSession = session;
+  writeResumeStorage("sessionStorage", tabSessionStorageKey, session);
+  const saved = readSavedSessions().filter(item => resumeSessionKey(item) !== resumeSessionKey(session) &&
+    item.resumeToken !== previousToken && item.resumeToken !== resumeToken);
+  writeResumeStorage("localStorage", savedSessionsStorageKey, [session, ...saved].slice(0, 20));
+  useResumeClaim(session, () => {});
+  renderSavedSessions();
+}
+
+function clearResumeSession(roomCode = null, forgetSaved = true) {
+  stopReconnecting();
+  pendingResumeClaim = null;
+  resumeRequestGeneration++;
+  const session = activeResumeSession;
+  if (session && (roomCode === null || session.roomCode === roomCode)) {
+    if (forgetSaved) writeResumeStorage("localStorage", savedSessionsStorageKey,
+      readSavedSessions().filter(item => item.resumeToken !== session.resumeToken));
+    activeResumeSession = null;
+    writeResumeStorage("sessionStorage", tabSessionStorageKey, null);
   }
+  releaseResumeClaim?.();
+  resumeRequestPending = false;
+  renderSavedSessions();
+}
 
-  if (
-    roomCode === null ||
-    localStorage.getItem(lastRoomStorageKey) === roomCode
-  ) {
-    localStorage.removeItem(lastRoomStorageKey);
+function stopReconnecting() {
+  clearTimeout(reconnectTimeout);
+  reconnectTimeout = null;
+  reconnectingOverlay.hidden = true;
+}
+
+function beginReconnecting() {
+  if (reconnectTimeout !== null) return;
+  reconnectingOverlay.hidden = false;
+  reconnectTimeout = setTimeout(() => {
+    stopReconnecting();
+    touchResumeSession();
+    // Keep the saved identity, but stop this tab's automatic retry loop.
+    clearResumeSession(null, false);
+    resetRoomState();
+    rejoinPromptShown = false;
+    rejoinCheckComplete = false;
+    showEntry();
+    renderSavedSessions();
+  }, 10_000);
+}
+
+function touchResumeSession() {
+  if (!activeResumeSession) return;
+  activeResumeSession.lastSeen = Date.now();
+  writeResumeStorage("sessionStorage", tabSessionStorageKey, activeResumeSession);
+  const saved = [activeResumeSession, ...readSavedSessions().filter(item => item.resumeToken !== activeResumeSession.resumeToken)]
+    .sort((a, b) => (b.lastSeen ?? b.savedAt) - (a.lastSeen ?? a.savedAt)).slice(0, 20);
+  writeResumeStorage("localStorage", savedSessionsStorageKey, saved);
+}
+
+let dismissingRejoinOffer = false;
+function dismissRejoinOffer() {
+  // Lifecycle cleanup must close the modal even while a room request is pending.
+  dismissingRejoinOffer = true;
+  try {
+    if (rejoinCandidate || rejoinModalElement.classList.contains("show")) {
+      bootstrap.Modal.getOrCreateInstance(rejoinModalElement).hide();
+    }
+    rejoinCandidate = null;
+  } finally {
+    dismissingRejoinOffer = false;
   }
 }
+
+function forgetSavedTokens(tokens) {
+  writeResumeStorage("localStorage", savedSessionsStorageKey,
+    readSavedSessions().filter(item => !tokens.has(item.resumeToken)));
+}
+
+async function offerSavedSession() {
+  if (!socket.connected || currentRoomCode !== null || isRoomRequestPending || activeResumeSession ||
+      rejoinPromptShown || rejoinCheckPending || rejoinCheckComplete) return;
+  const saved = readSavedSessions().filter(session =>
+    !/^[A-Z0-9]{6}$/.test(inviteRoomCode ?? "") || session.roomCode === inviteRoomCode);
+  if (saved.length === 0) return;
+  const generation = ++rejoinCheckGeneration;
+  rejoinCheckPending = true;
+  let heldLocks = new Set();
+  try {
+    const snapshot = await window.navigator.locks?.query?.();
+    heldLocks = new Set((snapshot?.held ?? []).map(lock => lock.name));
+  } catch { /* Server connection status remains authoritative when locks are unavailable. */ }
+  if (generation !== rejoinCheckGeneration) return;
+  socket.emit("check-resume-sessions", { tokens: saved.map(item => item.resumeToken) }, response => {
+    if (generation !== rejoinCheckGeneration) return;
+    rejoinCheckPending = false;
+    if (!response.success || !Array.isArray(response.sessions)) return;
+    rejoinCheckComplete = true;
+    if (currentRoomCode !== null || isRoomRequestPending || activeResumeSession || rejoinPromptShown) return;
+    const valid = new Map(response.sessions.map(item => [item.resumeToken, item]));
+    const invalid = new Set(saved.filter(item => !valid.has(item.resumeToken)).map(item => item.resumeToken));
+    forgetSavedTokens(invalid);
+    const eligible = saved.flatMap(item => {
+      const status = valid.get(item.resumeToken);
+      if (!status || status.isConnected || heldLocks.has(`gamehub:player:${resumeSessionKey({ ...item, playerName: status.playerName })}`)) return [];
+      return [{ ...item, ...status }];
+    }).sort((a, b) => (b.lastSeen ?? b.savedAt) - (a.lastSeen ?? a.savedAt));
+    const latest = eligible[0];
+    if (!latest) return;
+    rejoinCandidate = latest;
+    rejoinPromptShown = true;
+    rejoinRoomButton.textContent = `Rejoin as ${latest.playerName}`;
+    document.querySelector("#rejoin-player-message").textContent = `Your player ${latest.playerName} is still in a room.`;
+    document.querySelector("#rejoin-release-note").textContent = latest.releaseClosesRoom
+      ? "Joining as a new player will close this room because no connected player can take over hosting."
+      : latest.isHost
+        ? "Joining as a new player releases your old seat and transfers hosting to a connected player."
+        : "Joining as a new player releases your old seat first. You can then choose a new name.";
+    bootstrap.Modal.getOrCreateInstance(rejoinModalElement).show();
+    renderSavedSessions();
+  });
+}
+
+function renderSavedSessions() {
+  rejoinRoomButton.disabled = isRoomRequestPending || !rejoinCandidate;
+  newPlayerButton.disabled = isRoomRequestPending || !rejoinCandidate;
+  rejoinModalElement.querySelector(".btn-close").disabled = isRoomRequestPending;
+  void offerSavedSession();
+}
+
+rejoinRoomButton.addEventListener("click", () => {
+  if (isRoomRequestPending || currentRoomCode !== null || !rejoinCandidate) return;
+  const session = rejoinCandidate;
+  dismissRejoinOffer();
+  resumeSavedRoom(session.roomCode, session.resumeToken, session.playerName, true);
+});
+newPlayerButton.addEventListener("click", () => {
+  if (isRoomRequestPending || !rejoinCandidate) return;
+  const session = rejoinCandidate;
+  const generation = ++resumeRequestGeneration;
+  setRoomRequestPending(true);
+  useResumeClaim(session, () => {
+    if (generation !== resumeRequestGeneration || currentRoomCode !== null) return;
+    socket.emit("release-saved-player", { resumeToken: session.resumeToken }, response => {
+      if (generation !== resumeRequestGeneration || currentRoomCode !== null) return;
+      releaseResumeClaim?.();
+      setRoomRequestPending(false);
+      if (!response.success) { showToast(response.message); return; }
+      forgetSavedTokens(new Set([session.resumeToken]));
+      clearResumeSession(null, false);
+      dismissRejoinOffer();
+      roomCodeInput.value = response.roomClosed ? "" : session.roomCode;
+      playerNameInput.value = "";
+      playerNameInput.focus();
+    });
+  });
+});
+rejoinModalElement.addEventListener("hide.bs.modal", event => { if (isRoomRequestPending && !dismissingRejoinOffer) event.preventDefault(); });
+rejoinModalElement.addEventListener("hidden.bs.modal", () => { rejoinCandidate = null; });
+window.addEventListener("storage", event => {
+  if (event.key === savedSessionsStorageKey || event.key === null) {
+    rejoinCheckGeneration++;
+    rejoinCheckPending = false;
+    rejoinCheckComplete = false;
+    // A rotating token or newly held lock invalidates an offer in another tab.
+    if (rejoinCandidate && !readSavedSessions().some(item => item.resumeToken === rejoinCandidate.resumeToken)) dismissRejoinOffer();
+    renderSavedSessions();
+  }
+});
+window.addEventListener("pagehide", () => { touchResumeSession(); stopReconnecting(); rejoinCheckGeneration++; });
+document.addEventListener("visibilitychange", () => { if (document.hidden) touchResumeSession(); });
 
 function requestGamePause(isPaused) {
   return new Promise((resolve) => {
@@ -718,6 +954,7 @@ function requestGamePause(isPaused) {
 
 function setRoomRequestPending(isPending) {
   isRoomRequestPending = isPending;
+  renderSavedSessions();
 
   createRoomButton.disabled = isPending;
   joinRoomButton.disabled = isPending;
@@ -962,7 +1199,41 @@ function updateRoomLockDisplay() {
     : "Lock Lobby";
 }
 
+const lifecycleModals = [leaveGameModalElement, leaveSpectatorModalElement, exitGameModalElement, closeLobbyModalElement];
+const activeLifecycleModals = new Set();
+const pendingLifecycleModalHides = new WeakMap();
+for (const element of lifecycleModals) {
+  element.addEventListener("show.bs.modal", () => activeLifecycleModals.add(element));
+  element.addEventListener("hidden.bs.modal", () => activeLifecycleModals.delete(element));
+}
+function hideLifecycleModal(element) {
+  // show.bs.modal fires before the backdrop and dialog opening transitions.
+  if (!activeLifecycleModals.has(element) && !element.classList.contains("show")) return;
+  if (pendingLifecycleModalHides.has(element)) return;
+  const modal = bootstrap.Modal.getOrCreateInstance(element);
+  const hideAfterShow = () => modal.hide();
+  const cleanup = () => {
+    element.removeEventListener("shown.bs.modal", hideAfterShow);
+    element.removeEventListener("hidden.bs.modal", cleanup);
+    pendingLifecycleModalHides.delete(element);
+  };
+  pendingLifecycleModalHides.set(element, cleanup);
+  element.addEventListener("shown.bs.modal", hideAfterShow, { once: true });
+  element.addEventListener("hidden.bs.modal", cleanup, { once: true });
+  modal.hide();
+}
+function invalidateLifecycleRequests() {
+  lifecycleGeneration++;
+  pendingSettingsSave = null;
+  invalidateGameSelection();
+  for (const button of [leaveLobbyButton, confirmLeaveGameButton, confirmLeaveSpectatorButton, spectateGameButton, confirmExitGameButton, confirmCloseLobbyButton]) {
+    button.disabled = false;
+  }
+  for (const element of lifecycleModals) hideLifecycleModal(element);
+}
+
 function showLobby(roomCode, isHost) {
+  invalidateLifecycleRequests();
   if (inviteRoomCode != null) {
     const url = new URL(window.location.href);
     url.searchParams.delete("room");
@@ -1024,9 +1295,11 @@ function showEntry() {
   gameplayView.classList.add("d-none");
   lobbyView.classList.add("d-none");
   entryView.classList.remove("d-none");
+  renderSavedSessions();
 }
 
 function showLobbyAfterLeavingGame(hasActiveGame = true, wasSpectator = false) {
+  cancelScoreReset?.();
   placeAppUtilityControls(false);
   currentActiveGameId = null;
   activeGameIsPaused = false;
@@ -1046,6 +1319,9 @@ function showLobbyAfterLeavingGame(hasActiveGame = true, wasSpectator = false) {
 }
 
 function resetRoomState() {
+  invalidateLifecycleRequests();
+  pendingEntryRequest = null;
+  cancelScoreReset?.();
   gameClientHost.unmount();
   currentRoomCode = null;
   roomCodeHidden = true;
@@ -1239,6 +1515,8 @@ function requestGameSelection(gameId) {
     return;
   }
 
+  const request = { roomCode: currentRoomCode, gameId };
+  pendingGameSelection = request;
   isGameSelectionPending = true;
   gamePickerGrid.classList.add("is-pending");
 
@@ -1250,8 +1528,8 @@ function requestGameSelection(gameId) {
       ...(savedRuleSettings(selectedGame) ? { settings: savedRuleSettings(selectedGame) } : {})
     },
     (response) => {
-      isGameSelectionPending = false;
-      gamePickerGrid.classList.remove("is-pending");
+      if (pendingGameSelection !== request || currentRoomCode !== request.roomCode || !isCurrentUserHost) return;
+      invalidateGameSelection();
 
       if (!response.success) {
         showToast(response.message);
@@ -1263,6 +1541,15 @@ function requestGameSelection(gameId) {
       ).hide();
     }
   );
+}
+
+function invalidateGameSelection() {
+  pendingGameSelection = null;
+  isGameSelectionPending = false;
+  gamePickerGrid.classList.remove("is-pending");
+}
+for (const event of ["show.bs.modal", "hide.bs.modal", "hidden.bs.modal"]) {
+  gamePickerModalElement.addEventListener(event, invalidateGameSelection);
 }
 
 function displayGameInformation(game, settings) {
@@ -1510,43 +1797,56 @@ toggleRoomLockButton.addEventListener("click", () => {
   );
 });
 
-function resumeSavedRoom(roomCode, resumeToken) {
-  socket.emit(
-    "resume-room",
-    { resumeToken },
-    (response) => {
-      if (response.success) {
+function resumeSavedRoom(roomCode, resumeToken, playerName = activeResumeSession?.playerName ?? "", onlyDisconnected = false) {
+  if (resumeRequestPending) return;
+  resumeRequestPending = true;
+  const generation = ++resumeRequestGeneration;
+  beginReconnecting();
+  setRoomRequestPending(true);
+  const session = { roomCode, resumeToken, playerName, savedAt: Date.now(), lastSeen: Date.now() };
+  useResumeClaim(session, () => {
+    if (generation !== resumeRequestGeneration) return;
+    activeResumeSession = session;
+    playerNameInput.value = playerName;
+    writeResumeStorage("sessionStorage", tabSessionStorageKey, session);
+    socket.emit("resume-room", { resumeToken, ...(onlyDisconnected ? { onlyDisconnected: true } : {}) }, response => {
+      if (generation !== resumeRequestGeneration) return;
+      resumeRequestPending = false;
+      if (response.success) { stopReconnecting(); return; }
+      // A snapshot/token rotation may already have restored a newer identity.
+      if (activeResumeSession !== session) return;
+      if (response.sessionUnavailable !== true) {
+        // Keep the bounded recovery window and saved identity for temporary errors.
+        showToast(response.message ?? "Unable to restore your room yet.");
         return;
       }
+      rejoinCheckComplete = false;
+      clearResumeSession(roomCode);
+      resetRoomState();
+      setRoomRequestPending(false);
+      showEntry();
+      showToast(response.message ?? "That saved room session is no longer available.");
+    });
+  });
+}
 
-      if (currentRoomCode === null) {
-        clearResumeSession(roomCode);
-        showToast(response.message);
-      } else {
-        showToast("Your room session is already active.");
-      }
-    }
-  );
+function tryResumeCurrentTab() {
+  const session = activeResumeSession;
+  if (!session || (/^[A-Z0-9]{6}$/.test(inviteRoomCode ?? "") && session.roomCode !== inviteRoomCode)) return false;
+  resumeSavedRoom(session.roomCode, session.resumeToken, session.playerName);
+  return true;
 }
 
 socket.on("connect", () => {
   if (!socket.recovered) {
-    const savedRoomCode =
-      localStorage.getItem(lastRoomStorageKey);
-    const resumeToken = savedRoomCode
-      ? localStorage.getItem(`gamehub:resume:${savedRoomCode}`)
-      : null;
-
-    if (savedRoomCode && resumeToken &&
-        (!/^[A-Z0-9]{6}$/.test(inviteRoomCode ?? "") || savedRoomCode === inviteRoomCode)) {
-      resumeSavedRoom(savedRoomCode, resumeToken);
-    } else if (currentRoomCode !== null) {
+    if (!tryResumeCurrentTab() && currentRoomCode !== null) {
       resetRoomState();
       showEntry();
       showToast("Your room session could not be restored.");
     }
   }
 
+  renderSavedSessions();
   connectionStatus.textContent = "Connected to server";
 
   connectionStatus.classList.remove(
@@ -1578,6 +1878,25 @@ socket.on("latency-update", ({ rttMs }) => {
 });
 
 socket.on("disconnect", () => {
+  invalidateLifecycleRequests();
+  pendingEntryRequest = null;
+  touchResumeSession();
+  rejoinCheckGeneration++;
+  rejoinCheckPending = false;
+  rejoinCheckComplete = false;
+  if (rejoinCandidate || (resumeRequestPending && !activeResumeSession)) {
+    // An interrupted offer can be checked again after connection recovery.
+    rejoinPromptShown = false;
+  }
+  if (!activeResumeSession) {
+    pendingResumeClaim = null;
+    releaseResumeClaim?.();
+  }
+  dismissRejoinOffer();
+  if (activeResumeSession) beginReconnecting();
+  resumeRequestPending = false;
+  resumeRequestGeneration++;
+  cancelScoreReset?.();
   if (currentRoomCode === null) setRoomRequestPending(false);
   isGameSelectionPending = false;
   gamePickerGrid.classList.remove("is-pending");
@@ -1607,6 +1926,14 @@ socket.on("disconnect", () => {
 });
 
 socket.on("room-resumed", (room) => {
+  pendingEntryRequest = null;
+  stopReconnecting();
+  dismissRejoinOffer();
+  rejoinCheckGeneration++;
+  rejoinCheckPending = false;
+  resumeRequestPending = false;
+  isRoomRequestPending = false;
+  if (room.playerName) playerNameInput.value = room.playerName;
   hasReceivedPlayerList = false;
   returningGameMemberIds.clear();
   selectedGameId = room.selectedGameId;
@@ -1642,19 +1969,11 @@ socket.on("room-resume-token", (resumeToken) => {
 
 socket.on("room-resume-failed", (message) => {
   if (message == null) {
-    const savedRoomCode =
-      localStorage.getItem(lastRoomStorageKey);
-    const resumeToken = savedRoomCode
-      ? localStorage.getItem(`gamehub:resume:${savedRoomCode}`)
-      : null;
-    if (savedRoomCode && resumeToken &&
-        (!/^[A-Z0-9]{6}$/.test(inviteRoomCode ?? "") || savedRoomCode === inviteRoomCode)) {
-      resumeSavedRoom(savedRoomCode, resumeToken);
-      return;
-    }
+    if (tryResumeCurrentTab()) return;
+    if (currentRoomCode === null) { renderSavedSessions(); return; }
   }
 
-  if (currentRoomCode === null && /^[A-Z0-9]{6}$/.test(inviteRoomCode ?? "") && message == null) return;
+  stopReconnecting();
   clearResumeSession();
   resetRoomState();
   showEntry();
@@ -1664,6 +1983,8 @@ socket.on("room-resume-failed", (message) => {
 });
 
 socket.on("room-session-replaced", () => {
+  stopReconnecting();
+  clearResumeSession(null, false);
   resetRoomState();
   showEntry();
   showToast("This room session was restored in another connection.");
@@ -1832,6 +2153,8 @@ socket.on(
 );
 
 function mountGameClient(game) {
+  invalidateLifecycleRequests();
+  cancelScoreReset?.();
   if (!gameClientHost.has(game.gameId)) {
     showToast("This game's browser client is not installed.");
     return;
@@ -1903,6 +2226,8 @@ socket.on("game-chat-message", (chatMessage) => {
 });
 
 socket.on("game-ended", ({ message, returningMemberIds = [] }) => {
+  invalidateLifecycleRequests();
+  cancelScoreReset?.();
   const wasWaitingInLobby = currentActiveGameId === null;
   returningGameMemberIds = new Set(
     Array.isArray(returningMemberIds) ? returningMemberIds : []
@@ -1926,6 +2251,9 @@ socket.on("game-ended", ({ message, returningMemberIds = [] }) => {
   isCurrentUserSpectator = false;
   updateLobbyGameAction();
   updateStartGameAvailability();
+  const selectedGame = gameDefinitions.find((game) => game.id === selectedGameId);
+  if (selectedGame) displayGameInformation(selectedGame, currentGameSettings);
+  updateHostTransferOptions();
   gameStatus.textContent = message;
 });
 
@@ -1937,16 +2265,18 @@ socket.on("kicked-from-room", ({ message }) => {
 });
 
 function leaveActiveGame(confirmButton, modalElement) {
-  if (currentRoomCode === null || isCurrentUserHost) {
+  if (currentRoomCode === null || currentActiveGameId === null || isCurrentUserHost) {
     return;
   }
 
   const wasSpectator = isCurrentUserSpectator;
+  const generation = lifecycleGeneration;
   confirmButton.disabled = true;
   socket.emit(
     "leave-game",
     { roomCode: currentRoomCode },
     (response) => {
+      if (generation !== lifecycleGeneration) return;
       confirmButton.disabled = false;
       if (!response.success) {
         showToast(response.message);
@@ -1977,11 +2307,14 @@ leaveLobbyButton.addEventListener("click", () => {
     return;
   }
 
+  const generation = lifecycleGeneration;
+  const roomCode = currentRoomCode;
   leaveLobbyButton.disabled = true;
   socket.emit(
     "leave-lobby",
     { roomCode: currentRoomCode },
     (response) => {
+      if (generation !== lifecycleGeneration) return;
       leaveLobbyButton.disabled = false;
 
       if (!response.success) {
@@ -1989,7 +2322,7 @@ leaveLobbyButton.addEventListener("click", () => {
         return;
       }
 
-      clearResumeSession(currentRoomCode);
+      clearResumeSession(roomCode);
       resetRoomState();
       showEntry();
     }
@@ -2008,11 +2341,13 @@ confirmCloseLobbyButton.addEventListener("click", () => {
     return;
   }
 
+  const generation = lifecycleGeneration;
   confirmCloseLobbyButton.disabled = true;
   socket.emit(
     "close-room",
     { roomCode: currentRoomCode },
     (response) => {
+      if (generation !== lifecycleGeneration) return;
       confirmCloseLobbyButton.disabled = false;
       if (!response.success) {
         showToast(response.message);
@@ -2027,15 +2362,17 @@ confirmCloseLobbyButton.addEventListener("click", () => {
 });
 
 confirmExitGameButton.addEventListener("click", () => {
-  if (currentRoomCode === null || !isCurrentUserHost) {
+  if (currentRoomCode === null || currentActiveGameId === null || !isCurrentUserHost) {
     return;
   }
 
+  const generation = lifecycleGeneration;
   confirmExitGameButton.disabled = true;
   socket.emit(
     "close-game-to-lobby",
     { roomCode: currentRoomCode },
     (response) => {
+      if (generation !== lifecycleGeneration) return;
       confirmExitGameButton.disabled = false;
       if (!response.success) {
         showToast(response.message);
@@ -2048,6 +2385,10 @@ confirmExitGameButton.addEventListener("click", () => {
     }
   );
 });
+
+for (const event of ["show.bs.modal", "hide.bs.modal", "hidden.bs.modal"]) {
+  settingsModalElement.addEventListener(event, () => { pendingSettingsSave = null; });
+}
 
 settingsModalElement.addEventListener(
   "hidden.bs.modal",
@@ -2072,6 +2413,8 @@ saveGameSettingsButton.addEventListener("click", () => {
     return;
   }
 
+  const request = { roomCode: currentRoomCode, gameId: selectedGameId };
+  pendingSettingsSave = request;
   const settings = {};
 
   const settingInputs =
@@ -2089,10 +2432,13 @@ saveGameSettingsButton.addEventListener("click", () => {
   socket.emit(
     "update-game-settings",
     {
-      roomCode: currentRoomCode,
+      roomCode: request.roomCode,
       settings
     },
     (response) => {
+      if (pendingSettingsSave !== request || currentRoomCode !== request.roomCode ||
+          selectedGameId !== request.gameId || !isCurrentUserHost) return;
+      pendingSettingsSave = null;
       if (!response.success) {
         showToast(response.message);
         return;
@@ -2116,6 +2462,8 @@ createRoomButton.addEventListener("click", () => {
   const playerName = playerNameInput.value.trim();
   const selectedAvatar = avatars[selectedAvatarIndex];
 
+  const request = { type: "create", playerName };
+  pendingEntryRequest = request;
   setRoomRequestPending(true);
   hasReceivedPlayerList = false;
 
@@ -2126,6 +2474,8 @@ createRoomButton.addEventListener("click", () => {
       avatar: selectedAvatar
     },
     (response) => {
+      if (pendingEntryRequest !== request || currentRoomCode !== null) return;
+      pendingEntryRequest = null;
       if (!response.success) {
         setRoomRequestPending(false);
         showToast(response.message);
@@ -2134,7 +2484,7 @@ createRoomButton.addEventListener("click", () => {
 
       isRoomRequestPending = false;
       showLobby(response.roomCode, true);
-      saveResumeSession(response.roomCode, response.resumeToken);
+      saveResumeSession(response.roomCode, response.resumeToken, response.playerName ?? request.playerName);
 
       createRoomButton.disabled = true;
       startGameButton.disabled = selectedGameId === null;
@@ -2171,11 +2521,13 @@ spectateGameButton.addEventListener("click", () => {
     return;
   }
 
+  const generation = lifecycleGeneration;
   spectateGameButton.disabled = true;
   socket.emit(
     "spectate-game",
     { roomCode: currentRoomCode },
     (response) => {
+      if (generation !== lifecycleGeneration) return;
       if (!response.success) {
         spectateGameButton.disabled = false;
         showToast(response.message);
@@ -2191,7 +2543,12 @@ spectateGameButton.addEventListener("click", () => {
 
 joinRoomButton.addEventListener("click", () => {
   if (joinRoomButton.dataset.awaitingApproval) {
-    socket.emit("cancel-join-request", {}, () => setRoomRequestPending(false));
+    const request = pendingEntryRequest;
+    socket.emit("cancel-join-request", {}, () => {
+      if (pendingEntryRequest !== request || currentRoomCode !== null) return;
+      pendingEntryRequest = null;
+      setRoomRequestPending(false);
+    });
     return;
   }
   if (isRoomRequestPending || currentRoomCode !== null) {
@@ -2202,6 +2559,8 @@ joinRoomButton.addEventListener("click", () => {
   const playerName = playerNameInput.value.trim();
   const selectedAvatar = avatars[selectedAvatarIndex];
 
+  const request = { type: "join", playerName };
+  pendingEntryRequest = request;
   setRoomRequestPending(true);
   hasReceivedPlayerList = false;
 
@@ -2212,11 +2571,12 @@ joinRoomButton.addEventListener("click", () => {
       playerName,
       avatar: selectedAvatar
     },
-    finishJoiningRoom
+    response => finishJoiningRoom(response, request)
   );
 });
 
-function finishJoiningRoom(response) {
+function finishJoiningRoom(response, request) {
+  if (!request || request.type !== "join" || pendingEntryRequest !== request || currentRoomCode !== null) return;
   if (response.pendingApproval) {
     joinRoomButton.dataset.awaitingApproval = "true";
     joinRoomButton.disabled = false;
@@ -2224,6 +2584,7 @@ function finishJoiningRoom(response) {
     showToast("Waiting for the host to approve your join request (up to 60 seconds).");
     return;
   }
+  pendingEntryRequest = null;
   if (!response.success) {
     setRoomRequestPending(false);
     showToast(response.message);
@@ -2236,7 +2597,7 @@ function finishJoiningRoom(response) {
   isCurrentUserSpectator = response.role === "spectator";
   roomHasActiveGame = response.activeGameId !== null;
   showLobby(response.roomCode, false);
-  saveResumeSession(response.roomCode, response.resumeToken);
+  saveResumeSession(response.roomCode, response.resumeToken, response.playerName ?? request.playerName);
 
   if (isCurrentUserSpectator) {
     if (response.activeGameId !== null) {
@@ -2259,7 +2620,9 @@ function finishJoiningRoom(response) {
 }
 
 socket.on("join-request-result", (response) => {
-  finishJoiningRoom(response);
+  const request = pendingEntryRequest;
+  if (request?.type !== "join" || !joinRoomButton.dataset.awaitingApproval) return;
+  finishJoiningRoom(response, request);
   if (response.success) showToast("The host accepted your join request.");
 });
 socket.on("room-approval-changed", ({ requiresJoinApproval }) => {
@@ -2405,30 +2768,81 @@ function renderDisplayOptions() {
 
 // Presets are browser-only and always validated against the current game's schema.
 const ruleStorageKey = "gamehub:rule-presets";
-let rulePreferences = {};
-try {
-  const saved = JSON.parse(localStorage.getItem(ruleStorageKey) ?? "{}");
-  if (saved && typeof saved === "object" && !Array.isArray(saved)) rulePreferences = saved;
-} catch { /* Continue with memory-only preferences. */ }
-function storeRules(notify = false) {
-  try { localStorage.setItem(ruleStorageKey, JSON.stringify(rulePreferences)); }
-  catch { if (notify) showToast("Browser storage is unavailable. Presets will last only for this visit."); }
+function readRulePreferences(fallback = {}) {
+  try {
+    const saved = JSON.parse(localStorage.getItem(ruleStorageKey) ?? "{}");
+    return saved && typeof saved === "object" && !Array.isArray(saved) ? saved : {};
+  } catch { return fallback; }
+}
+let rulePreferences = readRulePreferences();
+let unsavedRuleChanges = [];
+let refreshPresetControls = null;
+function applyRuleChange(preferences, change) {
+  const previous = preferences[change.gameId];
+  if (change.type === "last") {
+    preferences[change.gameId] = { ...previous, last: change.settings };
+    return;
+  }
+  const presets = savedRulePresets(preferences, change.gameId).filter(preset => preset.name !== change.name);
+  if (change.type === "save") presets.push({ name: change.name, settings: change.settings });
+  preferences[change.gameId] = { ...previous, presets };
+}
+function refreshRulePreferences() {
+  rulePreferences = readRulePreferences(rulePreferences);
+  // Replay only unpersisted edits, preserving unrelated updates from other tabs.
+  for (const change of unsavedRuleChanges) applyRuleChange(rulePreferences, change);
+}
+function updateRulePreferences(change, notify = false, onSaved = () => {}) {
+  const apply = () => {
+    refreshRulePreferences();
+    if (change.type === "save" && savedRulePresets(rulePreferences, change.gameId)
+      .filter(preset => preset.name !== change.name).length >= 20) {
+      showToast("Delete a preset before adding another (maximum 20 per game).");
+      return;
+    }
+    applyRuleChange(rulePreferences, change);
+    unsavedRuleChanges.push(change);
+    let persisted = true;
+    try {
+      localStorage.setItem(ruleStorageKey, JSON.stringify(rulePreferences));
+      unsavedRuleChanges = [];
+    }
+    catch { persisted = false; if (notify) showToast("Browser storage is unavailable. Presets will last only for this visit."); }
+    refreshPresetControls?.();
+    onSaved(persisted);
+  };
+  // Serialize concurrent tab writes where supported; always reread before mutation.
+  if (window.navigator.locks?.request) {
+    void window.navigator.locks.request(ruleStorageKey, apply).catch(() => apply());
+  } else apply();
+}
+window.addEventListener("storage", event => {
+  if (event.key !== ruleStorageKey && event.key !== null) return;
+  refreshRulePreferences();
+  refreshPresetControls?.();
+});
+function savedRulePresets(preferences, gameId) {
+  const saved = preferences[gameId]?.presets;
+  return Array.isArray(saved) ? saved.filter(preset => typeof preset?.name === "string" &&
+    preset.settings && typeof preset.settings === "object" && !Array.isArray(preset.settings)) : [];
 }
 function validSavedRules(game, source) {
   if (!source || typeof source !== "object") return null;
   return Object.fromEntries(game.settings.map((setting) => {
     const value = source[setting.key];
     const valid = setting.type !== "number" ? typeof value === "boolean"
-      : Number.isFinite(value) && (setting.control === "range"
-        ? value >= setting.min && value <= setting.max : setting.options.includes(value));
+      : Number.isInteger(value) && (setting.control === "range"
+        ? value >= setting.min && value <= setting.max && (value - setting.min) % setting.step === 0
+        : setting.options.includes(value));
     return [setting.key, valid ? value : setting.defaultValue];
   }));
 }
-function savedRuleSettings(game) { return validSavedRules(game, rulePreferences[game.id]?.last); }
+function savedRuleSettings(game) {
+  refreshRulePreferences();
+  return validSavedRules(game, rulePreferences[game.id]?.last);
+}
 function rememberRules(gameId, settings) {
-  const previous = rulePreferences[gameId];
-  rulePreferences[gameId] = { ...(previous && typeof previous === "object" ? previous : {}), last: settings };
-  storeRules();
+  updateRulePreferences({ type: "last", gameId, settings });
 }
 function readRuleDraft() {
   return Object.fromEntries([...settingsModalBody.querySelectorAll("[data-setting-key]")].map((input) => [
@@ -2436,22 +2850,22 @@ function readRuleDraft() {
   ]));
 }
 function renderPresetControls(game) {
+  refreshPresetControls = null;
   if (!isCurrentUserHost || roomHasActiveGame) return;
   const toolbar = document.createElement("div");
   toolbar.className = "rule-presets mb-4";
   toolbar.innerHTML = '<label class="form-label" for="rule-preset">Load a preset</label><div class="d-flex gap-2 mb-3"><select id="rule-preset" class="form-select form-select-sm" aria-label="Saved rule preset"></select><button class="btn btn-outline-danger btn-sm" type="button" data-preset-action="delete">Delete</button></div><label class="form-label" for="rule-preset-name">Create a preset</label><div class="d-flex gap-2"><input id="rule-preset-name" class="form-control form-control-sm" maxlength="40" placeholder="Preset name" aria-label="Preset name"><button class="btn btn-outline-primary btn-sm" type="button" data-preset-action="save">Save preset</button></div><p class="small text-body-secondary mb-0 mt-1">Saved in this browser. Selecting a preset loads this draft. Use Save Settings to apply it to the room.</p>';
   const select = toolbar.querySelector("select"), name = toolbar.querySelector("input");
-  const presets = () => {
-    const saved = rulePreferences[game.id]?.presets;
-    return Array.isArray(saved) ? saved.filter((preset) => typeof preset?.name === "string" && preset.settings && typeof preset.settings === "object" && !Array.isArray(preset.settings)).slice(0, 20) : [];
-  };
+  const presets = () => savedRulePresets(rulePreferences, game.id);
   const refresh = () => {
+    const selected = select.value;
     select.replaceChildren();
     for (const preset of presets()) select.add(new window.Option(preset.name, preset.name));
     select.disabled = select.options.length === 0;
     toolbar.querySelector('[data-preset-action="delete"]').disabled = select.disabled;
-    select.selectedIndex = -1;
+    select.value = selected;
   };
+  refreshPresetControls = () => { if (toolbar.isConnected) refresh(); };
   select.onchange = () => {
     const preset = presets().find((preset) => preset.name === select.value);
     if (!preset) return;
@@ -2465,16 +2879,16 @@ function renderPresetControls(game) {
   toolbar.querySelector('[data-preset-action="save"]').onclick = () => {
     const title = name.value.trim();
     if (!title) { name.focus(); return; }
-    const saved = presets().filter((preset) => preset.name !== title);
-    if (saved.length >= 20) { showToast("Delete a preset before adding another (maximum 20 per game)."); return; }
-    saved.push({ name: title, settings: validSavedRules(game, readRuleDraft()) });
-    rulePreferences[game.id] = { ...rulePreferences[game.id], presets: saved };
-    storeRules(true); refresh(); select.value = title; showToast("Preset saved in this browser.");
+    const settings = validSavedRules(game, readRuleDraft());
+    updateRulePreferences({ type: "save", gameId: game.id, name: title, settings }, true, persisted => {
+      if (toolbar.isConnected) select.value = title;
+      showToast(persisted ? "Preset saved in this browser." : "Preset saved for this visit; browser storage is unavailable.");
+    });
   };
   toolbar.querySelector('[data-preset-action="delete"]').onclick = () => {
-    if (!select.value) return;
-    rulePreferences[game.id] = { ...rulePreferences[game.id], presets: presets().filter((preset) => preset.name !== select.value) };
-    storeRules(true); refresh();
+    const title = select.value;
+    if (!title) return;
+    updateRulePreferences({ type: "delete", gameId: game.id, name: title }, true);
   };
   refresh(); settingsModalBody.appendChild(toolbar);
 }
@@ -2518,6 +2932,7 @@ socket.on("room-host", ({ hostId, recoveryDeadline, serverNow }) => {
   if (Number.isFinite(serverNow)) roomClockOffset = serverNow - Date.now();
   const changed = isCurrentUserHost !== (hostId === socket.id);
   isCurrentUserHost = hostId === socket.id;
+  if (!isCurrentUserHost) cancelScoreReset?.();
   if (changed && currentRoomCode !== null) {
     closeLobbyButton.classList.toggle("d-none", !isCurrentUserHost);
     leaveLobbyButton.classList.toggle("d-none", isCurrentUserHost);
@@ -2536,11 +2951,25 @@ socket.on("room-host", ({ hostId, recoveryDeadline, serverNow }) => {
   gameClientHost.receivePlatformEvent({ type: "host-status", payload: { recoveryDeadline, serverNow } });
 });
 let pendingScoreReset = null;
+let cancelScoreReset = null;
 function resetRoomScoreboard(gameId) {
+  if (!isCurrentUserHost || currentRoomCode === null || currentActiveGameId !== gameId) {
+    return Promise.resolve({ success: false, message: "Only the host can reset totals for the active game." });
+  }
   if (pendingScoreReset) return pendingScoreReset;
+  const roomCode = currentRoomCode;
   const element = document.querySelector("#reset-scoreboard-modal");
   const button = document.querySelector("#confirm-reset-scoreboard");
   const modal = bootstrap.Modal.getOrCreateInstance(element);
+  const hide = () => {
+    // Bootstrap ignores hide() during the opening transition.
+    const hideAfterShow = () => modal.hide();
+    element.addEventListener("shown.bs.modal", hideAfterShow, { once: true });
+    element.addEventListener("hidden.bs.modal", () => {
+      element.removeEventListener("shown.bs.modal", hideAfterShow);
+    }, { once: true });
+    modal.hide();
+  };
   pendingScoreReset = new Promise(resolve => {
     let finished = false;
     const finish = result => {
@@ -2550,15 +2979,22 @@ function resetRoomScoreboard(gameId) {
       element.removeEventListener("hidden.bs.modal", cancel);
       button.disabled = false;
       pendingScoreReset = null;
+      cancelScoreReset = null;
       resolve(result);
     };
     const cancel = () => finish({ success: true });
+    cancelScoreReset = () => { cancel(); hide(); };
     const confirm = () => {
       if (button.disabled) return;
+      if (currentRoomCode !== roomCode || currentActiveGameId !== gameId || !isCurrentUserHost) {
+        cancelScoreReset?.();
+        return;
+      }
       button.disabled = true;
       socket.emit("reset-room-scoreboard", { gameId }, result => {
+        if (finished) return;
         finish(result);
-        modal.hide();
+        hide();
       });
     };
     button.addEventListener("click", confirm);
@@ -2571,3 +3007,21 @@ socket.on("room-scoreboard", (scores) => {
   roomScoreboards.set(scores.gameId, scores);
   if (scores.gameId === currentActiveGameId) gameClientHost.receivePlatformEvent({ type: "scoreboard", payload: scores });
 });
+
+// Preserve older saved players as an explicit choice, never an automatic takeover.
+try {
+  const roomCode = localStorage.getItem(lastRoomStorageKey);
+  const resumeToken = roomCode ? localStorage.getItem(`gamehub:resume:${roomCode}`) : null;
+  if (roomCode && resumeToken && /^[A-Z0-9]{6}$/.test(roomCode)) {
+    const saved = readSavedSessions();
+    if (!saved.some(session => session.resumeToken === resumeToken)) {
+      saved.push({ roomCode, resumeToken, playerName: "", savedAt: Date.now() });
+      writeResumeStorage("localStorage", savedSessionsStorageKey, saved.slice(0, 20));
+    }
+    localStorage.removeItem(`gamehub:resume:${roomCode}`);
+    localStorage.removeItem(lastRoomStorageKey);
+  }
+} catch { /* Browser storage is optional. */ }
+renderSavedSessions();
+
+if (activeResumeSession && (!inviteRoomCode || activeResumeSession.roomCode === inviteRoomCode)) beginReconnecting();

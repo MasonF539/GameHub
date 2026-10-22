@@ -552,6 +552,34 @@
     </div>
   </div>
 
+  <div id="reconnecting-overlay" class="reconnecting-overlay" role="status" aria-live="polite" hidden>
+    <div class="card bg-dark text-light text-center shadow p-4">
+      <div class="spinner-border text-info mx-auto mb-3" aria-hidden="true"></div>
+      <h2 class="h4">Reconnecting...</h2>
+      <p class="mb-0">Restoring your player. This can take up to 10 seconds.</p>
+    </div>
+  </div>
+
+  <div id="rejoin-room-modal" class="modal" tabindex="-1" aria-labelledby="rejoin-room-title"
+    aria-describedby="rejoin-player-message rejoin-release-note" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2 id="rejoin-room-title" class="modal-title fs-5">Rejoin your room?</h2>
+          <button class="btn-close" type="button" data-bs-dismiss="modal" aria-label="Dismiss rejoin offer"></button>
+        </div>
+        <div class="modal-body">
+          <p id="rejoin-player-message"></p>
+          <p id="rejoin-release-note" class="small text-secondary mb-0"></p>
+        </div>
+        <div class="modal-footer">
+          <button id="rejoin-as-new-player" class="btn btn-outline-secondary" type="button">Join as a new player</button>
+          <button id="rejoin-room" class="btn btn-primary" type="button">Rejoin</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script src="/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
   <script id="gamehub-config" type="application/json"><!-- gamehub-config --></script>
   <script src="/socket.io/socket.io.js"></script>

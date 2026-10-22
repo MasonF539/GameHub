@@ -5,7 +5,7 @@ const path = require("node:path");
 const { JSDOM } = require("jsdom");
 const { GameClientHost } = require("../public/gameHost.js");
 
-function createClient({ prefersReducedMotion = false, mobile = false, fullscreenRequest, savedRoom, savedRules, url = "http://localhost" } = {}) {
+function createClient({ prefersReducedMotion = false, mobile = false, fullscreenRequest, savedRoom, savedSessions = [], legacyRoom, locks, navigationType, sessionStatuses, savedRules, url = "http://localhost" } = {}) {
   const html = fs.readFileSync(
     path.join(__dirname, "..", "public", "index.html"),
     "utf8"
@@ -27,9 +27,17 @@ function createClient({ prefersReducedMotion = false, mobile = false, fullscreen
   global.document = dom.window.document;
   global.localStorage = dom.window.localStorage;
   if (savedRoom) {
-    localStorage.setItem("gamehub:last-room", savedRoom);
-    localStorage.setItem(`gamehub:resume:${savedRoom}`, "saved-token");
+    const session = { roomCode: savedRoom, resumeToken: "saved-token", playerName: "Saved player", savedAt: Date.now() };
+    dom.window.sessionStorage.setItem("gamehub:tab-session", JSON.stringify(session));
+    savedSessions = [session, ...savedSessions];
   }
+  localStorage.setItem("gamehub:saved-sessions", JSON.stringify(savedSessions));
+  if (legacyRoom) {
+    localStorage.setItem("gamehub:last-room", legacyRoom);
+    localStorage.setItem(`gamehub:resume:${legacyRoom}`, "legacy-token");
+  }
+  if (locks) Object.defineProperty(window.navigator, "locks", { value: locks, configurable: true });
+  if (navigationType) window.performance.getEntriesByType = () => [{ type: navigationType }];
   if (savedRules) localStorage.setItem("gamehub:rule-presets", JSON.stringify(savedRules));
   global.CSS = dom.window.CSS ?? { escape: (value) => String(value) };
   if (!global.CSS.escape) {
@@ -52,22 +60,37 @@ function createClient({ prefersReducedMotion = false, mobile = false, fullscreen
     Toast: { getOrCreateInstance: () => ({ show() { toastShowCount += 1; } }) },
     Modal: {
       getInstance: () => null,
-      getOrCreateInstance: () => ({
+      getOrCreateInstance: (element) => ({
         hide() {
+          if (element?.id === "rejoin-room-modal") {
+            const event = new window.Event("hide.bs.modal", { cancelable: true });
+            element.dispatchEvent(event);
+            if (event.defaultPrevented) return;
+            element.classList.remove("show");
+            element.dispatchEvent(new window.Event("hidden.bs.modal"));
+          }
           modalHideCount += 1;
         },
         show() {
           modalShowCount += 1;
+          if (element?.id === "rejoin-room-modal") element.classList.add("show");
         }
       })
     }
   };
   global.io = () => ({
+    connected: true,
     on(event, handler) {
       handlers.set(event, handler);
     },
     emit(event, data, respond) {
       emitted.push({ event, data, respond });
+      if (event === "check-resume-sessions" && respond) {
+        const records = JSON.parse(localStorage.getItem("gamehub:saved-sessions") ?? "[]");
+        const sessions = sessionStatuses ?? records.map(item => ({ ...item, playerName: item.playerName || "Previous player",
+          isConnected: false, expiresAt: Date.now() + 24 * 60 * 60 * 1000, isHost: false, releaseClosesRoom: false }));
+        respond({ success: true, sessions: sessions.filter(item => data.tokens.includes(item.resumeToken)) });
+      }
     }
   });
 
@@ -103,6 +126,7 @@ function createClient({ prefersReducedMotion = false, mobile = false, fullscreen
   global.setInterval = originalSetInterval;
 
   const close = () => {
+    window.dispatchEvent(new window.Event("pagehide"));
     handlers.get("game-ended")?.({ message: "Test cleanup" });
     intervals.forEach((interval) => clearInterval(interval));
     dom.window.close();
@@ -1014,7 +1038,7 @@ test("a guest who leaves the lobby returns to entry and clears the saved room se
   });
   handlers.get("room-resume-token")("resume-token");
   assert.equal(document.querySelector("#lobby-view").classList.contains("d-none"), false);
-  assert.equal(localStorage.getItem("gamehub:last-room"), "ABC123");
+  assert.equal(JSON.parse(window.sessionStorage.getItem("gamehub:tab-session")).roomCode, "ABC123");
 
   document.querySelector("#leave-lobby").click();
   const leaveRequest = emitted.find((item) => item.event === "leave-lobby");
@@ -1063,7 +1087,7 @@ for (const action of ["create-room", "join-room"]) {
       assert.equal(new URL(url).searchParams.has("room"), false);
       assert.equal(new URL(url).searchParams.get("other"), "kept");
       assert.equal(new URL(url).hash, "#details");
-      assert.equal(localStorage.getItem("gamehub:last-room"), "AAAAAA");
+      assert.equal(JSON.parse(window.sessionStorage.getItem("gamehub:tab-session")).roomCode, "AAAAAA");
     } finally { client.close(); }
     const refreshed = createClient({ url, savedRoom: "AAAAAA" });
     try {
@@ -1168,5 +1192,707 @@ test("score reset uses a repeatable in-app confirmation and cancellation sends n
     request.respond({ success: true });
     assert.equal((await second).success, true);
     assert.equal(document.querySelector("#confirm-reset-scoreboard").disabled, false);
+  } finally { view.close(); }
+});
+
+
+test("an in-game host handoff restores preset controls when the match ends", () => {
+  const view = createClient();
+  try {
+    const definition = game({ settings: [{ key: "fast", label: "Fast", defaultValue: false }] });
+    view.handlers.get("available-games")([definition]);
+    view.handlers.get("room-resumed")({ roomCode: "ABC123", isHost: false, selectedGameId: definition.id,
+      gameSettings: { fast: true }, activeGameId: definition.id, hasActiveGame: true, role: "player", isLocked: false });
+    view.handlers.get("game-selected")({ gameId: definition.id, settings: { fast: true } });
+    view.handlers.get("room-host")({ hostId: undefined, recoveryDeadline: null, serverNow: Date.now() });
+    assert.equal(document.querySelector("#rule-preset"), null);
+    view.handlers.get("game-ended")({ message: "Match ended" });
+    assert.ok(document.querySelector("#rule-preset"));
+    assert.equal(document.querySelector("#setting-fast").checked, true);
+    assert.equal(document.querySelector("#setting-fast").disabled, false);
+  } finally { view.close(); }
+});
+
+test("off-step saved slider values fall back to defaults on selection and preset load", () => {
+  const view = createClient({ savedRules: { "example-game": {
+    last: { seconds: 17 }, presets: [{ name: "Older rules", settings: { seconds: 17 } }]
+  } } });
+  try {
+    const definition = game({ settings: [{ type: "number", control: "range", key: "seconds", label: "Wait",
+      defaultValue: 60, min: 15, max: 300, step: 5 }] });
+    view.handlers.get("available-games")([definition]);
+    document.querySelector("#create-room").click();
+    view.emitted.find(({ event }) => event === "create-room").respond({ success: true, roomCode: "ABC123", resumeToken: "token" });
+    assert.equal(view.emitted.find(({ event }) => event === "select-game").data.settings.seconds, 60);
+    view.handlers.get("game-selected")({ gameId: definition.id, settings: { seconds: 60 } });
+    document.querySelector("#rule-preset").value = "Older rules";
+    document.querySelector("#rule-preset").dispatchEvent(new window.Event("change"));
+    assert.equal(document.querySelector("#setting-seconds").value, "60");
+  } finally { view.close(); }
+});
+
+for (const reason of ["room-closed", "game-ended", "disconnect", "room-host"]) {
+  test(`a score reset is cancelled on ${reason} and cannot submit afterward`, async () => {
+    const view = createClient();
+    try {
+      view.handlers.get("available-games")([game()]);
+      view.handlers.get("room-resumed")({ roomCode: "ABC123", isHost: true, selectedGameId: "example-game", gameSettings: {},
+        activeGameId: "example-game", role: "player", isLocked: false });
+      const pending = view.gameClientContexts[0].resetScoreboard();
+      view.handlers.get(reason)(reason === "room-host" ? { hostId: "other", recoveryDeadline: null } : { message: "Ended" });
+      assert.equal((await pending).success, true);
+      document.querySelector("#confirm-reset-scoreboard").click();
+      assert.equal(view.emitted.some(({event}) => event === "reset-room-scoreboard"), false);
+    } finally { view.close(); }
+  });
+}
+
+test("a late reset reply cannot dismiss a new confirmation", async () => {
+  const view = createClient();
+  try {
+    const room = { roomCode: "ABC123", isHost: true, selectedGameId: "example-game", gameSettings: {},
+      activeGameId: "example-game", role: "player", isLocked: false };
+    view.handlers.get("available-games")([game()]);
+    view.handlers.get("room-resumed")(room);
+    const first = view.gameClientContexts[0].resetScoreboard();
+    document.querySelector("#confirm-reset-scoreboard").click();
+    const oldRequest = view.emitted.find(({event}) => event === "reset-room-scoreboard");
+    view.handlers.get("game-ended")({ message: "Ended" });
+    await first;
+    view.handlers.get("room-resumed")(room);
+    const second = view.gameClientContexts[1].resetScoreboard();
+    const hidden = view.getModalHideCount();
+    oldRequest.respond({ success: false, message: "Old request" });
+    assert.equal(view.getModalHideCount(), hidden);
+    document.querySelector("#reset-scoreboard-modal").dispatchEvent(new window.Event("hidden.bs.modal"));
+    await second;
+  } finally { view.close(); }
+});
+
+
+test("reset cancellation retries closing after an opening transition and cleans that retry", async () => {
+  const view = createClient();
+  try {
+    view.handlers.get("available-games")([game()]);
+    view.handlers.get("room-resumed")({ roomCode: "ABC123", isHost: true, selectedGameId: "example-game", gameSettings: {},
+      activeGameId: "example-game", role: "player", isLocked: false });
+    const pending = view.gameClientContexts[0].resetScoreboard();
+    view.handlers.get("game-ended")({ message: "Ended while opening" });
+    await pending;
+    const modal = document.querySelector("#reset-scoreboard-modal");
+    const hides = view.getModalHideCount();
+    modal.dispatchEvent(new window.Event("shown.bs.modal"));
+    assert.equal(view.getModalHideCount(), hides + 1);
+    modal.dispatchEvent(new window.Event("hidden.bs.modal"));
+    modal.dispatchEvent(new window.Event("shown.bs.modal"));
+    assert.equal(view.getModalHideCount(), hides + 1);
+  } finally { view.close(); }
+});
+
+
+
+const settleRejoin = async () => { await Promise.resolve(); await Promise.resolve(); };
+const savedPlayer = (name, token, lastSeen = Date.now()) => ({
+  roomCode: "ABC123", resumeToken: token, playerName: name, savedAt: Date.now(), lastSeen
+});
+
+test("new tabs offer the most recently seen eligible player in a modal", async () => {
+  const view = createClient({ savedSessions: [savedPlayer("Older", "older", 100), savedPlayer("Latest", "latest", 200)] });
+  try {
+    await settleRejoin();
+    view.handlers.get("connect")();
+    view.handlers.get("room-resume-failed")(null);
+    assert.equal(view.emitted.some(item => item.event === "resume-room"), false);
+    assert.equal(document.querySelector("#saved-room-player"), null);
+    assert.equal(document.querySelector("#rejoin-room").textContent, "Rejoin as Latest");
+    assert.equal(view.getModalShowCount(), 1);
+    document.querySelector("#rejoin-room").click();
+    assert.deepEqual(view.emitted.find(item => item.event === "resume-room").data,
+      { resumeToken: "latest", onlyDisconnected: true });
+  } finally { view.close(); }
+});
+
+test("connected players, held locks, and invalid tokens never produce a rejoin modal", async () => {
+  const sessions = [savedPlayer("Connected", "connected"), savedPlayer("Open offline", "locked"), savedPlayer("Expired", "expired")];
+  const view = createClient({ savedSessions: sessions, locks: { query: async () => ({ held: [{ name: "gamehub:player:ABC123:open offline" }] }) },
+    sessionStatuses: sessions.slice(0, 2).map((item, index) => ({ ...item, isConnected: index === 0 })) });
+  try {
+    await settleRejoin();
+    assert.equal(view.getModalShowCount(), 0);
+    assert.equal(view.emitted.some(item => item.event === "resume-room"), false);
+    assert.deepEqual(JSON.parse(localStorage.getItem("gamehub:saved-sessions")).map(item => item.resumeToken), ["connected", "locked"]);
+  } finally { view.close(); }
+});
+
+test("joining as new releases the old identity before returning to ordinary join controls", async () => {
+  const view = createClient({ savedSessions: [savedPlayer("Guest", "guest")] });
+  try {
+    await settleRejoin();
+    document.querySelector("#rejoin-as-new-player").click();
+    const release = view.emitted.find(item => item.event === "release-saved-player");
+    assert.deepEqual(release.data, { resumeToken: "guest" });
+    assert.equal(view.emitted.some(item => item.event === "join-room"), false);
+    release.respond({ success: true, roomClosed: false });
+    assert.equal(document.querySelector("#room-code").value, "ABC123");
+    assert.equal(document.querySelector("#player-name").value, "");
+    assert.equal(JSON.parse(localStorage.getItem("gamehub:saved-sessions")).length, 0);
+    assert.equal(document.querySelector("#join-room").disabled, false);
+  } finally { view.close(); }
+});
+
+test("a failed release keeps the saved identity available", async () => {
+  const view = createClient({ savedSessions: [savedPlayer("Guest", "guest")] });
+  try {
+    await settleRejoin();
+    document.querySelector("#rejoin-as-new-player").click();
+    view.emitted.find(item => item.event === "release-saved-player").respond({ success: false, message: "Already connected" });
+    assert.equal(JSON.parse(localStorage.getItem("gamehub:saved-sessions")).length, 1);
+    assert.equal(document.querySelector("#rejoin-room").disabled, false);
+  } finally { view.close(); }
+});
+
+test("legacy tokens and reopened documents use the validated modal", async () => {
+  for (const options of [{ legacyRoom: "ABC123" }, { savedRoom: "ABC123", navigationType: "navigate" }]) {
+    const view = createClient(options);
+    try {
+      await settleRejoin();
+      view.handlers.get("connect")();
+      assert.equal(view.emitted.some(item => item.event === "resume-room"), false);
+      assert.equal(view.getModalShowCount(), 1);
+    } finally { view.close(); }
+  }
+});
+
+test("a copied tab cannot automatically claim a player held by another tab", async () => {
+  const view = createClient({ savedRoom: "ABC123", sessionStatuses: [], locks: { request: async (_key, _options, callback) => callback(null) } });
+  try {
+    view.handlers.get("connect")();
+    await settleRejoin();
+    assert.equal(view.emitted.some(item => item.event === "resume-room"), false);
+    assert.equal(window.sessionStorage.getItem("gamehub:tab-session"), null);
+    assert.equal(document.querySelector("#create-room").disabled, false);
+    assert.equal(view.getModalShowCount(), 0);
+    assert.equal(document.querySelector("#reconnecting-overlay").hidden, true);
+  } finally { view.close(); }
+});
+
+test("a disconnect during restoration retries and ignores the previous reply", () => {
+  const view = createClient({ savedRoom: "ABC123" });
+  try {
+    view.handlers.get("connect")();
+    const first = view.emitted.find(item => item.event === "resume-room");
+    view.handlers.get("disconnect")();
+    view.handlers.get("connect")();
+    assert.equal(view.emitted.filter(item => item.event === "resume-room").length, 2);
+    first.respond({ success: false, message: "Old failure" });
+    assert.ok(window.sessionStorage.getItem("gamehub:tab-session"));
+    assert.equal(document.querySelector("#reconnecting-overlay").hidden, false);
+  } finally { view.close(); }
+});
+
+test("automatic restoration has a ten-second deadline before offering the modal", async t => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const view = createClient({ savedRoom: "ABC123" });
+  try {
+    assert.equal(document.querySelector("#reconnecting-overlay").hidden, false);
+    t.mock.timers.tick(10_000);
+    await settleRejoin();
+    assert.equal(document.querySelector("#reconnecting-overlay").hidden, true);
+    assert.equal(window.sessionStorage.getItem("gamehub:tab-session"), null);
+    assert.equal(view.getModalShowCount(), 1);
+  } finally { view.close(); }
+});
+
+
+test("disconnect closes a pending rejoin modal and restores menu controls", async () => {
+  const view = createClient({ savedSessions: [savedPlayer("Guest", "guest")] });
+  try {
+    await settleRejoin();
+    const modal = document.querySelector("#rejoin-room-modal");
+    document.querySelector("#rejoin-as-new-player").click();
+    assert.ok(view.emitted.some(item => item.event === "release-saved-player"));
+    const hide = new window.Event("hide.bs.modal", { cancelable: true });
+    modal.dispatchEvent(hide);
+    assert.equal(hide.defaultPrevented, true);
+    assert.equal(modal.classList.contains("show"), true);
+    view.handlers.get("disconnect")();
+    assert.equal(modal.classList.contains("show"), false);
+    assert.equal(document.querySelector("#join-room").disabled, false);
+    assert.equal(JSON.parse(localStorage.getItem("gamehub:saved-sessions"))[0].resumeToken, "guest");
+  } finally { view.close(); }
+});
+
+
+test("an interrupted rejoin offer returns after connection recovery", async () => {
+  const view = createClient({ savedSessions: [savedPlayer("Guest", "guest")] });
+  try {
+    await settleRejoin();
+    document.querySelector("#rejoin-as-new-player").click();
+    view.handlers.get("disconnect")();
+    view.handlers.get("connect")();
+    await settleRejoin();
+    assert.equal(document.querySelector("#rejoin-room-modal").classList.contains("show"), true);
+    assert.equal(document.querySelector("#rejoin-room").disabled, false);
+  } finally { view.close(); }
+});
+
+test("a late saved-player release cannot clear a newer room identity", async () => {
+  const view = createClient({ savedSessions: [savedPlayer("Guest", "guest")] });
+  try {
+    await settleRejoin();
+    document.querySelector("#rejoin-as-new-player").click();
+    const release = view.emitted.find(item => item.event === "release-saved-player");
+    view.handlers.get("disconnect")();
+    view.handlers.get("room-resumed")({ roomCode: "NEW123", playerName: "New Host", activeGameId: null,
+      players: [], isHost: true, selectedGameId: "egyptian-war", gameSettings: {}, isLocked: false });
+    view.handlers.get("room-resume-token")("new-token");
+    const stored = window.sessionStorage.getItem("gamehub:tab-session");
+    assert.ok(stored);
+    release.respond({ success: true, roomClosed: false });
+    assert.equal(window.sessionStorage.getItem("gamehub:tab-session"), stored);
+    assert.equal(document.querySelector("#player-name").value, "New Host");
+  } finally { view.close(); }
+});
+
+
+const entrySuccess = (roomCode, resumeToken) => ({ success: true, roomCode, resumeToken,
+  playerName: "New Host", activeGameId: null, role: "player", selectedGameId: null, gameSettings: {} });
+for (const event of ["create-room", "join-room"]) {
+  for (const success of [false, true]) {
+    test(`a stale ${event} ${success ? "success" : "failure"} cannot replace a newer entry`, () => {
+      const view = createClient();
+      try {
+        document.querySelector("#player-name").value = "Previous player";
+        document.querySelector("#room-code").value = "OLD123";
+        document.querySelector(event === "create-room" ? "#create-room" : "#join-room").click();
+        const old = view.emitted.find(item => item.event === event);
+        view.handlers.get("disconnect")();
+        document.querySelector("#player-name").value = "New Host";
+        document.querySelector("#create-room").click();
+        const fresh = view.emitted.filter(item => item.event === "create-room").at(-1);
+        old.respond(success ? entrySuccess("OLD123", "old-token") : { success: false, message: "Old failure" });
+        assert.equal(document.querySelector("#create-room").disabled, true);
+        assert.equal(window.sessionStorage.getItem("gamehub:tab-session"), null);
+        fresh.respond(entrySuccess("NEW123", "new-token"));
+        const stored = JSON.parse(window.sessionStorage.getItem("gamehub:tab-session"));
+        assert.equal(stored.roomCode, "NEW123");
+        assert.equal(stored.resumeToken, "new-token");
+      } finally { view.close(); }
+    });
+  }
+}
+
+test("a cancelled approval result cannot replace a newer lobby", () => {
+  const view = createClient();
+  try {
+    document.querySelector("#player-name").value = "Guest";
+    document.querySelector("#room-code").value = "OLD123";
+    document.querySelector("#join-room").click();
+    view.emitted.find(item => item.event === "join-room").respond({ success: true, pendingApproval: true });
+    document.querySelector("#join-room").click();
+    view.emitted.find(item => item.event === "cancel-join-request").respond({ success: true });
+    document.querySelector("#create-room").click();
+    view.emitted.find(item => item.event === "create-room").respond(entrySuccess("NEW123", "new-token"));
+    view.handlers.get("join-request-result")(entrySuccess("OLD123", "old-token"));
+    assert.equal(JSON.parse(window.sessionStorage.getItem("gamehub:tab-session")).roomCode, "NEW123");
+  } finally { view.close(); }
+});
+
+test("a cancellation acknowledgement after host approval keeps joined controls locked", () => {
+  const view = createClient();
+  try {
+    document.querySelector("#player-name").value = "Guest";
+    document.querySelector("#room-code").value = "ABC123";
+    document.querySelector("#join-room").click();
+    view.emitted.find(item => item.event === "join-room").respond({ success: true, pendingApproval: true });
+    document.querySelector("#join-room").click();
+    const cancel = view.emitted.find(item => item.event === "cancel-join-request");
+    view.handlers.get("join-request-result")(entrySuccess("ABC123", "guest-token"));
+    cancel.respond({ success: true });
+    assert.equal(document.querySelector("#join-room").disabled, true);
+    assert.equal(document.querySelector("#player-name").disabled, true);
+    assert.equal(JSON.parse(window.sessionStorage.getItem("gamehub:tab-session")).roomCode, "ABC123");
+  } finally { view.close(); }
+});
+
+
+for (const activeGameId of [null, "example-game"]) {
+  test(`a terminal reconnect rejection clears the stale ${activeGameId ? "game" : "lobby"}`, () => {
+    const view = createClient();
+    try {
+      view.handlers.get("room-resumed")({ roomCode: "ABC123", playerName: "Host", isHost: true,
+        selectedGameId: "example-game", activeGameId, chatEnabled: true, gameSettings: {} });
+      view.handlers.get("room-resume-token")("old-token");
+      view.handlers.get("disconnect")();
+      view.handlers.get("connect")();
+      view.emitted.filter(item => item.event === "resume-room").at(-1)
+        .respond({ success: false, sessionUnavailable: true, message: "That saved room session is no longer available." });
+      assert.equal(document.querySelector("#entry-view").classList.contains("d-none"), false);
+      assert.equal(document.querySelector("#lobby-view").classList.contains("d-none"), true);
+      assert.equal(document.querySelector("#gameplay-view").classList.contains("d-none"), true);
+      assert.equal(window.sessionStorage.getItem("gamehub:tab-session"), null);
+      assert.deepEqual(JSON.parse(localStorage.getItem("gamehub:saved-sessions")), []);
+      assert.equal(document.querySelector("#reconnecting-overlay").hidden, true);
+      assert.equal(document.querySelector("#create-room").disabled, false);
+      assert.equal(view.audioScenes.at(-1), "menu");
+    } finally { view.close(); }
+  });
+}
+
+test("temporary reconnect errors keep the saved identity and bounded recovery window", async t => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const view = createClient({ savedRoom: "ABC123" });
+  try {
+    view.handlers.get("connect")();
+    view.emitted.find(item => item.event === "resume-room").respond({ success: false, message: "Unable to process that request." });
+    assert.ok(window.sessionStorage.getItem("gamehub:tab-session"));
+    assert.equal(document.querySelector("#reconnecting-overlay").hidden, false);
+    t.mock.timers.tick(10_000);
+    await settleRejoin();
+    assert.equal(document.querySelector("#entry-view").classList.contains("d-none"), false);
+    assert.equal(document.querySelector("#reconnecting-overlay").hidden, true);
+    assert.equal(JSON.parse(localStorage.getItem("gamehub:saved-sessions"))[0].resumeToken, "saved-token");
+  } finally { view.close(); }
+});
+
+test("an old terminal rejection cannot clear a successfully rotated reconnect identity", () => {
+  const view = createClient({ savedRoom: "ABC123" });
+  try {
+    view.handlers.get("connect")();
+    const request = view.emitted.find(item => item.event === "resume-room");
+    view.handlers.get("room-resumed")({ roomCode: "ABC123", playerName: "Saved player", isHost: true,
+      selectedGameId: null, activeGameId: null, gameSettings: {} });
+    view.handlers.get("room-resume-token")("rotated-token");
+    request.respond({ success: false, sessionUnavailable: true, message: "Old rejection" });
+    assert.equal(JSON.parse(window.sessionStorage.getItem("gamehub:tab-session")).resumeToken, "rotated-token");
+    assert.equal(document.querySelector("#lobby-view").classList.contains("d-none"), false);
+  } finally { view.close(); }
+});
+
+
+function openPresetEditor(view) {
+  const definition = game({ settings: [{ key: "fast", label: "Fast", description: "Fast rules", defaultValue: false }] });
+  view.handlers.get("available-games")([definition]);
+  document.querySelector("#create-room").click();
+  view.emitted.find(item => item.event === "create-room").respond(entrySuccess("ABC123", "token"));
+  view.handlers.get("game-selected")({ gameId: definition.id, settings: { fast: false } });
+}
+
+test("preset save and delete merge the latest data even before a storage event arrives", () => {
+  const view = createClient({ savedRules: { "example-game": { presets: [{ name: "Alpha", settings: { fast: false } }] } } });
+  try {
+    openPresetEditor(view);
+    const shared = { "example-game": { last: { fast: true }, presets: [
+      { name: "Alpha", settings: { fast: false } }, { name: "Beta", settings: { fast: true } }
+    ] }, other: { last: { untouched: true } } };
+    localStorage.setItem("gamehub:rule-presets", JSON.stringify(shared));
+    document.querySelector("#rule-preset-name").value = "Gamma";
+    document.querySelector('[data-preset-action="save"]').click();
+    let saved = JSON.parse(localStorage.getItem("gamehub:rule-presets"));
+    assert.deepEqual(saved["example-game"].presets.map(p => p.name), ["Alpha", "Beta", "Gamma"]);
+    assert.deepEqual(saved["example-game"].last, { fast: true });
+    assert.deepEqual(saved.other, shared.other);
+    saved["example-game"].presets.push({ name: "Delta", settings: { fast: false } });
+    localStorage.setItem("gamehub:rule-presets", JSON.stringify(saved));
+    document.querySelector("#rule-preset").value = "Beta";
+    document.querySelector('[data-preset-action="delete"]').click();
+    saved = JSON.parse(localStorage.getItem("gamehub:rule-presets"));
+    assert.deepEqual(saved["example-game"].presets.map(p => p.name), ["Alpha", "Gamma", "Delta"]);
+  } finally { view.close(); }
+});
+
+test("external preset updates refresh only the list and preserve an unsaved draft", () => {
+  const view = createClient({ savedRules: { "example-game": { presets: [{ name: "Alpha", settings: { fast: false } }] } } });
+  try {
+    openPresetEditor(view);
+    const toggle = document.querySelector('[data-setting-key="fast"]');
+    const name = document.querySelector("#rule-preset-name");
+    toggle.checked = true; name.value = "Unsaved name"; name.focus();
+    document.querySelector("#rule-preset").value = "Alpha";
+    localStorage.setItem("gamehub:rule-presets", JSON.stringify({ "example-game": { presets: [
+      { name: "Alpha", settings: { fast: false } }, { name: "Beta", settings: { fast: false } }
+    ] } }));
+    window.dispatchEvent(new window.StorageEvent("storage", { key: "gamehub:rule-presets" }));
+    assert.deepEqual([...document.querySelector("#rule-preset").options].map(o => o.value), ["Alpha", "Beta"]);
+    assert.equal(document.querySelector("#rule-preset").value, "Alpha");
+    assert.equal(toggle.checked, true);
+    assert.equal(name.value, "Unsaved name");
+    assert.equal(document.activeElement, name);
+    localStorage.removeItem("gamehub:rule-presets");
+    window.dispatchEvent(new window.StorageEvent("storage", { key: null }));
+    assert.equal(document.querySelector("#rule-preset").disabled, true);
+    assert.equal(toggle.checked, true);
+  } finally { view.close(); }
+});
+
+test("remembering confirmed rules preserves presets written by another tab", () => {
+  const view = createClient();
+  try {
+    openPresetEditor(view);
+    localStorage.setItem("gamehub:rule-presets", JSON.stringify({ "example-game": {
+      presets: [{ name: "Remote", settings: { fast: false } }]
+    } }));
+    view.handlers.get("game-settings-updated")({ gameId: "example-game", settings: { fast: true } });
+    const saved = JSON.parse(localStorage.getItem("gamehub:rule-presets"))["example-game"];
+    assert.deepEqual(saved.last, { fast: true });
+    assert.equal(saved.presets[0].name, "Remote");
+  } finally { view.close(); }
+});
+
+
+for (const readsBlocked of [false, true]) {
+  test(`failed writes retain preset edits and recover alongside other tabs (${readsBlocked ? "reads blocked" : "reads allowed"})`, () => {
+    const view = createClient({ savedRules: { "example-game": {
+      presets: [{ name: "Existing", settings: { fast: false } }]
+    } } });
+    const storage = localStorage;
+    const proto = Object.getPrototypeOf(storage);
+    const originalSet = proto.setItem, originalGet = proto.getItem;
+    let blocked = true;
+    try {
+      openPresetEditor(view);
+      proto.setItem = function(key, value) {
+        if (key === "gamehub:rule-presets" && blocked) throw new window.DOMException("Full", "QuotaExceededError");
+        return originalSet.call(this, key, value);
+      };
+      proto.getItem = function(key) {
+        if (key === "gamehub:rule-presets" && blocked && readsBlocked) throw new window.DOMException("Disabled", "SecurityError");
+        return originalGet.call(this, key);
+      };
+      const save = title => {
+        document.querySelector("#rule-preset-name").value = title;
+        document.querySelector('[data-preset-action="save"]').click();
+      };
+      save("Alpha"); save("Beta");
+      assert.deepEqual([...document.querySelector("#rule-preset").options].map(o => o.value), ["Existing", "Alpha", "Beta"]);
+      document.querySelector("#rule-preset").value = "Existing";
+      document.querySelector('[data-preset-action="delete"]').click();
+      view.handlers.get("game-settings-updated")({ gameId: "example-game", settings: { fast: true } });
+      const external = { "example-game": { last: { fast: false }, presets: [
+        { name: "Existing", settings: { fast: false } }, { name: "Remote", settings: { fast: false } }
+      ] }, other: { last: { keep: true } } };
+      originalSet.call(storage, "gamehub:rule-presets", JSON.stringify(external));
+      window.dispatchEvent(new window.StorageEvent("storage", { key: "gamehub:rule-presets" }));
+      const names = [...document.querySelector("#rule-preset").options].map(o => o.value);
+      assert.ok(names.includes("Alpha") && names.includes("Beta"));
+      assert.equal(names.includes("Existing"), false);
+      blocked = false;
+      save("Gamma");
+      const recovered = JSON.parse(storage.getItem("gamehub:rule-presets"));
+      assert.deepEqual(recovered["example-game"].presets.map(p => p.name).sort(), ["Alpha", "Beta", "Gamma", "Remote"]);
+      assert.deepEqual(recovered["example-game"].last, { fast: true });
+      assert.deepEqual(recovered.other, external.other);
+      window.dispatchEvent(new window.StorageEvent("storage", { key: "gamehub:rule-presets" }));
+      assert.equal(document.querySelector("#rule-preset").options.length, 4);
+    } finally {
+      proto.setItem = originalSet; proto.getItem = originalGet;
+      view.close();
+    }
+  });
+}
+
+
+for (const action of ["leave-lobby", "leave-game", "leave-spectator", "spectate-game"]) {
+  for (const success of [true, false]) {
+    test(`a stale ${action} ${success ? "success" : "failure"} cannot change a newer game`, () => {
+      const view = createClient();
+      try {
+        view.handlers.get("room-resumed")({ roomCode: "OLD123", isHost: false,
+          role: action === "leave-spectator" ? "spectator" : "player",
+          activeGameId: action === "leave-game" || action === "leave-spectator" ? "example-game" : null,
+          hasActiveGame: action !== "leave-lobby", selectedGameId: "example-game", gameSettings: {}, chatEnabled: true });
+        view.handlers.get("room-resume-token")("old-token");
+        const buttonId = { "leave-lobby": "leave-lobby", "leave-game": "confirm-leave-game",
+          "leave-spectator": "confirm-leave-spectator", "spectate-game": "spectate-game" }[action];
+        document.getElementById(buttonId).click();
+        const request = view.emitted.find(item => item.event === (action === "leave-spectator" ? "leave-game" : action));
+        assert.ok(request);
+        view.handlers.get("disconnect")();
+        view.handlers.get("room-resumed")({ roomCode: "NEW123", isHost: true, role: "player",
+          activeGameId: "example-game", selectedGameId: "example-game", gameSettings: {}, chatEnabled: true });
+        view.handlers.get("room-resume-token")("new-token");
+        const identity = window.sessionStorage.getItem("gamehub:tab-session");
+        const notices = view.getToastShowCount();
+        const hides = view.getModalHideCount();
+        request.respond({ success, role: "spectator", hasActiveGame: true, message: "Old response" });
+        assert.equal(window.sessionStorage.getItem("gamehub:tab-session"), identity);
+        assert.equal(document.querySelector("#gameplay-view").classList.contains("d-none"), false);
+        assert.equal(document.querySelector("#entry-view").classList.contains("d-none"), true);
+        assert.equal(view.getToastShowCount(), notices);
+        assert.equal(view.getModalHideCount(), hides);
+      } finally { view.close(); }
+    });
+  }
+}
+
+test("a leave-game reply cannot unmount a new match in the same room", () => {
+  const view = createClient();
+  try {
+    view.handlers.get("room-resumed")({ roomCode: "ABC123", isHost: false, role: "player",
+      activeGameId: "example-game", selectedGameId: "example-game", gameSettings: {}, chatEnabled: true });
+    document.querySelector("#confirm-leave-game").click();
+    const request = view.emitted.find(item => item.event === "leave-game");
+    view.handlers.get("game-ended")({ message: "Finished" });
+    view.handlers.get("game-started")({ gameId: "example-game", settings: {}, chatEnabled: true });
+    request.respond({ success: true, hasActiveGame: false });
+    assert.equal(document.querySelector("#gameplay-view").classList.contains("d-none"), false);
+    assert.equal(document.querySelector("#confirm-leave-game").disabled, false);
+  } finally { view.close(); }
+});
+
+
+for (const modalId of ["leave-game-modal", "leave-spectator-modal", "exit-game-modal"]) {
+  for (const event of ["game-ended", "room-closed", "disconnect"]) {
+    test(`${modalId} closes after opening when ${event} invalidates it and removes its retry`, () => {
+      const view = createClient();
+      try {
+        view.handlers.get("room-resumed")({ roomCode: "ABC123", isHost: modalId === "exit-game-modal",
+          role: modalId === "leave-spectator-modal" ? "spectator" : "player", activeGameId: "example-game",
+          selectedGameId: "example-game", gameSettings: {}, chatEnabled: true });
+        const modal = document.getElementById(modalId);
+        modal.dispatchEvent(new window.Event("show.bs.modal"));
+        const before = view.getModalHideCount();
+        view.handlers.get(event)({ message: "Ended during opening" });
+        assert.equal(view.getModalHideCount(), before + 1);
+        modal.dispatchEvent(new window.Event("shown.bs.modal"));
+        assert.equal(view.getModalHideCount(), before + 2);
+        modal.dispatchEvent(new window.Event("hidden.bs.modal"));
+        modal.dispatchEvent(new window.Event("show.bs.modal"));
+        modal.dispatchEvent(new window.Event("shown.bs.modal"));
+        assert.equal(view.getModalHideCount(), before + 2, "old retry must not close a newly opened dialog");
+        modal.dispatchEvent(new window.Event("hidden.bs.modal"));
+      } finally { view.close(); }
+    });
+  }
+}
+for (const success of [true, false]) {
+  test(`a stale Exit Game ${success ? "success" : "failure"} cannot affect a newer confirmation`, () => {
+    const view = createClient();
+    try {
+      view.handlers.get("room-resumed")({ roomCode: "ABC123", isHost: true, role: "player",
+        activeGameId: "example-game", selectedGameId: "example-game", gameSettings: {}, chatEnabled: true });
+      document.querySelector("#confirm-exit-game").click();
+      const old = view.emitted.find(item => item.event === "close-game-to-lobby");
+      view.handlers.get("game-ended")({ message: "Ended" });
+      view.handlers.get("game-started")({ gameId: "example-game", settings: {}, chatEnabled: true });
+      document.querySelector("#confirm-exit-game").click();
+      const hides = view.getModalHideCount(), notices = view.getToastShowCount();
+      old.respond({ success, message: "Old response" });
+      assert.equal(document.querySelector("#confirm-exit-game").disabled, true);
+      assert.equal(view.getModalHideCount(), hides);
+      assert.equal(view.getToastShowCount(), notices);
+      assert.equal(document.querySelector("#gameplay-view").classList.contains("d-none"), false);
+    } finally { view.close(); }
+  });
+}
+
+
+for (const success of [true, false]) {
+  test(`an old settings ${success ? "success" : "failure"} preserves a reopened preset draft`, () => {
+    const view = createClient({ savedRules: { "example-game": {
+      presets: [{ name: "Fast", settings: { fast: true } }]
+    } } });
+    try {
+      openPresetEditor(view);
+      const modal = document.querySelector("#settings-modal");
+      modal.dispatchEvent(new window.Event("show.bs.modal"));
+      document.querySelector("#save-game-settings").click();
+      const old = view.emitted.find(item => item.event === "update-game-settings");
+      view.handlers.get("game-settings-updated")({ gameId: "example-game", settings: { fast: false } });
+      modal.dispatchEvent(new window.Event("hide.bs.modal"));
+      modal.dispatchEvent(new window.Event("hidden.bs.modal"));
+      modal.dispatchEvent(new window.Event("show.bs.modal"));
+      const select = document.querySelector("#rule-preset");
+      select.value = "Fast"; select.dispatchEvent(new window.Event("change"));
+      assert.equal(document.querySelector('[data-setting-key="fast"]').checked, true);
+      document.querySelector("#rule-preset-name").value = "New draft";
+      document.querySelector('[data-preset-action="save"]').click();
+      const stored = localStorage.getItem("gamehub:rule-presets");
+      const hides = view.getModalHideCount(), notices = view.getToastShowCount();
+      old.respond({ success, message: "Old acknowledgement" });
+      assert.equal(view.getModalHideCount(), hides);
+      assert.equal(view.getToastShowCount(), notices);
+      assert.equal(document.querySelector('[data-setting-key="fast"]').checked, true);
+      assert.equal(localStorage.getItem("gamehub:rule-presets"), stored);
+      assert.equal(view.emitted.filter(item => item.event === "update-game-settings").length, 1);
+      document.querySelector("#save-game-settings").click();
+      const current = view.emitted.filter(item => item.event === "update-game-settings").at(-1);
+      assert.deepEqual(current.data.settings, { fast: true });
+      current.respond({ success: true });
+      assert.equal(view.getModalHideCount(), hides + 1);
+      assert.equal(JSON.parse(localStorage.getItem("gamehub:rule-presets"))["example-game"].presets.length, 2);
+    } finally { view.close(); }
+  });
+}
+
+test("only the latest save in a settings visit can close the editor", () => {
+  const view = createClient();
+  try {
+    openPresetEditor(view);
+    document.querySelector("#save-game-settings").click();
+    const first = view.emitted.filter(item => item.event === "update-game-settings").at(-1);
+    document.querySelector('[data-setting-key="fast"]').checked = true;
+    document.querySelector("#save-game-settings").click();
+    const second = view.emitted.filter(item => item.event === "update-game-settings").at(-1);
+    const hides = view.getModalHideCount();
+    first.respond({ success: true });
+    assert.equal(view.getModalHideCount(), hides);
+    second.respond({ success: true });
+    assert.equal(view.getModalHideCount(), hides + 1);
+  } finally { view.close(); }
+});
+
+test("a settings reply from before reconnect cannot close a newer room's editor", () => {
+  const view = createClient();
+  try {
+    openPresetEditor(view);
+    document.querySelector("#save-game-settings").click();
+    const old = view.emitted.find(item => item.event === "update-game-settings");
+    view.handlers.get("disconnect")();
+    view.handlers.get("room-resumed")({ roomCode: "NEW123", isHost: true, activeGameId: null,
+      selectedGameId: "example-game", gameSettings: {}, role: "player" });
+    document.querySelector("#settings-modal").dispatchEvent(new window.Event("show.bs.modal"));
+    const hides = view.getModalHideCount();
+    old.respond({ success: true });
+    assert.equal(view.getModalHideCount(), hides);
+  } finally { view.close(); }
+});
+
+
+for (const success of [true, false]) {
+  test(`a stale Close Lobby ${success ? "success" : "failure"} cannot affect a newer confirmation`, () => {
+    const view = createClient();
+    try {
+      const room = { roomCode: "OLD123", isHost: true, activeGameId: null, selectedGameId: null, gameSettings: {} };
+      view.handlers.get("room-resumed")(room);
+      document.querySelector("#confirm-close-lobby").click();
+      const old = view.emitted.find(item => item.event === "close-room");
+      view.handlers.get("room-closed")();
+      view.handlers.get("room-resumed")({ ...room, roomCode: "NEW123" });
+      document.querySelector("#confirm-close-lobby").click();
+      const hides = view.getModalHideCount(), notices = view.getToastShowCount();
+      old.respond({ success, message: "Old response" });
+      assert.equal(document.querySelector("#confirm-close-lobby").disabled, true);
+      assert.equal(view.getModalHideCount(), hides);
+      assert.equal(view.getToastShowCount(), notices);
+    } finally { view.close(); }
+  });
+}
+
+test("a stale picker reply cannot unlock or close a newer selection", () => {
+  const view = createClient();
+  try {
+    view.handlers.get("available-games")([game(), game({ id: "second-game" })]);
+    const room = { roomCode: "OLD123", isHost: true, activeGameId: null, selectedGameId: "example-game", gameSettings: {} };
+    view.handlers.get("room-resumed")(room);
+    document.querySelector('[data-game-id="second-game"]').click();
+    const old = view.emitted.filter(item => item.event === "select-game").at(-1);
+    view.handlers.get("disconnect")();
+    view.handlers.get("room-resumed")({ ...room, roomCode: "NEW123" });
+    document.querySelector('[data-game-id="second-game"]').click();
+    const hides = view.getModalHideCount();
+    old.respond({ success: true });
+    assert.equal(document.querySelector("#game-picker-grid").classList.contains("is-pending"), true);
+    assert.equal(view.getModalHideCount(), hides);
   } finally { view.close(); }
 });

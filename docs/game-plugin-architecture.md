@@ -41,7 +41,8 @@ does not make another server request. Reloading or reconnecting refreshes it.
 Locked rooms reject new join requests and dismiss any pending requests.
 The host can require approval for both players and
 spectators in Settings → Game → Joining. Pending visitors receive no membership,
-chat history, or game state. Requests expire after one minute, can be cancelled,
+chat history, or game state. At most two pending requests per client address
+are allowed in a room. Requests expire after one minute, can be cancelled,
 and are checked again against the room lock, capacity, and names on acceptance.
 
 Games may declare `displayOptions` in their definition. Each option has a stable
@@ -57,8 +58,9 @@ reliable list of connected keyboards.
 ## Chat, score resets, and shared controls
 
 Chat is optional per game through its definition. GameHub validates membership,
-message length (1-300 characters), and send rate, and retains the last 50 room
-messages for admitted viewers on join or reconnect. The current room chat is
+message length (1-300 characters), and send rate, and retains the last 50 messages
+for viewers of the active match on join or reconnect. Lobby waiters do not receive
+this history. History clears when a match starts or ends. The current room chat is
 shared by players and spectators; separate channels are not implemented.
 
 The platform's scoreboard reset service checks host permission and opens an
@@ -126,9 +128,11 @@ Games may optionally declare scoreboard columns and report authoritative counter
 through `context.recordStat(memberId, key)`. The platform awards declared `wins`
 on game completion. Totals live only in room memory, survive game restarts and
 socket-ID changes, and disappear when the room closes or the process stops.
-Members have server-generated score identities that survive reconnection; fresh
-joins receive new identities. A host-only reset clears totals. Scoreboards retain
-at most 200 participant rows per game per room. Pending joiners receive no scores.
+Score rows are keyed by case-insensitive player name within each room and game,
+so leaving and rejoining with the same name preserves totals. A returning name
+updates its displayed spelling and avatar; names are not authenticated identities.
+A host-only reset clears totals. Scoreboards retain at most 200 participant rows
+per game per room. Pending joiners receive no scores.
 
 The browser receives optional `scoreboard`, `host-changed`, and `host-status`
 platform events. `context.isHost` reflects current ownership; games should update
@@ -227,3 +231,91 @@ without throwing. Room codes use cryptographically secure randomness, and
 repeated invalid room-code guesses are limited before room lookup continues.
 Active players must use the game-leave flow before leaving a lobby, which
 keeps authoritative sessions from retaining a player the room has removed.
+
+## Rejoining and browser storage
+
+Each tab keeps its own player reconnect token in session storage. Refreshes and
+brief drops restore that player automatically while a Reconnecting screen blocks
+accidental input. After ten seconds without restoration, the client returns to
+the menu and checks saved identities for an explicit rejoin offer.
+
+A rejected resume with `sessionUnavailable: true` means the server no longer
+recognizes that identity (missing, expired, or revoked). The client forgets that
+identity, clears the stale lobby or mounted game, and returns to the menu with
+the server's reason. Temporary request errors keep the bounded recovery window
+and saved identity. Late rejections cannot discard a successfully rotated or
+newer session. Other browser-local preferences are unaffected.
+
+Local storage keeps up to 20 recent players with their room code, name, token,
+and last-seen time. Disconnect, visibility, and page-close events refresh recency.
+The server checks that tokens are within their 24-hour lifetime, that their room
+and member still exist, and whether the player is connected. Browser Web Locks,
+when available, also exclude identities still held by another tab, including an
+open tab that is briefly offline. Fresh tabs never automatically claim a saved
+identity. Old browser-wide tokens migrate to the same validated offer.
+
+The rejoin modal offers only the most recently seen eligible disconnected player,
+respects explicit room invites, and normally appears once per page visit. An
+offer interrupted by disconnection is checked again after connection recovery. Its footer offers
+Rejoin and Join as a new player. Rejoin uses the saved token and bypasses join approval;
+manual rejoining rechecks that the old player is still disconnected. Names alone
+never authorize claiming a seat. Switching devices without the token has no
+name-based fallback.
+
+Join as a new player first asks the server to release the saved disconnected
+identity. During a game this uses the package's voluntary-removal contract, which
+must succeed before the seat and token are removed. Releasing a host transfers
+ownership to an eligible connected player, or closes the room when nobody can
+take over; the modal explains that consequence. The user then enters a name and
+uses the ordinary join flow, including approval and lock checks. A failed release
+preserves the saved identity. No ghost seat is intentionally left behind.
+Disconnect cleanup closes a pending rejoin modal and releases unfinished claims
+when the tab has no active identity. Resume and saved-player-release callbacks
+use request generations so stale replies cannot clear a newer room session.
+
+Room creation and ordinary joining keep a separate pending request identity.
+Disconnects, room resets, and successful session restoration invalidate it.
+Acknowledgements apply only to that request while the tab is outside a room;
+late successes and failures cannot replace a newer lobby or unlock its controls.
+Approval results require a current waiting join request. Cancellation replies
+also check request identity so approval winning the race leaves the joined
+controls locked.
+
+Leave Lobby, Leave Game, Stop Spectating, and Spectate use a lifecycle generation
+to reject stale asynchronous responses. Disconnects, room changes/resets, game
+mounts, and game completion invalidate pending lifecycle replies and reset their
+buttons. A later match in the same room also has a new generation, so its board
+cannot be unmounted by a delayed reply from the previous match. Host Exit Game
+and Close Lobby acknowledgements use the same generation check. Leave Game,
+Stop Spectating, Exit Game, and Close Lobby confirmations close on invalidation
+even if their opening animation is in progress: cleanup retries after `shown.bs.modal` and removes the retry on
+`hidden.bs.modal`. Opening is tracked from `show.bs.modal`, before the backdrop
+finishes appearing. Verification is recorded in [bug-review.md](bug-review.md).
+
+Presets, keybinds, audio, and display preferences remain browser-wide local
+storage. Loading a preset changes the host's draft; Save Settings applies it
+only to that host's room.
+Save Settings acknowledgements also belong to a specific pending save and editor
+visit. Showing or closing that editor, replacing the save, or changing the room
+lifecycle invalidates older replies. A stale acknowledgement cannot close a newly
+opened editor or discard a preset-loaded draft. This guards only the reply's UI
+side effects; confirmed server-rule events and browser preset persistence keep
+their existing roles.
+Rule-preference mutations reread current storage and preserve unrelated presets
+and confirmed rules. An exclusive Web Lock serializes writes across tabs where
+supported; otherwise fresh reads protect sequential updates but do not guarantee
+serialization of simultaneous writes. Storage events refresh preset lists without
+resetting the host's unsaved draft, preset name, or focus. Queued preset saves use
+the name and rule values captured when Save preset was clicked. Saving an existing
+preset name replaces that preset. Failed writes retain pending preset saves,
+deletions, and confirmed-rule changes in memory. Reads and external storage events
+merge those edits over current shared data; the next successful mutation persists
+the merged result and clears pending edits only after the write succeeds. Until
+then, the UI reports that those edits last only for this visit. Closing or
+reloading the tab before storage recovers loses its unpersisted edits.
+
+Game-picker replies are tied to a pending selection and room. Showing or closing
+the picker invalidates older selection replies, preventing them from closing or
+unlocking newer controls. Leave Game requests require current active membership;
+lobby waiters cannot invoke a second plugin removal or regain active membership
+through a failed removal.

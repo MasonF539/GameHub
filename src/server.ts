@@ -1,5 +1,5 @@
 import express from "express";
-import { randomBytes, randomInt, randomUUID } from "node:crypto";
+import { randomBytes, randomInt } from "node:crypto";
 import { readFileSync } from "node:fs";
 import http from "http";
 import { tmpdir } from "node:os";
@@ -24,7 +24,6 @@ type GameSettingValue = boolean | number;
 
 type Player = {
   id: string;
-  scoreId: string;
   name: string;
   avatar: string;
   isConnected: boolean;
@@ -44,7 +43,7 @@ type Room = {
   scores: Map<string, Map<string, ScoreRow>>;
   requiresJoinApproval: boolean;
   pendingJoinRequests: Map<string, {
-    name: string; avatar: string; timer: ReturnType<typeof setTimeout>; accept: (respond: SocketResponse) => void;
+    address: string; name: string; avatar: string; timer: ReturnType<typeof setTimeout>; accept: (respond: SocketResponse) => void;
   }>;
   chatHistory: ChatMessage[];
   hostId: string;
@@ -253,6 +252,7 @@ const deterministicTestRandomInteger =
     ? (maxExclusive: number): number => maxExclusive - 1
     : randomInt;
 const maxLobbyPlayers = 12;
+const maxPendingJoinsPerAddress = 2;
 const rooms = new Map<string, Room>();
 const socketRoomCodes = new Map<string, string>();
 const pendingJoinRoomCodes = new Map<string, string>();
@@ -437,6 +437,23 @@ function removePlayerResumeTokens(
   }
 }
 
+// A saved token proves ownership; names are never used to claim a seat.
+function findSavedPlayer(token: string) {
+  const session = playerResumeTokens.get(token);
+  if (!session || Date.now() - session.createdAt > resumeTokenMaxAgeMs) {
+    if (session) playerResumeTokens.delete(token);
+    return null;
+  }
+  const room = rooms.get(session.roomCode);
+  const found = room ? getRoomMember(room, session.playerId) : null;
+  return room && found ? { session, room, found } : null;
+}
+
+function hostSuccessor(room: Room, memberId: string) {
+  return [...room.players.values()].find(player => player.isConnected && player.id !== memberId &&
+    (room.activeGameId === null || room.activeGamePlayerIds.has(player.id)));
+}
+
 function normalizeRoomCode(value: unknown): string {
   return String(value ?? "").trim().toUpperCase();
 }
@@ -534,6 +551,7 @@ function sendRoomResumed(
   const canViewActiveGame = isActiveGameViewer(room, socket.id);
   socket.emit("room-resumed", {
     roomCode,
+    playerName: getRoomMember(room, socket.id)?.member.name,
     isHost: room.hostId === socket.id,
     role: room.spectators.has(socket.id) ? "spectator" : "player",
     isLocked: room.isLocked,
@@ -581,11 +599,17 @@ function ensureScore(room: Room, gameId: string, memberId: string): ScoreRow | n
   if (!member || !columns?.length) return null;
   if (!room.scores.has(gameId)) room.scores.set(gameId, new Map());
   const scores = room.scores.get(gameId)!;
-  let row = scores.get(member.scoreId);
+  // Names are unique within a room, including case-insensitive comparisons.
+  const scoreKey = member.name.toLocaleLowerCase();
+  let row = scores.get(scoreKey);
   if (!row && scores.size < 200) {
-    row = { id: member.scoreId, name: member.name, avatar: member.avatar,
+    row = { id: scoreKey, name: member.name, avatar: member.avatar,
       values: Object.fromEntries(columns.map((column) => [column.key, 0])) };
-    scores.set(member.scoreId, row);
+    scores.set(scoreKey, row);
+  }
+  if (row) {
+    row.name = member.name;
+    row.avatar = member.avatar;
   }
   return row ?? null;
 }
@@ -727,9 +751,9 @@ function removeMemberFromRoom(
 }
 
 // Starts the recovery countdown for a disconnected member. When it ends:
-// a missing host closes the room (even mid-game, since only the host can
-// resume or remove players), a lobby player or spectator is removed, and a
-// player in an active game is left for the host to deal with.
+// a missing host hands control to an eligible connected player or closes the
+// room if nobody can take over. Lobby players and spectators are removed;
+// active-game players remain subject to the game's offline policy.
 function scheduleDisconnectExpiry(
   roomCode: string,
   room: Room,
@@ -751,8 +775,7 @@ function scheduleDisconnectExpiry(
     }
 
     if (found.role === "player" && room.hostId === memberId) {
-      const successor = [...room.players.values()].find((player) => player.isConnected && player.id !== memberId &&
-        (room.activeGameId === null || room.activeGamePlayerIds.has(player.id)));
+      const successor = hostSuccessor(room, memberId);
       if (successor) {
         transferRoomHost(roomCode, room, successor.id);
         return;
@@ -895,6 +918,7 @@ function finishActiveGame(
   disposeGameSession(room);
   room.activeGameId = null;
   room.activeGamePlayerIds.clear();
+  room.chatHistory = [];
 
   io.to(roomCode).emit("game-ended", {
     winnerId,
@@ -959,6 +983,58 @@ io.on("connection", (socket) => {
     }
   }
 
+  onSocketRequest(socket, "check-resume-sessions", (data, respond) => {
+    const tokens: unknown = data?.tokens;
+    if (!Array.isArray(tokens) || tokens.length > 20 ||
+        tokens.some(token => typeof token !== "string" || token.length > 200)) {
+      respond({ success: false, message: "Invalid saved sessions." });
+      return;
+    }
+    const sessions = [...new Set(tokens as string[])].flatMap(resumeToken => {
+      const saved = findSavedPlayer(resumeToken);
+      if (!saved) return [];
+      const { session, room, found } = saved;
+      return [{ resumeToken, roomCode: session.roomCode, playerName: found.member.name,
+        isConnected: found.member.isConnected, expiresAt: session.createdAt + resumeTokenMaxAgeMs,
+        isHost: room.hostId === session.playerId,
+        releaseClosesRoom: room.hostId === session.playerId && !hostSuccessor(room, session.playerId) }];
+    });
+    respond({ success: true, sessions });
+  });
+
+  onSocketRequest(socket, "release-saved-player", (data, respond) => {
+    if (socketRoomCodes.has(socket.id)) {
+      respond({ success: false, message: "Leave your current room first." }); return;
+    }
+    const saved = findSavedPlayer(String(data?.resumeToken ?? ""));
+    if (!saved) { respond({ success: false, message: "That saved player is no longer available." }); return; }
+    const { session, room, found } = saved;
+    if (found.member.isConnected) {
+      respond({ success: false, message: "That player is already connected." }); return;
+    }
+    const wasHost = room.hostId === session.playerId;
+    if (wasHost && !hostSuccessor(room, session.playerId)) {
+      closeRoom(session.roomCode, room, `Room ${session.roomCode} closed when its saved host left`);
+      respond({ success: true, roomClosed: true }); return;
+    }
+    if (found.role === "player" && room.gameSession && room.activeGamePlayerIds.has(session.playerId)) {
+      room.activeGamePlayerIds.delete(session.playerId);
+      const result = room.gameSession.memberRemoved?.(session.playerId, { voluntary: true }) ??
+        { success: false, message: "This game cannot release a player during play. Rejoin instead." };
+      if (!result.success) { room.activeGamePlayerIds.add(session.playerId); respond(result); return; }
+    }
+    removeMemberFromRoom(session.roomCode, room, session.playerId, found.role);
+    if (wasHost) {
+      const successor = hostSuccessor(room, session.playerId);
+      if (successor) transferRoomHost(session.roomCode, room, successor.id);
+      else {
+        closeRoom(session.roomCode, room, `Room ${session.roomCode} closed when its saved host left`);
+        respond({ success: true, roomClosed: true }); return;
+      }
+    }
+    respond({ success: true, roomClosed: false });
+  });
+
   onSocketRequest(socket, "resume-room", (data, respond) => {
     const token = String(data?.resumeToken ?? "");
     const session = playerResumeTokens.get(token);
@@ -970,6 +1046,7 @@ io.on("connection", (socket) => {
       }
       respond({
         success: false,
+        sessionUnavailable: true,
         message: revokedMessage ??
           "That saved room session is no longer available."
       });
@@ -980,6 +1057,7 @@ io.on("connection", (socket) => {
       playerResumeTokens.delete(token);
       respond({
         success: false,
+        sessionUnavailable: true,
         message: "That saved room session has expired."
       });
       return;
@@ -1008,6 +1086,7 @@ io.on("connection", (socket) => {
     if (!room || !roomMember) {
       respond({
         success: false,
+        sessionUnavailable: true,
         message: "That saved room session is no longer available."
       });
       return;
@@ -1015,6 +1094,9 @@ io.on("connection", (socket) => {
 
     const { member, role } = roomMember;
     const oldPlayerId = session.playerId;
+    if (data?.onlyDisconnected === true && member.isConnected && oldPlayerId !== socket.id) {
+      respond({ success: false, message: "That player is already connected." }); return;
+    }
     if (
       oldPlayerId === socket.id &&
       connectedRoomCode === session.roomCode &&
@@ -1134,7 +1216,6 @@ io.on("connection", (socket) => {
 
     room.players.set(socket.id, {
       id: socket.id,
-      scoreId: randomUUID(),
       name: playerName,
       avatar,
       isConnected: true
@@ -1259,12 +1340,18 @@ io.on("connection", (socket) => {
         respond({ success: false, message: "A join request is already pending, or the waiting list is full." });
         return;
       }
+      const pendingAtAddress = [...room.pendingJoinRequests.values()]
+        .filter((request) => request.address === joinLimitKey).length;
+      if (pendingAtAddress >= maxPendingJoinsPerAddress) {
+        respond({ success: false, message: "Too many pending join requests from this address. Wait for a response or cancel an existing request." });
+        return;
+      }
       const timer = setTimeout(() => {
         removeJoinRequest(socket.id);
         socket.emit("join-request-result", { success: false, message: "Your join request expired. Try again." });
       }, 60_000);
       room.pendingJoinRequests.set(socket.id, {
-        name: playerName, avatar, timer,
+        address: joinLimitKey, name: playerName, avatar, timer,
         accept: (respond) => joinRoom(data, (response) => {
           socket.emit("join-request-result", response);
           const result = response as { success: boolean; message?: string };
@@ -1278,7 +1365,6 @@ io.on("connection", (socket) => {
     }
     const roomMember = {
       id: socket.id,
-      scoreId: randomUUID(),
       name: playerName,
       avatar,
       isConnected: true
@@ -1312,7 +1398,7 @@ io.on("connection", (socket) => {
       resumeToken,
       role,
       activeGameId: room.activeGameId,
-      chatHistory: room.chatHistory,
+      chatHistory: isActiveGameViewer(room, socket.id) ? room.chatHistory : [],
       gameSettings: room.gameSettings,
       isPaused: room.gameSession?.getLifecycleState().isPaused ?? false,
       chatEnabled:
@@ -1437,7 +1523,6 @@ io.on("connection", (socket) => {
       return;
     }
 
-    room.selectedGameId = game.id;
     if (data?.settings !== undefined) {
       if (!data.settings || typeof data.settings !== "object" ||
           game.settings.some((setting) => !validateGameSetting(setting, data.settings[setting.key]))) {
@@ -1445,6 +1530,7 @@ io.on("connection", (socket) => {
       }
       for (const setting of game.settings) defaultSettings[setting.key] = data.settings[setting.key];
     }
+    room.selectedGameId = game.id;
     room.gameSettings = defaultSettings;
 
     io.to(roomCode).emit("game-selected", {
@@ -1743,7 +1829,7 @@ io.on("connection", (socket) => {
       return;
     }
 
-    if (room.gameSession === null) {
+    if (room.gameSession === null || !room.activeGamePlayerIds.has(socket.id)) {
       respond({
         success: false,
         message: "You are not in an active game."
@@ -1960,6 +2046,7 @@ io.on("connection", (socket) => {
       return;
     }
 
+    room.chatHistory = [];
     room.activeGameId = game.id;
     room.gameSession = createdSession;
 

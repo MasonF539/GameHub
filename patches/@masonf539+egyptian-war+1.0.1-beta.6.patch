@@ -9,6 +9,17 @@ diff --git a/node_modules/@masonf539/egyptian-war/dist/engine.js b/node_modules/
  exports.isEgyptianWarStateSlappable = isEgyptianWarStateSlappable;
  exports.startEgyptianWarSlapCooldown = startEgyptianWarSlapCooldown;
  exports.checkEgyptianWarSlapCooldown = checkEgyptianWarSlapCooldown;
+@@ -83,8 +84,8 @@
+     return shuffledCards;
+ }
+ function createEgyptianWarState(playerInputs, settings, randomInteger = node_crypto_1.randomInt) {
+-    if (playerInputs.length < 2 || playerInputs.length > 6) {
+-        throw new RangeError("Egyptian War requires between 2 and 6 players.");
++    if (playerInputs.length < 2 || playerInputs.length > 8) {
++        throw new RangeError("Egyptian War requires between 2 and 8 players.");
+     }
+     const playerIds = new Set(playerInputs.map((player) => player.id));
+     if (playerIds.size !== playerInputs.length) {
 @@ -375,21 +376,24 @@
      return Object.hasOwn(challengeAttempts, rank);
  }
@@ -80,6 +91,15 @@ diff --git a/node_modules/@masonf539/egyptian-war/dist/engine.js b/node_modules/
 diff --git a/node_modules/@masonf539/egyptian-war/dist/definition.js b/node_modules/@masonf539/egyptian-war/dist/definition.js
 --- a/node_modules/@masonf539/egyptian-war/dist/definition.js
 +++ b/node_modules/@masonf539/egyptian-war/dist/definition.js
+@@ -22,7 +22,7 @@
+     isPlayable: true,
+     chatEnabled: true,
+     minPlayers: 2,
+-    maxPlayers: 6,
++    maxPlayers: 8,
+     preview: {
+         videoPath: "/games/egyptian-war/assets/game-previews/preview.mp4",
+         posterPath: "/games/egyptian-war/assets/game-previews/poster.webp"
 @@ -42,6 +42,11 @@
          }
      ],
@@ -187,6 +207,24 @@ diff --git a/node_modules/@masonf539/egyptian-war/dist/session.js b/node_modules
              this.offlineTimers.set(memberId, setTimeout(() => {
                  this.offlineTimers.delete(memberId);
                  if (this.disposed || this.state.status !== "playing")
+@@ -237,8 +240,6 @@
+             return { success: false, message: "Only disconnected players can be kicked during a game." };
+         }
+         const currentBefore = this.state.players[this.state.currentPlayerIndex]?.id ?? null;
+-        if (this.turnTimer !== null)
+-            this.suspendTurnTimer();
+         try {
+             (0, engine_js_1.removeEgyptianWarPlayer)(this.state, memberId, options?.voluntary ? "left" : "removed");
+         }
+@@ -250,6 +251,8 @@
+                     : "Unable to remove that player from the game."
+             };
+         }
++        if (this.turnTimer !== null)
++            this.suspendTurnTimer();
+         if (this.reconnectGracePlayerId === memberId)
+             this.reconnectGracePlayerId = null;
+         this.clearOfflineMember(memberId);
 @@ -286,11 +289,18 @@
              this.clearOfflineMember(memberId);
          this.autoPlayingMembers.clear();
@@ -230,7 +268,31 @@ diff --git a/node_modules/@masonf539/egyptian-war/dist/session.js b/node_modules
 diff --git a/node_modules/@masonf539/egyptian-war/public/client.js b/node_modules/@masonf539/egyptian-war/public/client.js
 --- a/node_modules/@masonf539/egyptian-war/public/client.js
 +++ b/node_modules/@masonf539/egyptian-war/public/client.js
-@@ -204,6 +204,7 @@
+@@ -77,8 +77,9 @@
+ function restoreLayoutPreferences() {
+   const saved = readLayoutPreferences();
+   const narrow = globalScope.matchMedia?.("(max-width: 575.98px)").matches === true;
++  const shortLandscape = globalScope.matchMedia?.("(max-height: 500px) and (orientation: landscape)").matches === true;
+   egyptianWarSidePanelReopenMode = saved.reopenMode === "large" ? "large" : "medium";
+-  setSlapRulesExpanded(typeof saved.rulesExpanded === "boolean" ? saved.rulesExpanded : !narrow);
++  setSlapRulesExpanded(typeof saved.rulesExpanded === "boolean" ? saved.rulesExpanded : !(narrow || shortLandscape));
+   const mode = ["closed", "medium", "large"].includes(saved.panelMode)
+     ? saved.panelMode : narrow ? "closed" : "medium";
+   setEgyptianWarSidePanelMode(mode);
+@@ -112,8 +113,10 @@
+   button.textContent = "Kick";
+   button.setAttribute("aria-label", `Kick ${member.name}`);
+   button.addEventListener("click", async () => {
+-    const response = await currentContext.removeMember(member.id);
+-    if (response.message) currentContext.notify(response.message);
++    const context = currentContext;
++    if (!context) return;
++    const response = await context.removeMember(member.id);
++    if (currentContext === context && response.message) context.notify(response.message);
+   });
+   return button;
+ }
+@@ -204,6 +207,7 @@
  }
 
  function renderEgyptianWarTurnTimer() {
@@ -238,7 +300,51 @@ diff --git a/node_modules/@masonf539/egyptian-war/public/client.js b/node_module
    if (egyptianWarTurnTimer.classList.contains("is-hidden")) {
      return;
    }
-@@ -318,22 +319,19 @@
+@@ -263,6 +267,30 @@
+
+ let tableLayoutObserver = null;
+
++// End seats stay centered; remaining players use evenly spaced flat-side slots.
++// List seats clockwise so their visible order continues to match turn order.
++function egyptianWarRectangleSeats(count) {
++  const rightCount = Math.ceil((count - 2) / 2);
++  const leftCount = Math.floor((count - 2) / 2);
++  const seats = [{ x: 50, y: 10 }];
++  for (let slot = 1; slot <= rightCount; slot++) {
++    seats.push({ x: 82, y: 10 + 78 * slot / (rightCount + 1) });
++  }
++  seats.push({ x: 50, y: 88 });
++  for (let slot = leftCount; slot >= 1; slot--) {
++    seats.push({ x: 18, y: 10 + 78 * slot / (leftCount + 1) });
++  }
++  return seats;
++}
++
++// Reveal new activity without interrupting a reader on unchanged timer snapshots.
++function setEgyptianWarTableText(element, text) {
++  const next = text ?? "";
++  if (element.textContent === next) return;
++  element.textContent = next;
++  findEgyptianWarElement(".egyptian-war-table-updates").scrollTop = 0;
++}
++
+ function fitEgyptianWarTableContent() {
+   const arena = egyptianWarArena;
+   const info = findEgyptianWarElement(".egyptian-war-table-info");
+@@ -277,7 +305,11 @@
+     } : box;
+   });
+   const centerX = bounds.left + bounds.width / 2;
+-  let halfWidth = Math.min(bounds.width * 0.22, 200);
++  // A narrow center column clears the diagonal seats on shallow oval tables.
++  const shallowOval = bounds.height <= 220 && bounds.width >= bounds.height;
++  let halfWidth = shallowOval
++    ? Math.min(bounds.width * 0.12, 120)
++    : Math.min(bounds.width * 0.22, 200);
+   for (const box of seats) {
+     const offset = (box.left + box.right) / 2 - centerX;
+     if (Math.abs(offset) < bounds.width * 0.24) continue;
+@@ -318,22 +350,19 @@
  }
 
  function showEgyptianWarSidePanel(panel) {
@@ -274,7 +380,7 @@ diff --git a/node_modules/@masonf539/egyptian-war/public/client.js b/node_module
  }
 
  function configureEgyptianWarSidePanel(chatEnabled) {
-@@ -383,8 +381,8 @@
+@@ -383,8 +412,8 @@
    egyptianWarChatBadge.hidden = count === 0;
    egyptianWarChatBadge.textContent = count > 9 ? "9+" : String(count);
    const label = count === 0
@@ -285,7 +391,7 @@ diff --git a/node_modules/@masonf539/egyptian-war/public/client.js b/node_module
    openGameSidePanelButton.setAttribute("aria-label", label);
    openGameSidePanelButton.title = label;
  }
-@@ -396,9 +394,7 @@
+@@ -396,9 +425,7 @@
 
  function reopenEgyptianWarSidePanel() {
    setEgyptianWarSidePanelMode(egyptianWarSidePanelReopenMode);
@@ -296,7 +402,16 @@ diff --git a/node_modules/@masonf539/egyptian-war/public/client.js b/node_module
    selectedTab.focus();
  }
 
-@@ -890,6 +886,10 @@
+@@ -800,7 +827,7 @@
+       !animation.isFinalWin &&
+       typeof animation.activityMessage === "string"
+     ) {
+-      egyptianWarMessage.textContent = animation.activityMessage;
++      setEgyptianWarTableText(egyptianWarMessage, animation.activityMessage);
+     }
+
+     if (animation.action === "slap") {
+@@ -890,6 +917,10 @@
  }
 
  function renderEgyptianWarState(state) {
@@ -307,7 +422,80 @@ diff --git a/node_modules/@masonf539/egyptian-war/public/client.js b/node_module
    const previousState = previousEgyptianWarState;
    const animation = activeEgyptianWarAnimation;
    const currentPlayer = state.players.find(
-@@ -1164,7 +1164,9 @@
+@@ -936,13 +967,13 @@
+       (player) => player.id === state.challenge.responderId
+     );
+
+-    egyptianWarChallenge.textContent =
++    setEgyptianWarTableText(egyptianWarChallenge,
+       `${challenger?.name ?? "A player"} challenged ` +
+       `${responder?.name ?? "the next player"}: ` +
+       `${state.challenge.attemptsRemaining} ` +
+-      `${state.challenge.attemptsRemaining === 1 ? "attempt" : "attempts"} remaining.`;
++      `${state.challenge.attemptsRemaining === 1 ? "attempt" : "attempts"} remaining.`);
+   } else {
+-    egyptianWarChallenge.textContent = "";
++    setEgyptianWarTableText(egyptianWarChallenge, "");
+   }
+
+   const displayedPileCardCount = isShowingCollectedPile
+@@ -1010,6 +1041,8 @@
+   }
+
+   const playerCount = state.players.length;
++  egyptianWarArena.dataset.playerCount = String(playerCount);
++  const rectangleSeats = egyptianWarRectangleSeats(playerCount);
+
+   state.players.forEach((player, index) => {
+     const angle = -Math.PI / 2 + (2 * Math.PI * index) / playerCount;
+@@ -1028,13 +1061,13 @@
+     const directionX = Math.cos(angle);
+     const directionY = Math.sin(angle);
+     seat.dataset.tableHalf = directionY > 0 ? "bottom" : "top";
+-    // Project the same clockwise player order onto straight rectangular rails.
+-    // Both positions are available to CSS, so resizing needs no state update.
+-    const rectangleScale = Math.max(Math.abs(directionX), Math.abs(directionY));
++    // Keep equal-angle oval seating and separate flat-edge rectangle slots.
++    // Both positions remain available to CSS during live shape changes.
++    const rectangleSeat = rectangleSeats[index];
+     seat.style.setProperty("--oval-seat-x", `${50 + directionX * 40}%`);
+     seat.style.setProperty("--oval-seat-y", `${50 + directionY * 37}%`);
+-    seat.style.setProperty("--rectangle-seat-x", `${50 + directionX / rectangleScale * 32}%`);
+-    seat.style.setProperty("--rectangle-seat-y", `${49 + directionY / rectangleScale * 41}%`);
++    seat.style.setProperty("--rectangle-seat-x", `${rectangleSeat.x}%`);
++    seat.style.setProperty("--rectangle-seat-y", `${rectangleSeat.y}%`);
+
+     if (isNewSeat) {
+       seat.innerHTML = '<span class="player-avatar"></span><div class="egyptian-war-seat-details"><span class="player-name"></span><span class="egyptian-war-card-count"></span></div>';
+@@ -1046,11 +1079,12 @@
+     };
+     setText(".player-avatar", player.avatar);
+     setText(".player-name", player.name);
++    seat.querySelector(".player-name").title = player.name;
+     setText(".egyptian-war-card-count", `${player.cardCount} ${player.cardCount === 1 ? "card" : "cards"}`);
+     let eliminated = seat.querySelector(".egyptian-war-seat-details .badge");
+     if (player.isEliminated && !eliminated) {
+       eliminated = document.createElement("span");
+-      eliminated.className = "badge text-bg-secondary";
++      eliminated.className = "badge text-bg-secondary egyptian-war-out-badge";
+       eliminated.textContent = "Out";
+       seat.querySelector(".egyptian-war-seat-details").appendChild(eliminated);
+     } else if (!player.isEliminated) eliminated?.remove();
+@@ -1122,11 +1156,11 @@
+   });
+
+   egyptianWarTopCard.hidden = visibleEgyptianWarCards.length > 0;
+-  egyptianWarMessage.textContent = state.status === "finished"
++  setEgyptianWarTableText(egyptianWarMessage, state.status === "finished"
+     ? ""
+     : isWaitingForSlapWinnerReveal
+       ? previousState?.activityMessage ?? ""
+-      : state.activityMessage;
++      : state.activityMessage);
+   egyptianWarPlayCardButton.disabled =
+     (currentContext.role === "spectator") ||
+     state.status !== "playing" ||
+@@ -1164,7 +1198,9 @@
  }
 
  
@@ -317,10 +505,64 @@ diff --git a/node_modules/@masonf539/egyptian-war/public/client.js b/node_module
    egyptianWarSpectatorList.replaceChildren();
    for (const spectator of spectators) {
      const item = document.createElement("li");
-@@ -1272,6 +1274,52 @@
-   root.dataset.tableColor = currentContext.display?.get("tableColor") ?? "green";
+@@ -1217,34 +1253,40 @@
+   saveLayoutPreferences();
+ });
+ async function playEgyptianWarCard() {
+-  if (egyptianWarPlayCardButton.disabled) return;
+-  const response = await currentContext?.submitAction({ type: "play-card" });
+-  if (response && !response.success) currentContext.notify(response.message);
++  const context = currentContext;
++  if (!context || egyptianWarPlayCardButton.disabled) return;
++  const response = await context.submitAction({ type: "play-card" });
++  if (currentContext === context && response && !response.success) context.notify(response.message);
  }
 
+ async function slapEgyptianWarPile() {
+-  if (egyptianWarSlapButton.disabled) return;
+-  const response = await currentContext?.submitAction({
++  const context = currentContext;
++  if (!context || egyptianWarSlapButton.disabled) return;
++  const response = await context.submitAction({
+     type: "slap",
+     payload: { pileVersion: previousEgyptianWarState?.pileVersion }
+   });
+-  if (response && !response.success) currentContext.notify(response.message);
++  if (currentContext === context && response && !response.success) context.notify(response.message);
+ }
+
+ egyptianWarPlayCardButton.addEventListener("click", playEgyptianWarCard);
+ egyptianWarSlapButton.addEventListener("click", slapEgyptianWarPile);
+ egyptianWarPauseButton.addEventListener("click", async () => {
+-  if (!currentContext?.isHost) return;
++  const context = currentContext;
++  if (!context?.isHost) return;
+   const isPaused = egyptianWarPauseButton.getAttribute("aria-pressed") !== "true";
+-  const response = await currentContext.requestPause(isPaused);
+-  if (!response.success) currentContext.notify(response.message);
++  const response = await context.requestPause(isPaused);
++  if (currentContext === context && !response.success) context.notify(response.message);
+ });
+ egyptianWarChatForm.addEventListener("submit", async (event) => {
+   event.preventDefault();
++  const context = currentContext;
++  if (!context) return;
+   const message = egyptianWarChatInput.value.trim();
+-  const response = await currentContext.sendChat(message);
+-  if (!response.success) currentContext.notify(response.message);
+-  else egyptianWarChatInput.value = "";
++  const response = await context.sendChat(message);
++  if (currentContext !== context) return;
++  if (!response.success) context.notify(response.message);
++  else if (egyptianWarChatInput.value.trim() === message) egyptianWarChatInput.value = "";
+ });
+ showGameChatButton.addEventListener("click", () => showEgyptianWarSidePanel("chat"));
+ showGameSpectatorsButton.addEventListener("click", () => showEgyptianWarSidePanel("spectators"));
+@@ -1271,6 +1313,53 @@
+   root.dataset.cardStyle = currentContext.display?.get("cardStyle") ?? "classic";
+   root.dataset.tableColor = currentContext.display?.get("tableColor") ?? "green";
+ }
++
 +let offlinePlayers = [];
 +let offlinePaused = false;
 +let offlineClockOffset = 0;
@@ -362,15 +604,15 @@ diff --git a/node_modules/@masonf539/egyptian-war/public/client.js b/node_module
 +});
 +findEgyptianWarElement("#show-game-scoreboard").addEventListener("click", () => showEgyptianWarSidePanel("scoreboard"));
 +findEgyptianWarElement("#egyptian-war-reset-scores").addEventListener("click", async () => {
-+  if (!currentContext?.isHost) return;
-+  const result = await currentContext.resetScoreboard?.();
-+  if (result && !result.success) currentContext.notify(result.message);
++  const context = currentContext;
++  if (!context?.isHost) return;
++  const result = await context.resetScoreboard?.();
++  if (currentContext === context && result && !result.success) context.notify(result.message);
 +});
-+
+
  const egyptianWarClientModule = {
    mount(context) {
-     currentContext = context;
-@@ -1289,6 +1337,8 @@
+@@ -1289,6 +1378,8 @@
      ].filter(Boolean);
      updateEgyptianWarKeyHints();
      applyEgyptianWarDisplay();
@@ -379,7 +621,7 @@ diff --git a/node_modules/@masonf539/egyptian-war/public/client.js b/node_module
      showEgyptianWarGame(context.launchData);
      timerInterval = setInterval(renderEgyptianWarTurnTimer, 100);
      return {
-@@ -1303,6 +1353,22 @@
+@@ -1303,6 +1394,22 @@
          }
        },
        receivePlatformEvent(event) {
@@ -405,7 +647,87 @@ diff --git a/node_modules/@masonf539/egyptian-war/public/client.js b/node_module
 diff --git a/node_modules/@masonf539/egyptian-war/public/style.css b/node_modules/@masonf539/egyptian-war/public/style.css
 --- a/node_modules/@masonf539/egyptian-war/public/style.css
 +++ b/node_modules/@masonf539/egyptian-war/public/style.css
-@@ -1343,7 +1343,7 @@
+@@ -366,7 +366,7 @@
+   pointer-events: none;
+ }
+
+-/* The measured end and side seats bound this central area. */
++/* The measured seats bound a stable label, card, and message grid. */
+ .egyptian-war-table-info {
+   position: absolute;
+   z-index: 1;
+@@ -374,9 +374,9 @@
+   top: 22%;
+   bottom: 22%;
+   transform: translateX(-50%);
+-  display: flex;
+-  flex-direction: column;
+-  justify-content: center;
++  display: grid;
++  grid-template-rows: auto minmax(0, 4fr) minmax(0, 1fr);
++  gap: clamp(0.1rem, 1cqh, 0.35rem);
+   width: min(44%, 25rem);
+   padding: 0;
+   container-type: size;
+@@ -391,12 +391,10 @@
+
+ .egyptian-war-table-info > p,
+ .egyptian-war-table-updates > p {
+-  flex-shrink: 0;
+   font-size: clamp(0.625rem, min(6cqh, 8cqw), 0.95rem);
+   line-height: 1.3;
+ }
+ .egyptian-war-table-updates {
+-  flex: 0 1 auto;
+   min-height: 0;
+   overflow: auto;
+   overflow-wrap: anywhere;
+@@ -408,15 +406,25 @@
+ }
+ .egyptian-war-challenge:empty { display: none; }
+ .egyptian-war-table-info .egyptian-war-message { min-height: 0; }
++.egyptian-war-table-info .egyptian-war-pile-label {
++  align-self: center;
++  min-height: 0;
++  margin: 0 !important;
++  overflow: hidden;
++  white-space: nowrap;
++  text-overflow: ellipsis;
++  font-size: clamp(0.5rem, min(6cqh, 6cqw), 0.95rem);
++}
+
+ .egyptian-war-pile-stack {
+   position: relative;
+   width: 100%;
+-  flex: 1 0 min(5.5rem, 55cqh);
+-  min-height: min(5.5rem, 55cqh);
++  min-height: 0;
++  height: 100%;
+   max-height: 13rem;
++  align-self: center;
+   container-type: size;
+-  margin: 0 auto 0.35rem;
++  margin: 0 auto;
+ }
+
+ .egyptian-war-empty-pile {
+@@ -726,6 +734,15 @@
+   filter: grayscale(0.75);
+ }
+
++/* Overlay the avatar so elimination never changes the seat or pile geometry. */
++.egyptian-war-out-badge {
++  position: absolute;
++  left: 0.3rem;
++  bottom: 0.15rem;
++  font-size: 0.55rem;
++  pointer-events: none;
++}
++
+ .egyptian-war-seat.is-disconnected {
+   color: #d2d2d2;
+   background: rgba(91, 94, 99, 0.96);
+@@ -1343,7 +1360,7 @@
 
  .egyptian-war-side-tabs {
    display: grid;
@@ -414,7 +736,7 @@ diff --git a/node_modules/@masonf539/egyptian-war/public/style.css b/node_module
    gap: 0.35rem;
    padding: 0.28rem;
    background: rgba(0, 0, 0, 0.32);
-@@ -1493,7 +1493,7 @@
+@@ -1493,7 +1510,7 @@
 
  @media (max-width: 479.98px) {
    .egyptian-war-side-panel {
@@ -423,7 +745,7 @@ diff --git a/node_modules/@masonf539/egyptian-war/public/style.css b/node_module
    }
 
    .egyptian-war-side-panel-heading {
-@@ -1650,7 +1650,21 @@
+@@ -1650,7 +1667,21 @@
  }
  [data-card-style="midnight"] .playing-card.is-joker .playing-card-corner { color: #ffe5a3; }
  [data-card-style="midnight"] .playing-card-joker-ornament { color: #f5cf76; }
@@ -446,7 +768,7 @@ diff --git a/node_modules/@masonf539/egyptian-war/public/style.css b/node_module
  .egyptian-war-key-hint[hidden], .egyptian-war-action-subtitle[hidden] { display: none; }
  #egyptian-war-play-card .egyptian-war-action-label { white-space: normal; line-height: 1.1; }
 
-@@ -1679,3 +1693,65 @@
+@@ -1679,3 +1710,164 @@
      font-size: 0.55rem;
    }
  }
@@ -511,6 +833,105 @@ diff --git a/node_modules/@masonf539/egyptian-war/public/style.css b/node_module
 +@container egyptian-war-panel (max-width: 340px) {
 +  .egyptian-war-side-tabs { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.15rem; }
 +  .egyptian-war-side-tabs .btn { font-size: 0.55rem; padding-inline: 0.05rem; }
++}
++
++/* On portrait phones, overlay the board rather than the turn and action row. */
++@media (max-width: 600px) and (orientation: portrait) {
++  .egyptian-war-play-layout {
++    display: grid;
++    grid-template-columns: minmax(0, 1fr);
++    grid-template-rows: minmax(0, 1fr) auto;
++    gap: 0.5rem;
++  }
++
++  .egyptian-war-board-column { display: contents; }
++  .egyptian-war-arena { grid-area: 1 / 1; }
++  .egyptian-war-action-area {
++    grid-area: 2 / 1;
++    justify-self: end;
++    /* The panel is above this row, so reserve only the collapsed bubble space. */
++    width: min(44rem, calc(100% - 5rem));
++  }
++
++  .egyptian-war-side-panel {
++    position: relative;
++    grid-area: 1 / 1;
++    align-self: end;
++    left: auto;
++    width: calc(100% - 3.25rem);
++    max-width: none;
++    max-height: 100%;
++    margin-left: 0.5rem;
++  }
++
++  .egyptian-war-side-panel.is-expanded { height: 100%; }
++  .egyptian-war-side-tabs .btn { font-size: 0.68rem; padding-inline: 0.1rem; }
++}
++
++/* Keep long names on one line so extra seats do not grow into each other. */
++.egyptian-war-seat .player-name {
++  overflow: hidden;
++  text-overflow: ellipsis;
++  white-space: nowrap;
++}
++
++/* Seven/eight seats keep their oval angles, using smaller cards when crowded. */
++@container egyptian-war-board (aspect-ratio >= 1) {
++  .egyptian-war-arena:is([data-player-count="7"], [data-player-count="8"]) .egyptian-war-seat {
++    width: clamp(5.5rem, 16cqw, 10.5rem);
++    gap: 0.3rem;
++    padding: 0.2rem 0.35rem;
++  }
++
++  .egyptian-war-arena:is([data-player-count="7"], [data-player-count="8"]) .egyptian-war-seat .player-avatar {
++    width: clamp(1.4rem, min(4cqw, 10cqh), 2.5rem);
++    height: clamp(1.4rem, min(4cqw, 10cqh), 2.5rem);
++    flex-basis: clamp(1.4rem, min(4cqw, 10cqh), 2.5rem);
++    font-size: clamp(1rem, min(3cqw, 8cqh), 1.75rem);
++  }
++}
++
++
++/* Use the center's width for activity instead of stacking everything in its height. */
++@container egyptian-war-board (max-height: 220px) and (aspect-ratio >= 1) {
++  .egyptian-war-table-info {
++    grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr);
++    grid-template-rows: auto minmax(0, 1fr);
++    column-gap: 0.4rem;
++  }
++  .egyptian-war-pile-stack { grid-area: 1 / 1 / 3 / 2; }
++  .egyptian-war-table-info .egyptian-war-pile-label {
++    grid-area: 1 / 2;
++    white-space: normal;
++    font-size: 0.625rem;
++  }
++  .egyptian-war-table-updates { grid-area: 2 / 2; }
++  .egyptian-war-table-updates > p { font-size: 0.625rem; line-height: 1.2; }
++}
++
++
++@media (max-height: 500px) and (orientation: landscape) {
++  .egyptian-war-game-panel > .card-title {
++    /* Recover board height gradually while keeping the heading in the top row. */
++    margin-top: clamp(0.5rem, calc(32vh - 7.3rem), 2.75rem);
++  }
++  .egyptian-war-offline-status {
++    position: absolute;
++    top: 0;
++    left: 0;
++    width: 45%;
++    margin: 0;
++    text-align: left;
++  }
++  .egyptian-war-turn-inline { padding-left: 47%; }
++}
++
++
++/* Reserve the tool extension as well as the panel beside the action buttons. */
++@media (min-width: 600.01px), (orientation: landscape) {
++  .egyptian-war-side-panel {
++    max-width: max(0px, calc(100% - clamp(16rem, 52%, 44rem) - 4rem));
++  }
 +}
 diff --git a/node_modules/@masonf539/egyptian-war/public/template.html b/node_modules/@masonf539/egyptian-war/public/template.html
 --- a/node_modules/@masonf539/egyptian-war/public/template.html
