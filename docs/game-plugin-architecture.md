@@ -54,27 +54,73 @@ rules. Keyboard hints use `context.input.getBinding`, `hasKeyboard`, and
 capabilities and observed keyboard input because browsers do not expose a
 reliable list of connected keyboards.
 
-Egyptian War defaults to a 60-second offline waiting period, then auto-plays
-offline turns while preserving each player's hand for reconnection. Hosts can
-adjust the waiting period or disable takeover in the lobby's game settings.
-An explicit host pause remains paused when the wait ends. After the host
-disconnects, a two-minute recovery window precedes automatic transfer to a connected
-active player (or a connected lobby player when no game is running). With no
-eligible successor, the abandoned room closes. Hosts can transfer control manually
-in Settings > Game. Ownership changes notify mounted clients without resetting the game. Animation timing is shared;
-there is no personal animation-speed setting. System reduced-motion preferences
-remain supported.
+## Chat, score resets, and shared controls
 
-Private per-player events, spectator-isolated chat, a shared SDK turn timer,
-are not implemented by these changes.
+Chat is optional per game through its definition. GameHub validates membership,
+message length (1-300 characters), and send rate, and retains the last 50 room
+messages for admitted viewers on join or reconnect. The current room chat is
+shared by players and spectators; separate channels are not implemented.
+
+The platform's scoreboard reset service checks host permission and opens an
+in-app confirmation for the active game. Cancelling preserves totals. Room or
+game closure, disconnection, and loss of host ownership cancel an open reset;
+late replies must not dismiss a newer confirmation or access an unmounted game.
+The modal also closes safely if cancellation occurs during its opening animation.
+
+GameHub owns confirmed room closure, game exit, and player/spectator leave flows.
+It hides room codes by default and provides reveal, copy-code, and copy-link
+controls. Lobby waiters may enter an active game as spectators; spectators can
+return to the lobby through the spectator-leave confirmation. These procedures
+are shared across games. Game definitions declare
+playability; the platform keeps rules/settings available and prevents starting
+an unplayable game.
+
+Fullscreen is an explicit Game settings action. The platform does not request
+fullscreen automatically on page load or room entry. Browser support and user
+interaction determine whether the request succeeds.
+
+The personal Audio settings persist independent music, lobby-alert, and gameplay
+volume levels; 0% disables a category. Game packages register their own music and
+effects, and audio waits for browser-approved user interaction before starting.
+
+## Host ownership and recovery
+
+GameHub owns room host identity and transfer. When a host remains disconnected
+for 60 seconds, control transfers to a connected active player, or a connected
+lobby player when no game is running. If no eligible successor exists, the room
+closes. A returning former host does not automatically reclaim ownership.
+Disconnected non-host lobby players and spectators normally expire after two
+minutes; active-game players remain subject to the game's disconnect policy and
+host-management flow.
+
+Manual transfer is available beside Kick in the lobby and in Settings > Game,
+including during active play. Mounted clients receive ownership changes without
+restarting the match; games should refresh their host controls using the current
+`context.isHost` value. The host-transfer deadline is independent of any game's
+configurable offline-autoplay wait. The separate two-minute Socket.IO recovery
+window does not determine when host transfer occurs.
+
+Games own their offline-player policies, turn timers, and manual-pause behavior.
+Egyptian War's game-specific policy is documented in its own design document.
+Personal display preferences do not change shared animation or gameplay timing.
+
+## Current platform limits
+
+Private per-player events, spectator-isolated chat, and a shared SDK turn-timer
+implementation are not currently provided.
 
 ## Presets and room scores
 
 Hosts can save up to 20 named rule presets per game in their browser. The host's
 last confirmed configuration is restored on game selection. Saved values are
-validated against the current game schema; missing or incompatible values fall
-back to defaults. Loading a preset edits the draft; Save Settings applies it.
-Presets never go into server storage and remain specific to the browser origin.
+validated against the current game schema, including numeric bounds and slider
+increments; missing or incompatible values fall back to defaults. Selecting a
+preset loads the settings draft; Save Settings applies it to the room.
+
+Preset controls are available to the current host when no game is active. They
+refresh after a host change and when a match ends, including when ownership
+changed during play. Presets require no accounts or server storage and remain
+specific to the browser and site origin.
 
 Games may optionally declare scoreboard columns and report authoritative counters
 through `context.recordStat(memberId, key)`. The platform awards declared `wins`
@@ -89,11 +135,9 @@ platform events. `context.isHost` reflects current ownership; games should updat
 their visible host controls on ownership changes. Optional lifecycle disconnection
 metadata includes server deadlines so clients render countdowns locally. Egyptian
 War exposes its game-specific scoreboard only beside Chat and Spectators.
-Manual host transfer is available beside Kick in the lobby and in GameHub
-settings during a game. A disconnected host
-hands control to a connected player after 60 seconds; a returning former host
-does not automatically reclaim control. Slap rule explanations appear only after resolution;
-no live slap-validity hints or client-reported scores are accepted.
+Slap rule explanations appear only after resolution; no live slap-validity hints
+or client-reported scores are accepted. Host procedures are described under
+[Host ownership and recovery](#host-ownership-and-recovery).
 
 ## Versioned contracts
 
