@@ -223,3 +223,20 @@ test("mounted games observe host handoff without being remounted", () => {
   assert.equal(context.isHost, false); isHost = true;
   assert.equal(context.isHost, true); host.unmount();
 });
+
+
+test("a host discovers and mounts modules registered after its construction", () => {
+  const host = new GameClientHost({ root: {}, createContext: () => ({}) });
+  let mounted = false;
+  assert.equal(host.has("late-module"), false);
+  global.GameHubRegisterGameClientModule("late-module", {
+    mount() {
+      mounted = true;
+      return { receiveState() {}, receiveEvent() {}, destroy() {} };
+    }
+  });
+  assert.equal(host.has("late-module"), true);
+  host.mount("late-module");
+  assert.equal(mounted, true);
+  host.unmount();
+});

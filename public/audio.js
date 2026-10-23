@@ -29,6 +29,7 @@
   let currentScene = null;
   let isUnlocked = false;
   let settings = loadSettings();
+  const unsavedCategories = new Set();
 
   music.loop = true;
   music.preload = "auto";
@@ -75,7 +76,7 @@
     return normalized;
   }
 
-  function loadSettings() {
+  function loadSettings(fallback = defaultSettings) {
     try {
       const saved = localStorage.getItem(settingsStorageKey);
 
@@ -94,12 +95,16 @@
       // Defaults keep audio usable if storage is unavailable or malformed.
     }
 
-    return normalizeSettings(defaultSettings);
+    return normalizeSettings(fallback);
   }
 
-  function saveSettings() {
+  function saveSettings(changedCategories = categories) {
+    for (const category of changedCategories) unsavedCategories.add(category);
     try {
-      localStorage.setItem(settingsStorageKey, JSON.stringify(settings));
+      const latest = loadSettings(settings);
+      for (const category of unsavedCategories) latest[category] = settings[category];
+      localStorage.setItem(settingsStorageKey, JSON.stringify(latest));
+      unsavedCategories.clear();
       localStorage.removeItem(legacyMutedStorageKey);
     } catch {
       // Settings still apply for the current page when storage is unavailable.
@@ -174,7 +179,7 @@
     settings[category] = enabled
       ? settings[category] || defaultSettings[category]
       : 0;
-    saveSettings();
+    saveSettings([category]);
     syncControls(category);
 
     if (category === "music") {
@@ -188,7 +193,7 @@
     }
 
     settings[category] = clampVolume(volume, settings[category]);
-    saveSettings();
+    saveSettings([category]);
     syncControls(category);
 
     if (category === "music") {

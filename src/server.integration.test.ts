@@ -274,6 +274,8 @@ test(
         pageHtml,
         /<script type="module" src="\/games\/fixture-game\/client\.js"><\/script>/
       );
+      assert.match(pageHtml, /<script defer src="\/client\.js"><\/script>/);
+      assert.ok(pageHtml.indexOf('/games/fixture-game/client.js') < pageHtml.indexOf('defer src="/client.js"'));
       assert.match(pageHtml, /"avatars":\[/);
       assert.doesNotMatch(pageHtml, /egyptian-war/i);
 
@@ -521,13 +523,16 @@ test("names must be unique in a room and cannot hide characters", { timeout: 20_
     const roomCode = created.roomCode;
     assert.ok(roomCode);
 
-    for (const name of ["host", "HOST", "Gu\u200Best", "Gu\u202Eest"]) {
+    for (const name of ["host", "HOST", "Gu\u200Best", "Gu\u202Eest", "\u200D", "\uFE0F", "\u00AD", "\u3164", "\u2800"]) {
       const result = await emitAck(guest, "join-room", { roomCode, playerName: name, avatar: dogAvatar });
       assert.equal(result.success, false, `name ${JSON.stringify(name)} should be rejected`);
     }
 
-    const joined = await emitAck(guest, "join-room", { roomCode, playerName: "Guest", avatar: dogAvatar });
-    assert.equal(joined.success, true);
+    for (const name of ["Guest", "\u{1F468}\u200D\u{1F469}\u200D\u{1F467}", "\u0645\u06CC\u200C\u0645"]) {
+      const joined = await emitAck(guest, "join-room", { roomCode, playerName: name, avatar: dogAvatar });
+      assert.equal(joined.success, true, `visible name ${JSON.stringify(name)} should be allowed`);
+      assert.equal((await emitAck(guest, "leave-lobby", {})).success, true);
+    }
   } finally {
     host.close();
     guest.close();
@@ -619,9 +624,15 @@ test("a guest can leave an active game and the host keeps playing", { timeout: 2
     assert.ok(roomCode);
     assert.equal((await emitAck(guest, "join-room", { roomCode, playerName: "Guest", avatar: dogAvatar })).success, true);
     assert.equal((await emitAck(host, "select-game", { roomCode, gameId: fixtureGameId })).success, true);
+    let players: Array<{ id: string; isPlaying: boolean }> = [];
+    host.on("player-list", (updated) => { players = updated; });
     assert.equal((await emitAck(host, "start-game", { roomCode })).success, true);
+    assert.equal(players.find(player => player.id === guest.id)?.isPlaying, true);
 
     assert.equal((await emitAck(guest, "leave-game", { roomCode })).success, true);
+    // A host-side acknowledgement flushes earlier room updates on this socket.
+    await emitAck(host, "toggle-game-pause", { roomCode, isPaused: false });
+    assert.equal(players.find(player => player.id === guest.id)?.isPlaying, false);
     assert.equal((await emitAck(guest, "leave-game", { roomCode })).success, false);
     assert.equal((await emitGameAction(guest, roomCode, "advance")).success, false);
     assert.equal((await emitAck(guest, "game-chat-send", {

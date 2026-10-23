@@ -136,3 +136,63 @@ test("switches music scenes and independently adjusts persisted audio categories
 
   dom.window.close();
 });
+
+
+test("changing one audio category preserves volumes saved by another tab", () => {
+  const dom = new JSDOM('<input id="audio-game-volume" type="range">', {
+    url: "http://localhost", runScripts: "outside-only"
+  });
+  dom.window.Audio = class {
+    play() { return Promise.resolve(); }
+    pause() {}
+  };
+  try {
+    dom.window.eval(fs.readFileSync(path.join(__dirname, "..", "public", "audio.js"), "utf8"));
+    dom.window.localStorage.setItem("gamehub:audio-settings", JSON.stringify({ music: 0.3, join: 0, game: 0.8 }));
+    dom.window.GameHubAudio.setCategoryVolume("game", 0.4);
+    assert.deepEqual(JSON.parse(dom.window.localStorage.getItem("gamehub:audio-settings")), {
+      music: 0.3, join: 0, game: 0.4
+    });
+  } finally { dom.window.close(); }
+});
+
+
+for (const blockedReads of [false, true]) {
+  test(`temporary audio choices recover without replacing other volumes (reads ${blockedReads ? "blocked" : "allowed"})`, () => {
+    const dom = new JSDOM("", { url: "http://localhost", runScripts: "outside-only" });
+    dom.window.Audio = class {
+      play() { return Promise.resolve(); }
+      pause() {}
+    };
+    try {
+      dom.window.eval(fs.readFileSync(path.join(__dirname, "..", "public", "audio.js"), "utf8"));
+      const storage = dom.window.localStorage;
+      const prototype = dom.window.Storage.prototype;
+      const originalGet = prototype.getItem;
+      const originalSet = prototype.setItem;
+      const audio = dom.window.GameHubAudio;
+      try {
+        prototype.setItem = function(key, value) {
+          if (key === "gamehub:audio-settings") throw new Error("Storage unavailable");
+          return originalSet.call(this, key, value);
+        };
+        if (blockedReads) prototype.getItem = function(key) {
+          if (key === "gamehub:audio-settings") throw new Error("Storage unavailable");
+          return originalGet.call(this, key);
+        };
+        audio.setCategoryVolume("music", 0.2);
+        audio.setCategoryEnabled("join", false);
+        originalSet.call(storage, "gamehub:audio-settings", JSON.stringify({ music: 0.8, join: 0.8, game: 0.6 }));
+      } finally {
+        prototype.getItem = originalGet;
+        prototype.setItem = originalSet;
+      }
+      audio.setCategoryVolume("join", 0.4);
+      assert.deepEqual(JSON.parse(storage.getItem("gamehub:audio-settings")), { music: 0.2, join: 0.4, game: 0.6 });
+      audio.setMuted(true);
+      assert.deepEqual(JSON.parse(storage.getItem("gamehub:audio-settings")), { music: 0, join: 0, game: 0 });
+      audio.setMuted(false);
+      assert.deepEqual(JSON.parse(storage.getItem("gamehub:audio-settings")), { music: 1, join: 1, game: 1 });
+    } finally { dom.window.close(); }
+  });
+}

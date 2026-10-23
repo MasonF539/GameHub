@@ -212,6 +212,230 @@ or duplicate cards, invalid active-turn indexes, or departed players retained in
 challenges or winner references. This is invariant coverage, not a substitute for
 full-length browser playtesting.
 
+## Fixed: a departure-awarded pile inherits an almost-expired turn
+
+If the challenger left while their responder had one second remaining, the
+responder won the pile and remained the current player. The session treated this
+as the same turn and gave them only that remaining second to begin the next pile.
+It now detects pile-version changes during departure as a new turn, even when
+the current player ID stays the same. Removing an unrelated player preserves the
+original countdown.
+
+Verification: both scenarios have regression tests; all 93 game tests pass.
+The updated runtime is integrated into the normal GameHub install patch, and a
+fresh production install applies it and matches the independent game files.
+A separate seeded session audit exercised 69,713 pause, resume, disconnect,
+reconnect, departure, action, and clock operations across 150 runs. It found no
+lost or duplicate cards, active unpaused sessions without a turn timer, or paused
+sessions with a running timer. These checks do not replace real-device playtests.
+
+## Fixed: running games announce a disconnect pause after a host override
+
+With two offline players, the host could resume play early, then receive a
+"remains paused" announcement when one player reconnected. An individual
+player's autoplay deadline could likewise say the game was waiting to continue,
+and running snapshots retained a disconnect pause message.
+
+Recovery announcements now consult the actual pause state. A running game says
+it is continuing and exposes no pause message; a genuinely paused game retains
+its waiting/resume guidance. Two regressions reproduced the contradictory
+reconnect/deadline states. Host override, manual-pause, and departure-timer
+regressions pass, as do all 95 game tests, the seeded session audit, and a fresh
+production install.
+
+## Fixed: a stale tab overwrites unrelated display preferences
+
+Display dropdowns previously saved their entire startup cache. Changing a table
+color in one tab could erase a card style or another game's choices saved by a
+different tab. Writes now reread storage and merge only changed fields. Pending
+fields survive storage failures and flush on a later successful change; the
+current page still applies its choices immediately.
+
+A shared browser lock serializes display writes where supported. Real Edge
+checks exposed an intermittent loss when the lock was released immediately after
+writing; keeping it through the storage task boundary resolved the reproduced
+race across 15 consecutive browser runs. Those checks cover sequential and
+concurrent saves, quota recovery, and reload. Three client regressions cover
+unrelated choices and recovery with reads allowed or blocked; all 99 client tests
+pass. Without Web Locks, fresh reads protect sequential changes but do not
+promise atomic simultaneous writes. Temporary choices still require a successful
+write before the page closes to survive reload.
+
+## Fixed: rebinding a key erases other tabs' saved bindings
+
+Keybind persistence also wrote an entire stale page cache. Rebinding one action
+could erase another action, the General settings shortcut, or another game's
+bindings saved elsewhere. Saving now rereads and validates storage, applies only
+pending action changes, and retains them if persistence fails. Resetting to the
+default deletes only that action's override; unbinding still stores null.
+The current page's controls and active input subscriptions update immediately.
+
+Five regressions cover external changes, default reset, unbinding, and recovery
+with reads allowed or blocked; all 104 client tests pass. This synchronous path
+preserves sequential cross-tab edits but does not guarantee atomic simultaneous
+writes. Failed temporary changes require a later successful save before closing
+the page to survive reload. Actual Edge tabs preserve separate keybind edits and
+restore both after reload.
+
+## Fixed: adjusting an audio slider overwrites unrelated saved volumes
+
+Audio persistence now merges only changed categories into freshly loaded saved
+settings. Adjusting game effects in one tab no longer replaces another tab's
+music or join volume with an older cached value. Failed writes keep pending
+category changes for a later successful save. Explicit global mute/unmute still
+changes all categories, and local playback/controls update immediately.
+
+Four audio tests pass, covering normal playback, external saves, failed-write
+recovery with reads allowed or blocked, and global mute/unmute. As with the
+synchronous keybind path, sequential cross-tab changes are preserved; exact
+simultaneous writes are not guaranteed atomic. Actual Edge tabs preserve
+independent category changes and restore the combined settings after reload.
+
+## Fixed: SDK accepts numeric rule schemas the host cannot save
+
+Registry validation accepted fractional numeric choices and off-step range
+defaults, while the host rejects fractional rule values and slider values not on
+an increment. A plugin could therefore load with settings that fail Save Settings
+even without an edit. The registry now requires integer numeric values, integer
+range bounds/steps, and an in-bounds default on a step starting at min. Valid
+current Egyptian War settings remain accepted. A regression reproduces the old
+acceptance and covers off-step defaults and fractional defaults/bounds/steps or
+choices. SDK types and documentation describe the existing host constraint.
+Verification: all 164 GameHub tests and nine SDK tests pass, including the
+installed Egyptian War eight-player startup and package-sharing checks.
+
+## Live-game browser verification
+
+A real installed-package match completed after 95 moves between a 1366 by 768
+laptop viewport and a 390 by 844 phone viewport. The laptop used the keyboard to
+play cards; the phone used its Play button, and the host slapped visible doubles.
+Each settled snapshot preserved the total of 54 cards across hands and pile. The
+match reached the normal winner/game-ended event without browser script errors.
+This covers one match in desktop Edge emulation, not physical devices, audible
+output, every slap rule, or every possible full-game sequence.
+
+## Fixed: Settings closure removes an exit confirmation's scroll lock
+
+Choosing Exit/Leave from Settings previously hid Settings and immediately opened
+the next confirmation. When Settings finished its fade, Bootstrap removed the
+body's modal scroll lock even though the confirmation and backdrop remained.
+A real Edge reproduction confirmed one visible Leave Game dialog with an
+unlocked body.
+
+The handoff now waits for Settings' hidden event before opening the appropriate
+host/player/spectator confirmation. Opening-transition cleanup uses the existing
+retry helper; lifecycle changes remove the queued handoff, and repeat clicks do
+not queue duplicates. Five regressions cover all three roles and cancellation on
+game completion or disconnect; all 109 client tests pass. Real Edge checks for
+all three roles retain one confirmation, one backdrop, and the body scroll lock.
+
+## Fixed: deferred game modules are missing from the browser host
+
+The browser host copied module registrations only at construction. A module
+script normally executes later, so a correctly registered module-delivered game
+could still report that its browser client was not installed. The host now
+lazily discovers pending registrations on has/mount without adding permanent
+host listeners. A regression reproduced the missing late module.
+
+A second real Edge reproduction delayed the fixture module response by 600 ms
+while refreshing an active match. Session recovery ran before module registration
+and failed to mount. The platform script now defers startup until the preceding
+declared modules execute. The actual module fixture registers a minimal rendering
+client rather than an empty export; browser checks cover initial mounting,
+actions/state rendering, and active-match refresh with delayed module loading.
+The server HTML integration check also verifies deferred platform startup and
+module-before-platform ordering. Embedded Egyptian War keeps its existing script
+delivery mode.
+
+## Fixed: an obsolete player-lock rejection unlocks a newer entry request
+
+A browser lock request could reject after its saved-player action had been
+cancelled by disconnect and a new Create Room request had begun. The old catch
+handler reset pending controls and reported an obsolete error. It now checks
+pending claim identity before changing entry state. Two regressions cover stale
+rejection protection and normal rejection/retry controls for the current claim.
+
+## Fixed: failed restoration locks leave the reconnect overlay blocking retry
+
+A current lock rejection restored some button states but left the reconnect
+overlay visible for its full ten-second timeout. Manual rejoin had already
+closed its offer, and automatic recovery still held a stale tab identity, so
+neither immediately offered a retry. Current failures now stop the overlay and
+return to the validated saved-player offer while retaining the saved token.
+Release-as-new failures keep their existing offer. Two regressions cover manual
+and automatic restoration without waiting for the recovery timeout.
+
+## Fixed: an unsent chat draft follows the page into an unrelated room
+
+A real Edge test typed a draft, ended the match, closed its room, and started a
+new room on the same page. The old draft remained in the new game's chat input.
+Egyptian War now clears that transient input during unmount. The same browser
+flow passes, as do all 18 affected client regressions and the fresh production
+install check. Server chat history, saved rules, and personal preferences are
+unchanged; the fix is included in the current game patch.
+
+## Fixed: lobby Settings retains an obsolete match disconnect countdown
+
+Leaving a match or stopping spectating reset the local game flags but kept the
+last disconnection list in Settings. Because lobby waiters stop receiving match
+lifecycle updates, it could indefinitely show an old pause/countdown for a game
+they were no longer viewing. Lobby transitions now clear and rerender only the
+match-specific disconnection status. Room-level host recovery remains available.
+Player and spectator regressions reproduce the stale text and verify cleanup.
+
+## Fixed: approval failures invert newer room or toggle state
+
+The join-approval checkbox used to invert its current value when a request failed.
+A delayed failure could therefore change a newer room's policy display, and two
+quick toggles could show an incorrect intermediate policy when replies arrived.
+Failures now restore the last server-confirmed approval value and apply only to
+the current host's room lifecycle. Two regressions reproduce the stale-room and
+overlapping-toggle failures; server approval enforcement is unchanged.
+
+## Fixed: clipboard fallback changes the room code after a room transition
+
+The Copy code action passed the clicked room's code to the clipboard, but its
+failure prompt read the room again after awaiting permission. If the room had
+changed, it prompted a different code. It now captures one code for both paths,
+matching the existing invite-link behavior. The host/guest copy regression also
+covers delayed denial after moving to a different room.
+
+## Fixed: unchanged turn snapshots rewrite the live announcement
+
+Egyptian War replaced the turn live region's text on every state snapshot, even
+when only the timer changed. MutationObserver coverage reproduced a redundant
+live-region update with identical wording. The client now assigns text only when
+it changes, retaining polite/atomic announcements for real turn, pause, and win
+changes. The affected client suite passes; physical screen-reader output remains
+untested. The current installed package and tracked patch include the fix.
+
+## Fixed: invisible-only player names are admitted
+
+A name consisting only of a zero-width joiner passed the length check and joined
+with an apparently blank name. One validation condition now requires a character
+other than whitespace, Unicode default-ignorable characters, or blank Braille.
+The existing name regression covers these empty-looking names and still admits
+visible compound emoji and text containing script joiners. No new name state or
+normalization layer is introduced.
+
+## Fixed: Settings shows a pause failure from an old room
+
+A delayed Settings Pause failure could notify after disconnecting and entering
+another room. The handler now checks the existing lifecycle generation before
+showing the error. A regression reproduces the stale notification and verifies
+that current-game failures still notify. No new state or change to server pause
+behavior is needed.
+
+## Fixed: leaving a match leaves stale player eligibility in the lobby list
+
+A successful Leave Game removed the player from the active game but did not
+broadcast the updated player list. Other clients still considered them playing,
+so the in-game host-transfer dropdown could offer an ineligible target until
+another membership event refreshed it. The server now calls the existing member
+list broadcaster after a successful departure. The existing live-server leave
+regression verifies the player changes from playing to waiting in the lobby;
+server transfer authorization remains unchanged.
+
 ## Accepted small-screen limit
 
 Eight Egyptian War players and multiple disconnected-seat controls can leave a

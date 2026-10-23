@@ -235,3 +235,26 @@ test("scoreboards are optional and validate their declared columns", () => {
   manifest.definition.scoreboard.push({ key: "wins", label: "Duplicate" });
   assert.throws(() => validateGamePluginManifest(manifest), /Scoreboard keys/);
 });
+
+
+test("numeric settings reject defaults and choices the host cannot save", () => {
+  const manifest = createManifest();
+  const range = {
+    type: "number" as const, control: "range" as const,
+    key: "turnSeconds", label: "Turn seconds", description: "Turn duration.",
+    defaultValue: 15, min: 5, max: 30, step: 5
+  };
+  manifest.definition.settings = [range];
+  assert.doesNotThrow(() => validateGamePluginManifest(manifest));
+  for (const invalid of [
+    { defaultValue: 12 }, { defaultValue: 12.5 }, { min: 0.5 }, { max: 30.5 }, { step: 0.5 }
+  ]) {
+    manifest.definition.settings = [{ ...range, ...invalid }];
+    assert.throws(() => validateGamePluginManifest(manifest), GamePluginValidationError);
+  }
+  manifest.definition.settings = [{
+    type: "number", key: "rounds", label: "Rounds", description: "Round count.",
+    defaultValue: 1, options: [1, 1.5, 2]
+  }];
+  assert.throws(() => validateGamePluginManifest(manifest), GamePluginValidationError);
+});

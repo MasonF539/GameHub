@@ -6,6 +6,7 @@ export type BooleanGameSetting = {
   defaultValue: boolean;
 };
 
+/** Numeric rule values and choices must be integers accepted by the host. */
 export type SelectNumberGameSetting = {
   type: "number";
   control?: "select";
@@ -17,6 +18,7 @@ export type SelectNumberGameSetting = {
   unit?: string;
 };
 
+/** Integer bounds/step; the default must lie on a step starting at min. */
 export type RangeNumberGameSetting = {
   type: "number";
   control: "range";

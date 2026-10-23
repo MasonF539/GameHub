@@ -40,11 +40,14 @@
     }
 
     has(gameId) {
+      if (!this.modules.has(gameId) && pendingModules.has(gameId)) {
+        this.register(gameId, pendingModules.get(gameId));
+      }
       return this.modules.has(gameId);
     }
 
     mount(gameId, launchData = {}) {
-      const gameModule = this.modules.get(gameId);
+      const gameModule = this.has(gameId) ? this.modules.get(gameId) : null;
       if (!gameModule) {
         throw new Error(`Game client module ${gameId} is not registered.`);
       }

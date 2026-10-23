@@ -173,7 +173,7 @@ diff --git a/node_modules/@masonf539/egyptian-war/dist/session.js b/node_modules
      constructor(context, settings) {
          this.context = context;
          this.offlineAutoPlay = settings.offlineAutoPlay !== false;
-@@ -78,18 +79,19 @@
+@@ -78,18 +79,17 @@
      getLifecycleState() {
          return {
              isPaused: this.isPaused,
@@ -191,15 +191,13 @@ diff --git a/node_modules/@masonf539/egyptian-war/dist/session.js b/node_modules
 -            : this.isPaused
 -                ? "Game paused by the host."
 -                : null, connectedIds);
-+        return { ...(0, engine_js_1.createPublicEgyptianWarState)(this.state, this.isPaused, this.isAnimating, this.turnDurationMs / 1000, this.getTurnTimeRemainingMs(), this.disconnectPausedPlayerId !== null
++        return { ...(0, engine_js_1.createPublicEgyptianWarState)(this.state, this.isPaused, this.isAnimating, this.turnDurationMs / 1000, this.getTurnTimeRemainingMs(), !this.isPaused ? null : this.disconnectPausedPlayerId !== null
 +                ? "A player disconnected; the host may resume the game."
-+                : this.isPaused
-+                    ? "Game paused by the host."
-+                    : null, connectedIds), offlinePlayers: this.getOfflinePlayers(), serverNow: this.context.now() };
++                : "Game paused by the host.", connectedIds), offlinePlayers: this.getOfflinePlayers(), serverNow: this.context.now() };
      }
      handleAction(memberId, action) {
          if (action.type !== "play-card" && action.type !== "slap") {
-@@ -142,6 +144,7 @@
+@@ -142,6 +142,7 @@
          if (this.state.status !== "playing")
              return;
          if (this.offlineAutoPlay && !this.offlineTimers.has(memberId)) {
@@ -207,16 +205,45 @@ diff --git a/node_modules/@masonf539/egyptian-war/dist/session.js b/node_modules
              this.offlineTimers.set(memberId, setTimeout(() => {
                  this.offlineTimers.delete(memberId);
                  if (this.disposed || this.state.status !== "playing")
-@@ -237,8 +240,6 @@
+@@ -160,7 +161,9 @@
+                     }
+                 }
+                 this.state.activityMessage = waiting
+-                    ? `Waiting for ${waiting.name} to reconnect before continuing.`
++                    ? this.isPaused
++                        ? `Waiting for ${waiting.name} to reconnect before continuing.`
++                        : `Offline auto-play is ready. The game is continuing while ${waiting.name} is disconnected.`
+                     : this.isPaused
+                         ? "Offline auto-play is ready. The host has kept the game paused."
+                         : "Offline players' turns will be played automatically.";
+@@ -201,11 +204,11 @@
+                 this.isPaused = this.wasPausedBeforeDisconnect;
+                 this.wasPausedBeforeDisconnect = false;
+             }
+-            this.state.activityMessage = this.disconnectPausedPlayerId !== null
+-                ? `${player?.name ?? "A player"} reconnected. The game remains paused until the other player returns.`
+-                : this.isPaused
+-                    ? `${player?.name ?? "A player"} reconnected. The host can resume the game.`
+-                    : `${player?.name ?? "A player"} reconnected. The game is continuing.`;
++            this.state.activityMessage = this.isPaused
++                ? this.disconnectPausedPlayerId !== null
++                    ? `${player?.name ?? "A player"} reconnected. The game remains paused until the other player returns.`
++                    : `${player?.name ?? "A player"} reconnected. The host can resume the game.`
++                : `${player?.name ?? "A player"} reconnected. The game is continuing.`;
+         }
+         const currentPlayer = this.state.players[this.state.currentPlayerIndex];
+         if (this.state.status === "playing" && currentPlayer?.id === memberId) {
+@@ -237,8 +240,7 @@
              return { success: false, message: "Only disconnected players can be kicked during a game." };
          }
          const currentBefore = this.state.players[this.state.currentPlayerIndex]?.id ?? null;
 -        if (this.turnTimer !== null)
 -            this.suspendTurnTimer();
++        const pileVersionBefore = this.state.pileVersion;
          try {
              (0, engine_js_1.removeEgyptianWarPlayer)(this.state, memberId, options?.voluntary ? "left" : "removed");
          }
-@@ -250,6 +251,8 @@
+@@ -250,6 +252,8 @@
                      : "Unable to remove that player from the game."
              };
          }
@@ -225,7 +252,18 @@ diff --git a/node_modules/@masonf539/egyptian-war/dist/session.js b/node_modules
          if (this.reconnectGracePlayerId === memberId)
              this.reconnectGracePlayerId = null;
          this.clearOfflineMember(memberId);
-@@ -286,11 +289,18 @@
+@@ -264,7 +268,9 @@
+             }
+         }
+         const currentAfter = this.state.players[this.state.currentPlayerIndex]?.id ?? null;
+-        if (currentBefore !== currentAfter) {
++        // A departure can award the pile without changing the current player.
++        // That starts a new turn; an unrelated departure keeps the old deadline.
++        if (currentBefore !== currentAfter || this.state.pileVersion !== pileVersionBefore) {
+             this.turnTimeRemainingMs = null;
+             this.reconnectGraceUsedThisTurn = false;
+         }
+@@ -286,11 +292,18 @@
              this.clearOfflineMember(memberId);
          this.autoPlayingMembers.clear();
      }
@@ -244,7 +282,7 @@ diff --git a/node_modules/@masonf539/egyptian-war/dist/session.js b/node_modules
          this.autoPlayingMembers.delete(memberId);
      }
      emitPauseChanged() {
-@@ -500,6 +510,7 @@
+@@ -500,6 +513,7 @@
              : null;
          const slappableBefore = (0, engine_js_1.isEgyptianWarStateSlappable)(this.state);
          const wasSlappable = action === "slap" && slappableBefore;
@@ -252,7 +290,7 @@ diff --git a/node_modules/@masonf539/egyptian-war/dist/session.js b/node_modules
          const versionBefore = this.state.pileVersion;
          const previousPileCount = this.state.pile.length;
          const previousCounts = new Map(this.state.players.map((player) => [player.id, player.cards.length]));
-@@ -524,6 +535,12 @@
+@@ -524,6 +538,12 @@
                  at: this.context.now(),
                  wasSlappable: slappableBefore
              };
@@ -344,7 +382,12 @@ diff --git a/node_modules/@masonf539/egyptian-war/public/client.js b/node_module
    for (const box of seats) {
      const offset = (box.left + box.right) / 2 - centerX;
      if (Math.abs(offset) < bounds.width * 0.24) continue;
-@@ -318,22 +350,19 @@
+@@ -314,26 +346,24 @@
+   egyptianWarTimerRemainingMs = null;
+   egyptianWarTimerDeadline = null;
+   egyptianWarChat.hidden = true;
++  egyptianWarChatInput.value = "";
+   egyptianWarHostControls.classList.add("d-none");
  }
 
  function showEgyptianWarSidePanel(panel) {
@@ -380,7 +423,7 @@ diff --git a/node_modules/@masonf539/egyptian-war/public/client.js b/node_module
  }
 
  function configureEgyptianWarSidePanel(chatEnabled) {
-@@ -383,8 +412,8 @@
+@@ -383,8 +413,8 @@
    egyptianWarChatBadge.hidden = count === 0;
    egyptianWarChatBadge.textContent = count > 9 ? "9+" : String(count);
    const label = count === 0
@@ -391,7 +434,7 @@ diff --git a/node_modules/@masonf539/egyptian-war/public/client.js b/node_module
    openGameSidePanelButton.setAttribute("aria-label", label);
    openGameSidePanelButton.title = label;
  }
-@@ -396,9 +425,7 @@
+@@ -396,9 +426,7 @@
 
  function reopenEgyptianWarSidePanel() {
    setEgyptianWarSidePanelMode(egyptianWarSidePanelReopenMode);
@@ -402,7 +445,7 @@ diff --git a/node_modules/@masonf539/egyptian-war/public/client.js b/node_module
    selectedTab.focus();
  }
 
-@@ -800,7 +827,7 @@
+@@ -800,7 +828,7 @@
        !animation.isFinalWin &&
        typeof animation.activityMessage === "string"
      ) {
@@ -411,7 +454,7 @@ diff --git a/node_modules/@masonf539/egyptian-war/public/client.js b/node_module
      }
 
      if (animation.action === "slap") {
-@@ -890,6 +917,10 @@
+@@ -890,6 +918,10 @@
  }
 
  function renderEgyptianWarState(state) {
@@ -422,7 +465,24 @@ diff --git a/node_modules/@masonf539/egyptian-war/public/client.js b/node_module
    const previousState = previousEgyptianWarState;
    const animation = activeEgyptianWarAnimation;
    const currentPlayer = state.players.find(
-@@ -936,13 +967,13 @@
+@@ -918,7 +950,7 @@
+
+   updateEgyptianWarTurnTimer(state);
+
+-  egyptianWarTurn.textContent = state.isPaused
++  const turnText = state.isPaused
+     ? state.pauseMessage ?? "Game is paused"
+     : winner
+       ? `${winner.name} wins!`
+@@ -927,6 +959,7 @@
+           ? "It's your turn"
+           : `${currentPlayer.name}'s turn`
+         : "Game complete";
++  if (egyptianWarTurn.textContent !== turnText) egyptianWarTurn.textContent = turnText;
+
+   if (state.challenge) {
+     const challenger = state.players.find(
+@@ -936,13 +969,13 @@
        (player) => player.id === state.challenge.responderId
      );
 
@@ -439,7 +499,7 @@ diff --git a/node_modules/@masonf539/egyptian-war/public/client.js b/node_module
    }
 
    const displayedPileCardCount = isShowingCollectedPile
-@@ -1010,6 +1041,8 @@
+@@ -1010,6 +1043,8 @@
    }
 
    const playerCount = state.players.length;
@@ -448,7 +508,7 @@ diff --git a/node_modules/@masonf539/egyptian-war/public/client.js b/node_module
 
    state.players.forEach((player, index) => {
      const angle = -Math.PI / 2 + (2 * Math.PI * index) / playerCount;
-@@ -1028,13 +1061,13 @@
+@@ -1028,13 +1063,13 @@
      const directionX = Math.cos(angle);
      const directionY = Math.sin(angle);
      seat.dataset.tableHalf = directionY > 0 ? "bottom" : "top";
@@ -467,7 +527,7 @@ diff --git a/node_modules/@masonf539/egyptian-war/public/client.js b/node_module
 
      if (isNewSeat) {
        seat.innerHTML = '<span class="player-avatar"></span><div class="egyptian-war-seat-details"><span class="player-name"></span><span class="egyptian-war-card-count"></span></div>';
-@@ -1046,11 +1079,12 @@
+@@ -1046,11 +1081,12 @@
      };
      setText(".player-avatar", player.avatar);
      setText(".player-name", player.name);
@@ -481,7 +541,7 @@ diff --git a/node_modules/@masonf539/egyptian-war/public/client.js b/node_module
        eliminated.textContent = "Out";
        seat.querySelector(".egyptian-war-seat-details").appendChild(eliminated);
      } else if (!player.isEliminated) eliminated?.remove();
-@@ -1122,11 +1156,11 @@
+@@ -1122,11 +1158,11 @@
    });
 
    egyptianWarTopCard.hidden = visibleEgyptianWarCards.length > 0;
@@ -495,7 +555,7 @@ diff --git a/node_modules/@masonf539/egyptian-war/public/client.js b/node_module
    egyptianWarPlayCardButton.disabled =
      (currentContext.role === "spectator") ||
      state.status !== "playing" ||
-@@ -1164,7 +1198,9 @@
+@@ -1164,7 +1200,9 @@
  }
 
  
@@ -505,7 +565,7 @@ diff --git a/node_modules/@masonf539/egyptian-war/public/client.js b/node_module
    egyptianWarSpectatorList.replaceChildren();
    for (const spectator of spectators) {
      const item = document.createElement("li");
-@@ -1217,34 +1253,40 @@
+@@ -1217,34 +1255,40 @@
    saveLayoutPreferences();
  });
  async function playEgyptianWarCard() {
@@ -558,7 +618,7 @@ diff --git a/node_modules/@masonf539/egyptian-war/public/client.js b/node_module
  });
  showGameChatButton.addEventListener("click", () => showEgyptianWarSidePanel("chat"));
  showGameSpectatorsButton.addEventListener("click", () => showEgyptianWarSidePanel("spectators"));
-@@ -1271,6 +1313,53 @@
+@@ -1271,6 +1315,53 @@
    root.dataset.cardStyle = currentContext.display?.get("cardStyle") ?? "classic";
    root.dataset.tableColor = currentContext.display?.get("tableColor") ?? "green";
  }
@@ -612,7 +672,7 @@ diff --git a/node_modules/@masonf539/egyptian-war/public/client.js b/node_module
 
  const egyptianWarClientModule = {
    mount(context) {
-@@ -1289,6 +1378,8 @@
+@@ -1289,6 +1380,8 @@
      ].filter(Boolean);
      updateEgyptianWarKeyHints();
      applyEgyptianWarDisplay();
@@ -621,7 +681,7 @@ diff --git a/node_modules/@masonf539/egyptian-war/public/client.js b/node_module
      showEgyptianWarGame(context.launchData);
      timerInterval = setInterval(renderEgyptianWarTurnTimer, 100);
      return {
-@@ -1303,6 +1394,22 @@
+@@ -1303,6 +1396,22 @@
          }
        },
        receivePlatformEvent(event) {

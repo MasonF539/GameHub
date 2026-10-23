@@ -92,21 +92,22 @@ function validateSetting(setting: GameSetting, gameId: string): void {
     return;
   }
 
-  if (typeof defaultValue !== "number" || !Number.isFinite(defaultValue)) {
+  if (typeof defaultValue !== "number" || !Number.isInteger(defaultValue)) {
     throw new GamePluginValidationError(
-      `${gameId}.${settingKey} must have a finite numeric default.`
+      `${gameId}.${settingKey} must have an integer numeric default.`
     );
   }
 
   if (setting.control === "range") {
     if (
-      !Number.isFinite(setting.min) ||
-      !Number.isFinite(setting.max) ||
-      !Number.isFinite(setting.step) ||
+      !Number.isInteger(setting.min) ||
+      !Number.isInteger(setting.max) ||
+      !Number.isInteger(setting.step) ||
       setting.min > setting.max ||
       setting.step <= 0 ||
       defaultValue < setting.min ||
-      defaultValue > setting.max
+      defaultValue > setting.max ||
+      (defaultValue - setting.min) % setting.step !== 0
     ) {
       throw new GamePluginValidationError(
         `${gameId}.${settingKey} has an invalid numeric range.`
@@ -117,7 +118,7 @@ function validateSetting(setting: GameSetting, gameId: string): void {
 
   if (
     setting.options.length === 0 ||
-    setting.options.some((option) => !Number.isFinite(option)) ||
+    setting.options.some((option) => !Number.isInteger(option)) ||
     new Set(setting.options).size !== setting.options.length ||
     !setting.options.includes(defaultValue)
   ) {

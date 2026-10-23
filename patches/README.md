@@ -5,7 +5,11 @@ slap explanations/stat reporting, offline countdowns, live host controls,
 eight-player support, flat-edge seating for the rectangular table, stable pile
 layout and activity scrolling, compact landscape presentation, panel-tool
 clearance, safe handling of replies after leaving a game, and preservation of
-running turn deadlines when a player removal is rejected.
+running turn deadlines when a player removal is rejected, and fresh turn timers
+when a departure awards the pile. Recovery messages also respect an early host
+resume while other players remain offline. Unmounting also clears unsent chat
+drafts so they cannot carry into an unrelated room. Turn announcements update
+only when their wording changes, avoiding redundant live-region mutations.
 It updates only runtime engine/session/definition JavaScript and browser files.
 The independent Egyptian War repository remains the source of these changes.
 

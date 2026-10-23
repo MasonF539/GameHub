@@ -43,3 +43,8 @@ Publishing requires npm access to the `@masonf539` scope. Games declare compatib
 SDK peer ranges, including an explicit prerelease range when testing an SDK beta,
 so the game and host share one installation. Pin the development dependency to
 the SDK release used for builds and tests.
+
+Numeric rule settings use integers. Select defaults must appear in their integer
+choices. Range bounds and steps must be integers, with a positive step, and the
+default must be in bounds at `min + n * step`. The registry rejects definitions
+that the host's settings validation could not save.

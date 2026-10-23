@@ -490,7 +490,7 @@ const disallowedNameCharacters =
   /[\u0000-\u001F\u007F\u061C\u200B\u200E\u200F\u2028\u2029\u202A-\u202E\u2060\u2066-\u2069\uFEFF]/;
 
 function isValidPlayerName(playerName: string): boolean {
-  return playerName.length >= 1 &&
+  return /[^\s\p{Default_Ignorable_Code_Point}\u2800]/u.test(playerName) &&
     playerName.length <= 20 &&
     !disallowedNameCharacters.test(playerName);
 }
@@ -1855,6 +1855,7 @@ io.on("connection", (socket) => {
 
     // IMPORTANT: do NOT call removeMemberFromRoom().
     // The player is leaving the game but staying in the lobby.
+    sendRoomMemberLists(roomCode, room);
     console.log(`${found.member.name} left game ${roomCode}`);
     respond({
       success: true,

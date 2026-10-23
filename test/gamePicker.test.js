@@ -253,6 +253,16 @@ test("hosts and guests can copy a hidden room code and the link separately", asy
       assert.equal(document.querySelector("#room-copy-menu"), null);
       assert.equal(document.querySelector("#copy-game-invite-link"), null);
       assert.equal(document.querySelector("#copy-game-room-code"), null);
+      let rejectCopy;
+      window.navigator.clipboard.writeText = () => new Promise((_resolve, reject) => { rejectCopy = reject; });
+      const prompted = [];
+      window.prompt = (_message, value) => prompted.push(value);
+      document.querySelector("#copy-room-code").click();
+      view.handlers.get("room-resumed")({ roomCode: "NEW123", isHost, isLocked: false,
+        selectedGameId: null, gameSettings: {}, activeGameId: null, isPaused: false, chatEnabled: false });
+      rejectCopy(new Error("Clipboard denied"));
+      await Promise.resolve();
+      assert.deepEqual(prompted, ["ABC123"]);
     } finally { view.close(); }
   }
 });
@@ -1894,5 +1904,341 @@ test("a stale picker reply cannot unlock or close a newer selection", () => {
     old.respond({ success: true });
     assert.equal(document.querySelector("#game-picker-grid").classList.contains("is-pending"), true);
     assert.equal(view.getModalHideCount(), hides);
+  } finally { view.close(); }
+});
+
+
+test("changing a display option preserves choices saved by another tab", () => {
+  const view = createClient();
+  try {
+    view.handlers.get("available-games")([game({ displayOptions: [{
+      key: "tableColor", label: "Table", defaultValue: "green", choices: [
+        { value: "green", label: "Green" }, { value: "blue", label: "Blue" }
+      ]
+    }] })]);
+    localStorage.setItem("gamehub:display-options", JSON.stringify({
+      "example-game": { cardStyle: "midnight" },
+      "other-game": { tableColor: "red" }
+    }));
+    const select = document.querySelector("#display-example-game-tableColor");
+    select.value = "blue";
+    select.dispatchEvent(new window.Event("change"));
+    assert.deepEqual(JSON.parse(localStorage.getItem("gamehub:display-options")), {
+      "example-game": { cardStyle: "midnight", tableColor: "blue" },
+      "other-game": { tableColor: "red" }
+    });
+  } finally { view.close(); }
+});
+
+
+for (const blockedReads of [false, true]) {
+  test(`failed display writes recover temporary choices alongside external saves (reads ${blockedReads ? "blocked" : "allowed"})`, () => {
+    const view = createClient();
+    try {
+      const choices = [{ value: "green", label: "Green" }, { value: "blue", label: "Blue" }];
+      view.handlers.get("available-games")([game({ displayOptions: [
+        { key: "tableColor", label: "Table", defaultValue: "green", choices },
+        { key: "cardStyle", label: "Cards", defaultValue: "green", choices }
+      ] })]);
+      const prototype = window.Storage.prototype;
+      const originalGet = prototype.getItem;
+      const originalSet = prototype.setItem;
+      const change = (key, value) => {
+        const select = document.querySelector(`#display-example-game-${key}`);
+        select.value = value;
+        select.dispatchEvent(new window.Event("change"));
+      };
+      try {
+        prototype.setItem = function(key, value) {
+          if (key === "gamehub:display-options") throw new Error("Storage unavailable");
+          return originalSet.call(this, key, value);
+        };
+        if (blockedReads) prototype.getItem = function(key) {
+          if (key === "gamehub:display-options") throw new Error("Storage unavailable");
+          return originalGet.call(this, key);
+        };
+        change("tableColor", "blue");
+        change("cardStyle", "blue");
+        originalSet.call(localStorage, "gamehub:display-options", JSON.stringify({ "other-game": { tableColor: "red" } }));
+      } finally {
+        prototype.getItem = originalGet;
+        prototype.setItem = originalSet;
+      }
+      change("tableColor", "green");
+      assert.deepEqual(JSON.parse(localStorage.getItem("gamehub:display-options")), {
+        "example-game": { tableColor: "green", cardStyle: "blue" },
+        "other-game": { tableColor: "red" }
+      });
+    } finally { view.close(); }
+  });
+}
+
+
+test("rebinding one action preserves bindings saved in another tab", () => {
+  const view = createClient();
+  try {
+    view.handlers.get("available-games")([game({ keybinds: [
+      { id: "primary", label: "Primary", defaultKey: "Space" },
+      { id: "secondary", label: "Secondary", defaultKey: "KeyQ" }
+    ] })]);
+    localStorage.setItem("gamehub:keybinds", JSON.stringify({
+      general: { "settings": "KeyG" },
+      "example-game": { secondary: "KeyZ" },
+      "other-game": { primary: "KeyX" }
+    }));
+    document.querySelector("#keybind-body-example-game .game-keybind-button").click();
+    document.dispatchEvent(new window.KeyboardEvent("keydown", { code: "KeyE", bubbles: true }));
+    assert.deepEqual(JSON.parse(localStorage.getItem("gamehub:keybinds")), {
+      general: { "settings": "KeyG" },
+      "example-game": { primary: "KeyE", secondary: "KeyZ" },
+      "other-game": { primary: "KeyX" }
+    });
+  } finally { view.close(); }
+});
+
+
+for (const key of ["Space", "Backspace"]) {
+  test(`${key === "Space" ? "restoring a default key" : "unbinding an action"} preserves unrelated stored bindings`, () => {
+    const view = createClient();
+    try {
+      view.handlers.get("available-games")([game({ keybinds: [
+        { id: "primary", label: "Primary", defaultKey: "Space" },
+        { id: "secondary", label: "Secondary", defaultKey: "KeyQ" }
+      ] })]);
+      localStorage.setItem("gamehub:keybinds", JSON.stringify({
+        "example-game": { primary: "KeyX", secondary: "KeyZ" }
+      }));
+      document.querySelector("#keybind-body-example-game .game-keybind-button").click();
+      document.dispatchEvent(new window.KeyboardEvent("keydown", { code: key, bubbles: true }));
+      assert.deepEqual(JSON.parse(localStorage.getItem("gamehub:keybinds")), {
+        "example-game": key === "Space" ? { secondary: "KeyZ" } : { primary: null, secondary: "KeyZ" }
+      });
+    } finally { view.close(); }
+  });
+}
+
+for (const blockedReads of [false, true]) {
+  test(`failed keybind writes recover local changes alongside external saves (reads ${blockedReads ? "blocked" : "allowed"})`, () => {
+    const view = createClient();
+    try {
+      view.handlers.get("available-games")([game({ keybinds: [
+        { id: "primary", label: "Primary", defaultKey: "Space" },
+        { id: "secondary", label: "Secondary", defaultKey: "KeyQ" }
+      ] })]);
+      const prototype = window.Storage.prototype;
+      const originalGet = prototype.getItem;
+      const originalSet = prototype.setItem;
+      const change = (index, code) => {
+        document.querySelectorAll("#keybind-body-example-game .game-keybind-button")[index].click();
+        document.dispatchEvent(new window.KeyboardEvent("keydown", { code, bubbles: true }));
+      };
+      try {
+        prototype.setItem = function(key, value) {
+          if (key === "gamehub:keybinds") throw new Error("Storage unavailable");
+          return originalSet.call(this, key, value);
+        };
+        if (blockedReads) prototype.getItem = function(key) {
+          if (key === "gamehub:keybinds") throw new Error("Storage unavailable");
+          return originalGet.call(this, key);
+        };
+        change(0, "KeyE");
+        change(1, "KeyR");
+        originalSet.call(localStorage, "gamehub:keybinds", JSON.stringify({ general: { settings: "KeyG" } }));
+      } finally {
+        prototype.getItem = originalGet;
+        prototype.setItem = originalSet;
+      }
+      change(0, "Space");
+      assert.deepEqual(JSON.parse(localStorage.getItem("gamehub:keybinds")), {
+        general: { settings: "KeyG" }, "example-game": { secondary: "KeyR" }
+      });
+    } finally { view.close(); }
+  });
+}
+
+
+for (const role of ["host", "player", "spectator"]) {
+  test(`the ${role} exit confirmation waits until Settings finishes closing`, () => {
+    const view = createClient();
+    try {
+      view.handlers.get("available-games")([game()]);
+      view.handlers.get("room-resumed")({ roomCode: "ABC123", isHost: role === "host",
+        role: role === "spectator" ? "spectator" : "player", activeGameId: "example-game",
+        hasActiveGame: true, selectedGameId: "example-game", gameSettings: {}, chatEnabled: true });
+      const settings = document.querySelector("#app-settings-modal");
+      settings.classList.add("show");
+      const shows = view.getModalShowCount();
+      document.querySelector("#app-game-exit").click();
+      assert.equal(view.getModalShowCount(), shows);
+      settings.classList.remove("show");
+      settings.dispatchEvent(new window.Event("hidden.bs.modal"));
+      assert.equal(view.getModalShowCount(), shows + 1);
+    } finally { view.close(); }
+  });
+}
+
+for (const event of ["game-ended", "disconnect"]) {
+  test(`a pending Settings exit handoff is cancelled by ${event}`, () => {
+    const view = createClient();
+    try {
+      view.handlers.get("available-games")([game()]);
+      view.handlers.get("room-resumed")({ roomCode: "ABC123", isHost: true, role: "player",
+        activeGameId: "example-game", hasActiveGame: true, selectedGameId: "example-game", gameSettings: {}, chatEnabled: true });
+      const settings = document.querySelector("#app-settings-modal");
+      settings.classList.add("show");
+      document.querySelector("#app-game-exit").click();
+      view.handlers.get(event)(event === "game-ended" ? { winnerId: null, message: "Finished", returningMemberIds: [] } : undefined);
+      const shows = view.getModalShowCount();
+      settings.classList.remove("show");
+      settings.dispatchEvent(new window.Event("hidden.bs.modal"));
+      assert.equal(view.getModalShowCount(), shows);
+    } finally { view.close(); }
+  });
+}
+
+
+test("a rejected obsolete player lock cannot unlock a newer room request", async () => {
+  let rejectClaim;
+  const view = createClient({ savedSessions: [savedPlayer("Guest", "guest")], locks: {
+    request: () => new Promise((_resolve, reject) => { rejectClaim = reject; })
+  } });
+  try {
+    await new Promise(resolve => setImmediate(resolve));
+    document.querySelector("#rejoin-as-new-player").click();
+    assert.equal(typeof rejectClaim, "function");
+    view.handlers.get("disconnect")();
+    document.querySelector("#player-name").value = "New Host";
+    document.querySelector("#create-room").click();
+    assert.ok(view.emitted.some(item => item.event === "create-room"));
+    assert.equal(document.querySelector("#create-room").disabled, true);
+    const toasts = view.getToastShowCount();
+    rejectClaim(new Error("Old lock rejected"));
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(document.querySelector("#create-room").disabled, true);
+    assert.equal(view.getToastShowCount(), toasts);
+  } finally { view.close(); }
+});
+
+
+test("a current player-lock rejection restores retry controls and reports its failure", async () => {
+  let rejectClaim;
+  const view = createClient({ savedSessions: [savedPlayer("Guest", "guest")], locks: {
+    request: () => new Promise((_resolve, reject) => { rejectClaim = reject; })
+  } });
+  try {
+    await new Promise(resolve => setImmediate(resolve));
+    document.querySelector("#rejoin-as-new-player").click();
+    const toasts = view.getToastShowCount();
+    rejectClaim(new Error("Lock rejected"));
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(document.querySelector("#create-room").disabled, false);
+    assert.equal(document.querySelector("#rejoin-as-new-player").disabled, false);
+    assert.equal(view.getToastShowCount(), toasts + 1);
+  } finally { view.close(); }
+});
+
+
+for (const automatic of [false, true]) {
+  test(`${automatic ? "automatic" : "manual"} restoration lock failure stops recovery and keeps a retry offer`, async () => {
+    let rejectClaim;
+    const locks = { request: () => new Promise((_resolve, reject) => { rejectClaim = reject; }) };
+    const view = createClient(automatic ? { savedRoom: "ABC123", locks } : { savedSessions: [savedPlayer("Guest", "guest")], locks });
+    try {
+      if (automatic) view.handlers.get("connect")();
+      else {
+        await settleRejoin();
+        document.querySelector("#rejoin-room").click();
+      }
+      assert.equal(document.querySelector("#reconnecting-overlay").hidden, false);
+      rejectClaim(new Error("Lock rejected"));
+      await settleRejoin();
+      assert.equal(document.querySelector("#reconnecting-overlay").hidden, true);
+      assert.equal(document.querySelector("#rejoin-room-modal").classList.contains("show"), true);
+      assert.equal(document.querySelector("#rejoin-room").disabled, false);
+      assert.equal(JSON.parse(localStorage.getItem("gamehub:saved-sessions")).length, 1);
+    } finally { view.close(); }
+  });
+}
+
+
+for (const role of ["player", "spectator"]) {
+  test(`leaving as a ${role} clears stale in-game disconnect status`, () => {
+    const view = createClient();
+    try {
+      view.handlers.get("available-games")([game()]);
+      view.handlers.get("room-resumed")({ roomCode: "ABC123", isHost: false, role,
+        activeGameId: "example-game", hasActiveGame: true, selectedGameId: "example-game", gameSettings: {}, chatEnabled: true });
+      view.handlers.get("game-lifecycle")({ gameId: "example-game", isPaused: true, isBusy: false,
+        disconnections: [{ id: "missing", name: "Missing Player", autoPlayAt: null, autoPlaying: false }] });
+      assert.match(document.querySelector("#app-disconnect-status").textContent, /Missing Player/);
+      document.querySelector(role === "player" ? "#confirm-leave-game" : "#confirm-leave-spectator").click();
+      view.emitted.find(item => item.event === "leave-game").respond({ success: true, hasActiveGame: true });
+      assert.equal(document.querySelector("#app-disconnect-status").textContent, "");
+    } finally { view.close(); }
+  });
+}
+
+
+test("an old join-approval failure cannot change a newer room's policy", () => {
+  const view = createClient();
+  try {
+    const resume = roomCode => view.handlers.get("room-resumed")({ roomCode, isHost: true,
+      role: "player", activeGameId: null, hasActiveGame: false, selectedGameId: null, gameSettings: {} });
+    resume("OLD123");
+    const checkbox = document.querySelector("#require-join-approval");
+    checkbox.checked = true;
+    checkbox.dispatchEvent(new window.Event("change"));
+    const old = view.emitted.find(item => item.event === "set-room-approval");
+    view.handlers.get("disconnect")();
+    resume("NEW123");
+    view.handlers.get("room-approval-changed")({ requiresJoinApproval: true });
+    const toasts = view.getToastShowCount();
+    old.respond({ success: false, message: "Old failure" });
+    assert.equal(checkbox.checked, true);
+    assert.equal(view.getToastShowCount(), toasts);
+  } finally { view.close(); }
+});
+
+test("join-approval failures restore confirmed policy rather than invert a newer toggle", () => {
+  const view = createClient();
+  try {
+    view.handlers.get("room-resumed")({ roomCode: "ABC123", isHost: true, role: "player",
+      activeGameId: null, hasActiveGame: false, selectedGameId: null, gameSettings: {} });
+    view.handlers.get("room-approval-changed")({ requiresJoinApproval: false });
+    const checkbox = document.querySelector("#require-join-approval");
+    for (const checked of [true, false]) {
+      checkbox.checked = checked;
+      checkbox.dispatchEvent(new window.Event("change"));
+    }
+    const requests = view.emitted.filter(item => item.event === "set-room-approval");
+    requests[0].respond({ success: false, message: "Rejected" });
+    assert.equal(checkbox.checked, false);
+    requests[1].respond({ success: false, message: "Rejected" });
+    assert.equal(checkbox.checked, false);
+  } finally { view.close(); }
+});
+
+
+test("Settings pause failures only notify in the requesting game lifecycle", async () => {
+  const view = createClient();
+  try {
+    const room = { roomCode: "OLD123", isHost: true, role: "player",
+      activeGameId: "example-game", hasActiveGame: true, selectedGameId: "example-game",
+      gameSettings: {}, chatEnabled: true };
+    view.handlers.get("available-games")([game()]);
+    view.handlers.get("room-resumed")(room);
+    document.querySelector("#app-game-pause-toggle").click();
+    const old = view.emitted.filter(item => item.event === "toggle-game-pause").at(-1);
+    view.handlers.get("disconnect")();
+    view.handlers.get("room-resumed")({ ...room, roomCode: "NEW123" });
+    const notices = view.getToastShowCount();
+    old.respond({ success: false, message: "Old pause failure" });
+    await Promise.resolve();
+    assert.equal(view.getToastShowCount(), notices);
+    document.querySelector("#app-game-pause-toggle").click();
+    view.emitted.filter(item => item.event === "toggle-game-pause").at(-1)
+      .respond({ success: false, message: "Current pause failure" });
+    await Promise.resolve();
+    assert.equal(view.getToastShowCount(), notices + 1);
   } finally { view.close(); }
 });

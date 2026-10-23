@@ -319,3 +319,54 @@ the picker invalidates older selection replies, preventing them from closing or
 unlocking newer controls. Leave Game requests require current active membership;
 lobby waiters cannot invoke a second plugin removal or regain active membership
 through a failed removal.
+
+Display choices apply immediately in the current page. Persistence merges changed
+fields into fresh shared storage so another tab's unrelated choices survive.
+Failed writes retain pending fields until a later successful change. Display
+writes use an exclusive Web Lock where available and retain it through the
+storage task boundary before allowing another tab to write. Without Web Locks,
+sequential writes merge fresh data but exact simultaneous writes are not atomic.
+
+Keybind writes validate fresh stored bindings and apply only changed actions,
+including default resets and explicit unbinding. Failed writes retain pending
+action changes for the next save. The current tab updates its keybind UI and
+subscriptions immediately; synchronous storage writes protect sequential edits
+from other tabs but do not guarantee atomic simultaneous updates.
+
+Audio persistence likewise merges changed categories into fresh saved settings
+and retains failed category writes for recovery. Global mute/unmute explicitly
+updates every category. Local playback remains immediate, with the same
+sequential-write guarantee and simultaneous-write limit as keybinds.
+
+Numeric rule schemas follow the host's integer validation. Select choices and
+defaults are integers; range bounds and steps are integers, and the default must
+be in bounds on a step starting at min. Invalid schemas fail registry validation
+rather than producing a settings editor whose default cannot be saved.
+
+Leaving or exiting through Settings waits for its hidden event before opening
+the next confirmation, preserving Bootstrap's backdrop and body scroll lock.
+The queued handoff is cancelled on room/game lifecycle changes, and chooses the
+current host/player/spectator confirmation only when Settings has finished closing.
+
+The browser host discovers modules registered after its construction when checking
+or mounting a game. Platform startup is deferred after declared game module
+scripts, so active-room recovery waits for their registration. The module fixture
+includes an actual rendering client; browser verification covers a delayed module
+response during an active-match refresh as well as normal action/state routing.
+
+Saved-player lock rejections apply only to their current pending claim. An
+obsolete lock failure cannot unlock controls or report an error for a newer
+room-entry request; a current rejection still restores retry controls.
+
+A current restoration-lock failure stops the reconnect overlay immediately and
+returns to a validated saved-player offer, retaining the saved token. It clears
+only the tab's failed recovery attempt; a release-as-new failure keeps its current
+offer available for retry.
+
+Returning to the lobby clears the previous match's disconnection list and status
+text. Room-level host recovery remains separate, so lobby waiters do not retain
+obsolete match countdowns after they stop receiving game lifecycle events.
+
+Join-approval request failures restore the server-confirmed policy rather than
+inverting a possibly newer checkbox value. Replies from an obsolete room
+lifecycle or after loss of host ownership cannot change the current controls.

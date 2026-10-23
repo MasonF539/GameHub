@@ -166,6 +166,7 @@ let roomCodeHidden = true;
 let publicInviteUrl = null;
 let isRoomLocked = false;
 let gameDefinitions = [];
+let roomRequiresJoinApproval = false;
 let isCurrentUserHost = false;
 let isCurrentUserSpectator = false;
 let selectedGameId = null;
@@ -177,6 +178,7 @@ let pendingEntryRequest = null;
 let lifecycleGeneration = 0;
 let pendingSettingsSave = null;
 let pendingGameSelection = null;
+let pendingSettingsExit = null;
 let isGameSelectionPending = false;
 let currentActiveGameId = null;
 let activeGameIsPaused = false;
@@ -260,7 +262,7 @@ function isStandaloneModifierCode(code) {
   return /^(Shift|Control|Alt|Meta)(Left|Right)$/.test(code);
 }
 
-function loadKeybindOverrides() {
+function loadKeybindOverrides(fallback = Object.create(null)) {
   try {
     const saved = JSON.parse(localStorage.getItem(keybindStorageKey) ?? "{}");
     if (saved && typeof saved === "object" && !Array.isArray(saved)) {
@@ -280,13 +282,26 @@ function loadKeybindOverrides() {
   } catch {
     // Invalid local preferences should fall back to package defaults.
   }
-  return Object.create(null);
+  return fallback;
 }
 
-function saveKeybindOverrides() {
+const unsavedKeybindChanges = [];
+function saveKeybindOverrides(change) {
   for (const listener of bindingChangeListeners) listener();
+  unsavedKeybindChanges.push(change);
+  const latest = loadKeybindOverrides(keybindOverrides);
+  for (const { groupId, actionId, code, reset } of unsavedKeybindChanges) {
+    if (reset) {
+      delete latest[groupId]?.[actionId];
+      if (Object.keys(latest[groupId] ?? {}).length === 0) delete latest[groupId];
+    } else {
+      latest[groupId] ??= Object.create(null);
+      latest[groupId][actionId] = code;
+    }
+  }
   try {
-    localStorage.setItem(keybindStorageKey, JSON.stringify(keybindOverrides));
+    localStorage.setItem(keybindStorageKey, JSON.stringify(latest));
+    unsavedKeybindChanges.length = 0;
     return true;
   } catch {
     return false;
@@ -367,7 +382,7 @@ function setKeybind(groupId, actionId, code) {
     keybindOverrides[groupId][actionId] = code;
   }
   notifiedKeybindConflicts.clear();
-  return saveKeybindOverrides();
+  return saveKeybindOverrides({ groupId, actionId, code, reset: code === definition.defaultKey });
 }
 
 function createGameInput(gameId) {
@@ -759,8 +774,15 @@ function useResumeClaim(session, onClaim) {
       for (const callback of request.callbacks) callback();
     });
   }).catch(() => {
-    if (pendingResumeClaim === request) pendingResumeClaim = null;
+    if (pendingResumeClaim !== request) return;
+    pendingResumeClaim = null;
     resumeRequestPending = false;
+    stopReconnecting();
+    if (!rejoinCandidate && currentRoomCode === null) {
+      clearResumeSession(null, false);
+      rejoinPromptShown = false;
+      rejoinCheckComplete = false;
+    }
     setRoomRequestPending(false);
     showToast("Unable to restore that player. Try again.");
   });
@@ -1106,20 +1128,29 @@ updateFullscreenButton();
 
 appGamePauseButton.addEventListener("click", async () => {
   if (appGamePauseButton.disabled) return;
+  const generation = lifecycleGeneration;
   const response = await requestGamePause(!activeGameIsPaused);
-  if (!response.success) showToast(response.message);
+  if (generation === lifecycleGeneration && !response.success) showToast(response.message);
 });
 
 appGameExitButton.addEventListener("click", () => {
-  if (appGameExitButton.disabled) return;
-
-  bootstrap.Modal.getOrCreateInstance(appSettingsModalElement).hide();
-  const confirmationModal = isCurrentUserHost
-    ? exitGameModalElement
-    : isCurrentUserSpectator
-      ? leaveSpectatorModalElement
-      : leaveGameModalElement;
-  bootstrap.Modal.getOrCreateInstance(confirmationModal).show();
+  if (appGameExitButton.disabled || pendingSettingsExit) return;
+  const generation = lifecycleGeneration;
+  const showConfirmation = () => {
+    pendingSettingsExit = null;
+    if (generation !== lifecycleGeneration || currentActiveGameId === null) return;
+    const confirmationModal = isCurrentUserHost
+      ? exitGameModalElement
+      : isCurrentUserSpectator
+        ? leaveSpectatorModalElement
+        : leaveGameModalElement;
+    bootstrap.Modal.getOrCreateInstance(confirmationModal).show();
+  };
+  if (appSettingsModalElement.classList.contains("show")) {
+    pendingSettingsExit = showConfirmation;
+    appSettingsModalElement.addEventListener("hidden.bs.modal", showConfirmation, { once: true });
+    hideLifecycleModal(appSettingsModalElement);
+  } else showConfirmation();
 });
 
 appSettingsModalElement.addEventListener(
@@ -1224,6 +1255,10 @@ function hideLifecycleModal(element) {
 }
 function invalidateLifecycleRequests() {
   lifecycleGeneration++;
+  if (pendingSettingsExit) {
+    appSettingsModalElement.removeEventListener("hidden.bs.modal", pendingSettingsExit);
+    pendingSettingsExit = null;
+  }
   pendingSettingsSave = null;
   invalidateGameSelection();
   for (const button of [leaveLobbyButton, confirmLeaveGameButton, confirmLeaveSpectatorButton, spectateGameButton, confirmExitGameButton, confirmCloseLobbyButton]) {
@@ -1244,6 +1279,8 @@ function showLobby(roomCode, isHost) {
   currentActiveGameId = null;
   activeGameIsPaused = false;
   activeGameIsBusy = false;
+  gameDisconnections = [];
+  renderRoomStatus();
   gameHubAudio.setScene("menu");
   entryView.classList.add("d-none");
   lobbyView.classList.remove("d-none");
@@ -1282,6 +1319,7 @@ function showEntry() {
   document.querySelector("#host-transfer-controls").hidden = true;
   document.querySelector("#join-request-count").textContent = "0";
   document.querySelector("#pending-join-requests").replaceChildren();
+  roomRequiresJoinApproval = false;
   document.querySelector("#require-join-approval").checked = false;
   placeAppUtilityControls(false);
   currentActiveGameId = null;
@@ -1304,6 +1342,8 @@ function showLobbyAfterLeavingGame(hasActiveGame = true, wasSpectator = false) {
   currentActiveGameId = null;
   activeGameIsPaused = false;
   activeGameIsBusy = false;
+  gameDisconnections = [];
+  renderRoomStatus();
   updateGameSettingsControls();
   gameClientHost.unmount();
   gameplayView.classList.add("d-none");
@@ -2626,7 +2666,8 @@ socket.on("join-request-result", (response) => {
   if (response.success) showToast("The host accepted your join request.");
 });
 socket.on("room-approval-changed", ({ requiresJoinApproval }) => {
-  document.querySelector("#require-join-approval").checked = requiresJoinApproval === true;
+  roomRequiresJoinApproval = requiresJoinApproval === true;
+  document.querySelector("#require-join-approval").checked = roomRequiresJoinApproval;
 });
 socket.on("join-requests", (requests) => {
   const list = document.querySelector("#pending-join-requests");
@@ -2665,8 +2706,10 @@ document.querySelector("#review-joiners").addEventListener("click", () => {
   bootstrap.Tab.getOrCreateInstance(document.querySelector("#app-settings-game-tab")).show();
 });
 document.querySelector("#require-join-approval").addEventListener("change", (event) => {
+  const generation = lifecycleGeneration;
   socket.emit("set-room-approval", { enabled: event.target.checked }, (response) => {
-    if (!response.success) { event.target.checked = !event.target.checked; showToast(response.message); }
+    if (generation !== lifecycleGeneration || !isCurrentUserHost) return;
+    if (!response.success) { event.target.checked = roomRequiresJoinApproval; showToast(response.message); }
   });
 });
 async function copyRoomInvite() {
@@ -2685,12 +2728,13 @@ async function copyRoomInvite() {
 }
 socket.on("public-invite-url", (url) => { publicInviteUrl = url; });
 async function copyRoomCode() {
-  if (!currentRoomCode) return;
+  const roomCode = currentRoomCode;
+  if (!roomCode) return;
   try {
-    await window.navigator.clipboard.writeText(currentRoomCode);
+    await window.navigator.clipboard.writeText(roomCode);
     showToast("Room code copied.");
   } catch {
-    window.prompt("Copy this room code:", currentRoomCode);
+    window.prompt("Copy this room code:", roomCode);
   }
 }
 document.querySelector("#copy-invite-link").addEventListener("click", copyRoomInvite);
@@ -2698,11 +2742,38 @@ document.querySelector("#copy-room-code").addEventListener("click", copyRoomCode
 
 const displayStorageKey = "gamehub:display-options";
 const displayChangeListeners = new Map();
-let displayPreferences = {};
-try {
-  const saved = JSON.parse(localStorage.getItem(displayStorageKey) ?? "{}");
-  if (saved && typeof saved === "object" && !Array.isArray(saved)) displayPreferences = saved;
-} catch { /* Browsing without storage still supports temporary preferences. */ }
+function readDisplayPreferences(fallback = {}) {
+  try {
+    const saved = JSON.parse(localStorage.getItem(displayStorageKey) ?? "{}");
+    return saved && typeof saved === "object" && !Array.isArray(saved) ? saved : {};
+  } catch { return fallback; }
+}
+let displayPreferences = readDisplayPreferences();
+const unsavedDisplayChanges = new Map();
+function saveDisplayChoice(gameId, key, value) {
+  const current = displayPreferences[gameId];
+  displayPreferences[gameId] = { ...(current && typeof current === "object" ? current : {}), [key]: value };
+  unsavedDisplayChanges.set(gameId, { ...unsavedDisplayChanges.get(gameId), [key]: value });
+  const persist = () => {
+    const latest = readDisplayPreferences(displayPreferences);
+    for (const [id, changes] of unsavedDisplayChanges) {
+      latest[id] = { ...latest[id], ...changes };
+    }
+    try {
+      localStorage.setItem(displayStorageKey, JSON.stringify(latest));
+      unsavedDisplayChanges.clear();
+    } catch {
+      showToast("Display options will only last for this visit; browser storage is unavailable.");
+    }
+  };
+  if (window.navigator.locks?.request) {
+    void window.navigator.locks.request(displayStorageKey, async () => {
+      persist();
+      // Let the storage write leave this task before another tab gets the lock.
+      await new Promise(resolve => setTimeout(resolve, 0));
+    }).catch(() => persist());
+  } else persist();
+}
 
 function displayValue(gameId, option) {
   const saved = displayPreferences[gameId]?.[option.key];
@@ -2751,10 +2822,7 @@ function renderDisplayOptions() {
         if (choice?.previewPath) image.src = choice.previewPath;
       };
       select.addEventListener("change", () => {
-        const current = displayPreferences[game.id];
-        displayPreferences[game.id] = { ...(current && typeof current === "object" ? current : {}), [option.key]: select.value };
-        try { localStorage.setItem(displayStorageKey, JSON.stringify(displayPreferences)); }
-        catch { showToast("Display options will only last for this visit; browser storage is unavailable."); }
+        saveDisplayChoice(game.id, option.key, select.value);
         updatePreview();
         for (const listener of displayChangeListeners.get(game.id) ?? []) listener();
       });
