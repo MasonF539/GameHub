@@ -389,3 +389,16 @@ Explicit host pause requests are delegated to the session even when lifecycle
 state is already paused. A game can distinguish a manual host pause from an
 automatic disconnect pause and preserve that intent after reconnection. Resume
 on an already-running game remains a no-op.
+
+
+Browser requests share one connection guard. A request made while disconnected
+returns a failed acknowledgement immediately instead of entering Socket.IO's
+send buffer; this includes game actions, chat, room controls, and pause requests.
+Gameplay keybind handlers do not run while disconnected. Local preference edits
+remain independent of transport availability.
+
+For launcher-discovered invites, the server observes the registration file once
+per second and broadcasts only changes to the validated address, including its
+removal. Connected clients cache that value for Copy Link. A configured
+GAMEHUB_PUBLIC_URL takes precedence and skips the file observer. The observer
+is removed when the HTTP server closes.

@@ -1,6 +1,6 @@
 import express from "express";
 import { randomBytes, randomInt } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { readFileSync, unwatchFile, watchFile } from "node:fs";
 import http from "http";
 import { tmpdir } from "node:os";
 import path from "path";
@@ -947,11 +947,13 @@ function finishActiveGame(
   }
 }
 
+const publicInviteUrlFile = path.join(tmpdir(), "gamehub-public-url");
+
 function getPublicInviteUrl(): string | null {
   let publicUrl = process.env.GAMEHUB_PUBLIC_URL?.trim() ?? "";
   if (!publicUrl) {
     try {
-      publicUrl = readFileSync(path.join(tmpdir(), "gamehub-public-url"), "utf8").trim();
+      publicUrl = readFileSync(publicInviteUrlFile, "utf8").trim();
     } catch { /* Local mode has no tunnel address. */ }
   }
   try {
@@ -961,6 +963,19 @@ function getPublicInviteUrl(): string | null {
     invite.hash = "";
     return invite.href;
   } catch { return null; }
+}
+
+// The launcher can register or clear a tunnel while local clients are connected.
+if (!process.env.GAMEHUB_PUBLIC_URL?.trim()) {
+  let previousPublicUrl = getPublicInviteUrl();
+  const publishPublicUrl = () => {
+    const publicUrl = getPublicInviteUrl();
+    if (publicUrl === previousPublicUrl) return;
+    previousPublicUrl = publicUrl;
+    io.emit("public-invite-url", publicUrl);
+  };
+  watchFile(publicInviteUrlFile, { interval: 1_000, persistent: false }, publishPublicUrl);
+  server.once("close", () => unwatchFile(publicInviteUrlFile, publishPublicUrl));
 }
 
 io.on("connection", (socket) => {

@@ -1,6 +1,6 @@
 # Current bug review
 
-Review date: 2026-10-25. Findings describe the current unpublished checkout.
+Review date: 2026-10-26. Findings describe the current unpublished checkout.
 
 ## Fixed: late room-entry responses replace a newer lobby
 
@@ -661,3 +661,72 @@ The Stop action always printed "GameHub has stopped", even when Compose failed
 and containers could still be running. It now checks Docker's exit code and
 reports failure before returning. Stubbed launcher tests cover success and
 failure without stopping any actual containers.
+
+
+## Cross-project starter review (2026-10-26)
+
+The game template and Loaded Roulette's inherited placeholder score race shared
+several bugs. Both now preserve points when a reconnect remaps the member ID,
+reject disconnected-player actions, and stop advertising scoring or accepting
+pause/resume after disposal. Browser clients reset the reused action button on
+mount and ignore replies after destruction, so an old failure cannot notify a
+replacement match. The example rule no longer claims that scoring uses turns.
+These fixes apply to the score-race scaffold, not the planned roulette gameplay.
+
+Both packages also installed SDK 1.0.1 as a runtime dependency. A packed consumer
+with GameHub's SDK prerelease reproduced nested SDK copies before the fix. They
+now declare a compatible peer range and keep 1.0.1 as a development dependency;
+the same packed-consumer check verifies shared resolution after the fix. Neither
+game has been added to GameHub's normal configuration.
+
+Verification: nine tests and type checks pass in each scaffold after a fresh
+standalone installation. A real Edge client running each game in an isolated
+GameHub server preserves guest scores across token reconnects, handles host
+pause/resume and scoring buttons, and exits without script errors. All 206
+GameHub root tests, nine SDK tests, and 95 Egyptian War tests pass. npm audit
+reports no known vulnerabilities in any of the four dependency lockfiles, and
+tracked Markdown relative links resolve in all four repositories.
+
+Template copying instructions now exclude .git so a new game does not inherit
+the template's repository history and remote. Loaded Roulette's shared theft
+rules now distinguish hand theft from Interception's future reward: an empty
+hand blocks hand theft, but does not make a future reward ineligible.
+
+Egyptian War's runtime and its install patch are unchanged in this pass. No
+packages were published during this review.
+
+
+## Additional pass: launcher transitions and offline requests (2026-10-26)
+
+Public mode could select an expired address from retained logs after a tunnel
+container restarted. It now obtains the current container start time and reads
+only logs from that run using [Compose logs --since](https://docs.docker.com/reference/cli/docker/compose/logs/).
+If container metadata is unavailable it does not fall back to an older address.
+It also restores the caller's prior GAMEHUB_TRUST_CLOUDFLARE_IP setting, whether
+unset, true, or false, including after a failed start. Sixteen isolated launcher
+tests cover Local/Stop plus Public startup and metadata success/failure without
+running Docker or touching the user's containers.
+
+Real Edge/Socket.IO checks confirmed that offline game actions, chat, kicks,
+and pause commands entered the send buffer. A focused lobby Lock button also
+queued an offline mutation when activated with Enter behind the reconnecting
+screen. All browser requests now use one sender that fails immediately while
+disconnected, and gameplay shortcuts do not fire offline. Nine client regressions
+cover game APIs, keyboard dispatch, lobby controls, and approval rollback. Real
+Edge checks now verify an empty send buffer for both game and lobby paths.
+
+The server previously sent the public invite address only on connection. Tabs
+already connected during tunnel registration or clearing retained a stale value.
+A registration-file observer now broadcasts validated changes to connected
+clients, unless a fixed environment URL is configured. An isolated integration
+test covers creation, replacement, and removal. A real Edge Copy Link check
+confirms public/local fallback updates on the same socket and room, with no
+per-click request. This pass does not verify a live Cloudflare tunnel.
+
+
+Additional-pass verification: full type checks, all 228 GameHub root tests, and
+all nine SDK tests pass. The root total includes 147 client tests, 37 live-server
+integration tests, and 16 mocked Windows launcher tests. Real Edge checks cover
+offline game APIs, focused lobby controls, and live invite-cache updates. The
+Egyptian War runtime/patch and the two scaffold runtimes were not changed again
+in this additional pass. No Docker daemon or live tunnel was used.

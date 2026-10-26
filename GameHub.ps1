@@ -121,13 +121,19 @@ function Start-PublicGameHub {
     Write-Host "Building GameHub and requesting a public tunnel..." -ForegroundColor Cyan
 
     # Behind the tunnel, rate limits should use each visitor's real address.
+    $previousTrustCloudflareIp = $env:GAMEHUB_TRUST_CLOUDFLARE_IP
     $env:GAMEHUB_TRUST_CLOUDFLARE_IP = "true"
 
     try {
         docker compose --profile public up --build --detach
     }
     finally {
-        Remove-Item Env:\GAMEHUB_TRUST_CLOUDFLARE_IP -ErrorAction SilentlyContinue
+        if ($null -eq $previousTrustCloudflareIp) {
+            Remove-Item Env:\GAMEHUB_TRUST_CLOUDFLARE_IP -ErrorAction SilentlyContinue
+        }
+        else {
+            $env:GAMEHUB_TRUST_CLOUDFLARE_IP = $previousTrustCloudflareIp
+        }
     }
 
     if ($LASTEXITCODE -ne 0) {
@@ -149,12 +155,20 @@ function Start-PublicGameHub {
     $publicUrl = $null
     Set-GameHubPublicUrl | Out-Null
 
+    # Restarted containers retain older logs; ignore addresses from prior runs.
+    $tunnelStartedAt = $null
+    $tunnelContainerId = docker compose --profile public ps --quiet tunnel
+    if ($LASTEXITCODE -eq 0 -and $tunnelContainerId) {
+        $tunnelStartedAt = docker inspect --format '{{.State.StartedAt}}' $tunnelContainerId
+        if ($LASTEXITCODE -ne 0) { $tunnelStartedAt = $null }
+    }
+
     # Resolve the tunnel before opening the browser. Repeated Docker CLI polls
     # can briefly contend with desktop window activation on Windows.
-    for ($attempt = 1; $attempt -le 20; $attempt += 1) {
+    for ($attempt = 1; $attempt -le 20 -and $tunnelStartedAt; $attempt += 1) {
         Start-Sleep -Seconds 2
 
-        $tunnelLogs = docker compose logs --no-color --tail 100 tunnel 2>&1 |
+        $tunnelLogs = docker compose logs --no-color --since $tunnelStartedAt --tail 100 tunnel 2>&1 |
             Out-String
 
         $urlMatches = [regex]::Matches(

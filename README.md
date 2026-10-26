@@ -117,7 +117,9 @@ The complete public address is copied to the Windows clipboard and verified befo
 
 Public mode also gives the detected tunnel address to the server. The host can
 stay on localhost; the lobby's **Copy link** button uses the public address for
-invites. Without a registered public address, it uses the current page address.
+invites. Connected tabs receive address changes automatically when the server
+registration is updated or cleared; copying a link makes no additional server
+request. Without a registered public address, it uses the current page address.
 
 ## Manual Docker commands
 
@@ -244,6 +246,7 @@ The resulting `node_modules` folder is excluded from Git.
 
 - Rooms are stored in memory and disappear when the server stops.
 - Active-game reconnect recovery is temporary and remains in memory only.
+- While disconnected, room and game requests fail immediately instead of queuing for replay; gameplay shortcuts wait for reconnection.
 - Quick Tunnels have no uptime guarantee.
 - The public address changes when the tunnel restarts.
 - Egyptian War is currently the only playable game.

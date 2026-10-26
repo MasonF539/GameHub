@@ -78,7 +78,7 @@ function createClient({ prefersReducedMotion = false, mobile = false, fullscreen
       })
     }
   };
-  global.io = () => ({
+  const clientSocket = {
     connected: true,
     on(event, handler) {
       handlers.set(event, handler);
@@ -92,7 +92,8 @@ function createClient({ prefersReducedMotion = false, mobile = false, fullscreen
         respond({ success: true, sessions: sessions.filter(item => data.tokens.includes(item.resumeToken)) });
       }
     }
-  });
+  };
+  global.io = () => clientSocket;
 
   global.GameHubRegisterGameClientModule("example-game", {
     mount(context) {
@@ -134,6 +135,7 @@ function createClient({ prefersReducedMotion = false, mobile = false, fullscreen
 
   return {
     close,
+    socket: clientSocket,
     emitted,
     handlers,
     playedEffects,
@@ -2420,3 +2422,78 @@ test("a restored locked-room snapshot immediately shows the confirmed lock state
     assert.equal(view.emitted.find(item => item.event === "set-room-locked").data.isLocked, false);
   } finally { view.close(); }
 });
+
+
+for (const method of ["submitAction", "sendChat", "removeMember", "requestPause"]) {
+  test(`disconnected game ${method} fails immediately without buffering a request`, async () => {
+    const view = createClient();
+    try {
+      view.handlers.get("available-games")([game()]);
+      view.handlers.get("room-resumed")({ roomCode: "ABC123", playerName: "Host", isHost: true,
+        role: "player", selectedGameId: "example-game", gameSettings: {}, activeGameId: "example-game", isLocked: false });
+      const context = view.gameClientContexts.at(-1);
+      view.socket.connected = false;
+      view.handlers.get("disconnect")();
+      const before = view.emitted.length;
+      const pending = context[method](method === "submitAction" ? { type: "advance" } : method === "requestPause" ? true : "test");
+      const requests = view.emitted.slice(before);
+      // Settle an accidentally emitted request as well, so failure never hangs the test.
+      requests.forEach(request => request.respond?.({ success: true }));
+      const result = await pending;
+      assert.deepEqual(requests, []);
+      assert.equal(result.success, false);
+      assert.match(result.message, /reconnect/i);
+    } finally { view.close(); }
+  });
+}
+
+test("game shortcuts do not fire while disconnected", () => {
+  const view = createClient();
+  try {
+    view.handlers.get("available-games")([game({ keybinds: [{ id: "advance", label: "Advance", defaultKey: "KeyE" }] })]);
+    view.handlers.get("room-resumed")({ roomCode: "ABC123", isHost: true, role: "player",
+      selectedGameId: "example-game", gameSettings: {}, activeGameId: "example-game", isLocked: false });
+    let calls = 0;
+    view.gameClientContexts.at(-1).input.onAction("advance", () => calls++);
+    view.socket.connected = false;
+    view.handlers.get("disconnect")();
+    document.body.dispatchEvent(new window.KeyboardEvent("keydown", { code: "KeyE", bubbles: true, cancelable: true }));
+    assert.equal(calls, 0);
+    view.socket.connected = true;
+    document.body.dispatchEvent(new window.KeyboardEvent("keydown", { code: "KeyE", bubbles: true, cancelable: true }));
+    assert.equal(calls, 1);
+  } finally { view.close(); }
+});
+
+
+for (const action of ["lock", "kick", "transfer", "approval"]) {
+  test(`offline lobby ${action} fails without queuing a room change`, () => {
+    const view = createClient();
+    try {
+      view.handlers.get("available-games")([game()]);
+      view.handlers.get("room-resumed")({ roomCode: "ABC123", isHost: true, role: "player",
+        selectedGameId: "example-game", gameSettings: {}, activeGameId: null, isLocked: false });
+      view.handlers.get("player-list")([
+        { id: "host", name: "Host", avatar: "H", isHost: true, isConnected: true },
+        { id: "guest", name: "Guest", avatar: "G", isHost: false, isConnected: true }
+      ]);
+      view.socket.connected = false;
+      view.handlers.get("disconnect")();
+      const before = view.emitted.length;
+      const toasts = view.getToastShowCount();
+      if (action === "approval") {
+        const input = document.querySelector("#require-join-approval");
+        input.checked = true;
+        input.dispatchEvent(new window.Event("change", { bubbles: true }));
+        assert.equal(input.checked, false);
+      } else {
+        const selector = action === "lock" ? "#toggle-room-lock"
+          : action === "kick" ? '#player-list button[aria-label="Kick Guest"]'
+          : '#player-list button[aria-label="Make Guest the host"]';
+        document.querySelector(selector).click();
+      }
+      assert.equal(view.emitted.length, before);
+      assert.equal(view.getToastShowCount(), toasts + 1);
+    } finally { view.close(); }
+  });
+}

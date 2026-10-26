@@ -1,5 +1,13 @@
 const socket = io();
 
+function emitRequest(event, data, respond) {
+  if (!socket.connected) {
+    respond?.({ success: false, message: "Connection lost. Wait for reconnection." });
+    return;
+  }
+  socket.emit(event, data, respond);
+}
+
 const connectionStatus = document.querySelector("#connection-status");
 const gameplayConnectionStatus =
   document.querySelector("#gameplay-connection-status");
@@ -48,7 +56,7 @@ const gameClientHost = new window.GameHubGameClientHost({
         return;
       }
 
-      socket.emit(
+      emitRequest(
         "game-action",
         { roomCode: currentRoomCode, gameId, action },
         resolve
@@ -60,14 +68,14 @@ const gameClientHost = new window.GameHubGameClientHost({
         resolve({ success: false, message: "You are not in a room." });
         return;
       }
-      socket.emit("game-chat-send", { roomCode: currentRoomCode, message }, resolve);
+      emitRequest("game-chat-send", { roomCode: currentRoomCode, message }, resolve);
     }),
     removeMember: (memberId) => new Promise((resolve) => {
       if (currentRoomCode === null) {
         resolve({ success: false, message: "You are not in a room." });
         return;
       }
-      socket.emit(
+      emitRequest(
         "kick-player",
         { roomCode: currentRoomCode, playerId: memberId },
         resolve
@@ -686,6 +694,7 @@ document.addEventListener("keydown", (event) => {
 
   if (
     currentActiveGameId === null ||
+    !socket.connected ||
     isCurrentUserSpectator ||
     document.querySelector(".modal.show, .modal[aria-modal='true']")
   ) {
@@ -882,7 +891,7 @@ async function offerSavedSession() {
     heldLocks = new Set((snapshot?.held ?? []).map(lock => lock.name));
   } catch { /* Server connection status remains authoritative when locks are unavailable. */ }
   if (generation !== rejoinCheckGeneration) return;
-  socket.emit("check-resume-sessions", { tokens: saved.map(item => item.resumeToken) }, response => {
+  emitRequest("check-resume-sessions", { tokens: saved.map(item => item.resumeToken) }, response => {
     if (generation !== rejoinCheckGeneration) return;
     rejoinCheckPending = false;
     if (!response.success || !Array.isArray(response.sessions) ||
@@ -933,7 +942,7 @@ newPlayerButton.addEventListener("click", () => {
   setRoomRequestPending(true);
   useResumeClaim(session, () => {
     if (generation !== resumeRequestGeneration || currentRoomCode !== null) return;
-    socket.emit("release-saved-player", { resumeToken: session.resumeToken }, response => {
+    emitRequest("release-saved-player", { resumeToken: session.resumeToken }, response => {
       if (generation !== resumeRequestGeneration || currentRoomCode !== null) return;
       releaseResumeClaim?.();
       setRoomRequestPending(false);
@@ -970,7 +979,7 @@ function requestGamePause(isPaused) {
       return;
     }
 
-    socket.emit(
+    emitRequest(
       "toggle-game-pause",
       { roomCode: currentRoomCode, isPaused },
       resolve
@@ -1177,7 +1186,7 @@ function createKickPlayerButton(player, className) {
   kickButton.setAttribute("aria-label", `Kick ${player.name}`);
   kickButton.addEventListener("click", () => {
     const generation = lifecycleGeneration;
-    socket.emit(
+    emitRequest(
       "kick-player",
       {
         roomCode: currentRoomCode,
@@ -1566,7 +1575,7 @@ function requestGameSelection(gameId) {
   isGameSelectionPending = true;
   gamePickerGrid.classList.add("is-pending");
 
-  socket.emit(
+  emitRequest(
     "select-game",
     {
       roomCode: currentRoomCode,
@@ -1831,7 +1840,7 @@ toggleRoomLockButton.addEventListener("click", () => {
   }
 
   const generation = lifecycleGeneration;
-  socket.emit(
+  emitRequest(
     "set-room-locked",
     {
       roomCode: currentRoomCode,
@@ -1858,7 +1867,7 @@ function resumeSavedRoom(roomCode, resumeToken, playerName = activeResumeSession
     activeResumeSession = session;
     playerNameInput.value = playerName;
     writeResumeStorage("sessionStorage", tabSessionStorageKey, session);
-    socket.emit("resume-room", { resumeToken, ...(onlyDisconnected ? { onlyDisconnected: true } : {}) }, response => {
+    emitRequest("resume-room", { resumeToken, ...(onlyDisconnected ? { onlyDisconnected: true } : {}) }, response => {
       if (generation !== resumeRequestGeneration) return;
       resumeRequestPending = false;
       if (response.success) { stopReconnecting(); return; }
@@ -2133,7 +2142,7 @@ socket.on("player-list", (players) => {
         hostButton.setAttribute("aria-label", `Make ${player.name} the host`);
         hostButton.onclick = () => {
           const generation = lifecycleGeneration;
-          socket.emit("transfer-host", { memberId: player.id }, (result) => {
+          emitRequest("transfer-host", { memberId: player.id }, (result) => {
             if (generation === lifecycleGeneration && !result.success) showToast(result.message);
           });
         };
@@ -2324,7 +2333,7 @@ function leaveActiveGame(confirmButton, modalElement) {
   const wasSpectator = isCurrentUserSpectator;
   const generation = lifecycleGeneration;
   confirmButton.disabled = true;
-  socket.emit(
+  emitRequest(
     "leave-game",
     { roomCode: currentRoomCode },
     (response) => {
@@ -2362,7 +2371,7 @@ leaveLobbyButton.addEventListener("click", () => {
   const generation = lifecycleGeneration;
   const roomCode = currentRoomCode;
   leaveLobbyButton.disabled = true;
-  socket.emit(
+  emitRequest(
     "leave-lobby",
     { roomCode: currentRoomCode },
     (response) => {
@@ -2395,7 +2404,7 @@ confirmCloseLobbyButton.addEventListener("click", () => {
 
   const generation = lifecycleGeneration;
   confirmCloseLobbyButton.disabled = true;
-  socket.emit(
+  emitRequest(
     "close-room",
     { roomCode: currentRoomCode },
     (response) => {
@@ -2420,7 +2429,7 @@ confirmExitGameButton.addEventListener("click", () => {
 
   const generation = lifecycleGeneration;
   confirmExitGameButton.disabled = true;
-  socket.emit(
+  emitRequest(
     "close-game-to-lobby",
     { roomCode: currentRoomCode },
     (response) => {
@@ -2481,7 +2490,7 @@ saveGameSettingsButton.addEventListener("click", () => {
         : input.checked;
   }
 
-  socket.emit(
+  emitRequest(
     "update-game-settings",
     {
       roomCode: request.roomCode,
@@ -2519,7 +2528,7 @@ createRoomButton.addEventListener("click", () => {
   setRoomRequestPending(true);
   hasReceivedPlayerList = false;
 
-  socket.emit(
+  emitRequest(
     "create-room",
     {
       playerName,
@@ -2550,7 +2559,7 @@ startGameButton.addEventListener("click", () => {
     return;
   }
 
-  socket.emit(
+  emitRequest(
     "start-game",
     {
       roomCode: currentRoomCode,
@@ -2575,7 +2584,7 @@ spectateGameButton.addEventListener("click", () => {
 
   const generation = lifecycleGeneration;
   spectateGameButton.disabled = true;
-  socket.emit(
+  emitRequest(
     "spectate-game",
     { roomCode: currentRoomCode },
     (response) => {
@@ -2596,7 +2605,7 @@ spectateGameButton.addEventListener("click", () => {
 joinRoomButton.addEventListener("click", () => {
   if (joinRoomButton.dataset.awaitingApproval) {
     const request = pendingEntryRequest;
-    socket.emit("cancel-join-request", {}, () => {
+    emitRequest("cancel-join-request", {}, () => {
       if (pendingEntryRequest !== request || currentRoomCode !== null) return;
       pendingEntryRequest = null;
       setRoomRequestPending(false);
@@ -2616,7 +2625,7 @@ joinRoomButton.addEventListener("click", () => {
   setRoomRequestPending(true);
   hasReceivedPlayerList = false;
 
-  socket.emit(
+  emitRequest(
     "join-room",
     {
       roomCode,
@@ -2705,7 +2714,7 @@ socket.on("join-requests", (requests) => {
       button.setAttribute("aria-label", button.textContent + " " + request.name);
       button.addEventListener("click", () => {
         const generation = lifecycleGeneration;
-        socket.emit("review-join-request", { memberId: request.id, accept }, (response) => {
+        emitRequest("review-join-request", { memberId: request.id, accept }, (response) => {
           if (generation !== lifecycleGeneration) return;
           if (!response.success) showToast(response.message);
         });
@@ -2721,7 +2730,7 @@ document.querySelector("#review-joiners").addEventListener("click", () => {
 });
 document.querySelector("#require-join-approval").addEventListener("change", (event) => {
   const generation = lifecycleGeneration;
-  socket.emit("set-room-approval", { enabled: event.target.checked }, (response) => {
+  emitRequest("set-room-approval", { enabled: event.target.checked }, (response) => {
     if (generation !== lifecycleGeneration || !isCurrentUserHost) return;
     if (!response.success) { event.target.checked = roomRequiresJoinApproval; showToast(response.message); }
   });
@@ -2995,7 +3004,7 @@ function updateHostTransferOptions() {
 document.querySelector("#transfer-host").onclick = () => {
   const generation = lifecycleGeneration;
   const memberId = document.querySelector("#host-transfer-player").value;
-  if (memberId) socket.emit("transfer-host", { memberId }, result => {
+  if (memberId) emitRequest("transfer-host", { memberId }, result => {
     if (generation === lifecycleGeneration && !result.success) showToast(result.message);
   });
 };
@@ -3074,7 +3083,7 @@ function resetRoomScoreboard(gameId) {
         return;
       }
       button.disabled = true;
-      socket.emit("reset-room-scoreboard", { gameId }, result => {
+      emitRequest("reset-room-scoreboard", { gameId }, result => {
         if (finished) return;
         finish(result);
         hide();

@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { fork, type ChildProcess } from "node:child_process";
 import path from "node:path";
+import { mkdtempSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import test from "node:test";
 import { io as createClient, type Socket } from "socket.io-client";
 
@@ -1364,5 +1366,35 @@ test("explicit host pause during a disconnect pause survives the player's return
   } finally {
     host.disconnect(); guest.disconnect(); restored?.disconnect();
     await stopServer(server);
+  }
+});
+
+
+test("connected clients receive public invite updates without reconnecting", { timeout: 15_000 }, async () => {
+  const temporaryParent = tmpdir();
+  const directory = mkdtempSync(path.join(temporaryParent, "gamehub-invite-update-"));
+  let server: ChildProcess | undefined;
+  let client: Socket | undefined;
+  try {
+    const started = await startServer({ TEMP: directory, TMP: directory, TMPDIR: directory, GAMEHUB_PUBLIC_URL: "" });
+    server = started.server;
+    client = createClient(started.url, { autoConnect: false, transports: ["websocket"], reconnection: false });
+    const initial = waitForEvent<string | null>(client, "public-invite-url");
+    client.connect();
+    assert.equal(await initial, null);
+    const file = path.join(directory, "gamehub-public-url");
+    for (const address of ["https://first.trycloudflare.com/", "https://second.trycloudflare.com/"]) {
+      const changed: Promise<string | null> = waitForEvent<string | null>(client, "public-invite-url");
+      writeFileSync(file, address);
+      assert.equal(await changed, address);
+    }
+    const removed = waitForEvent<string | null>(client, "public-invite-url");
+    unlinkSync(file);
+    assert.equal(await removed, null);
+  } finally {
+    client?.disconnect();
+    if (server) await stopServer(server);
+    assert.equal(path.dirname(directory), temporaryParent);
+    rmSync(directory, { recursive: true, force: true });
   }
 });
