@@ -1261,3 +1261,108 @@ test("unknown and revoked reconnect tokens are marked unavailable without miscla
     assert.equal(revoked.sessionUnavailable, true);
   } finally { host.disconnect(); guest.disconnect(); visitor.disconnect(); await stopServer(server); }
 });
+
+
+test("transport recovery preserves current members and rejects revoked room subscriptions", { timeout: 20_000 }, async () => {
+  const { server, url } = await startServer();
+  const host = await connect(url), guest = await connect(url);
+  try {
+    const { roomCode } = await emitAck(host, "create-room", { playerName: "Host", avatar: catAvatar });
+    const joined = await emitAck(guest, "join-room", { roomCode, playerName: "Guest", avatar: dogAvatar });
+    const originalId = guest.id;
+    const drop = () => {
+      const disconnected = waitForEvent<Array<{ id: string; isConnected: boolean }>>(host, "player-list",
+        players => players.some(player => player.id === originalId && !player.isConnected));
+      guest.io.engine.close();
+      return disconnected;
+    };
+    await drop();
+    await emitAck(host, "set-room-locked", { roomCode, isLocked: true });
+    let connected = waitForEvent(guest, "connect");
+    const restoredToken = waitForEvent<string>(guest, "room-resume-token");
+    guest.connect();
+    await connected;
+    assert.equal(guest.recovered, true);
+    assert.equal(guest.id, originalId);
+    const token = await restoredToken;
+    assert.ok(token);
+    assert.notEqual(token, joined.resumeToken);
+    assert.equal((await emitAck(guest, "resume-room", { resumeToken: token })).success, true);
+
+    await drop();
+    assert.equal((await emitAck(host, "kick-player", { roomCode, playerId: originalId })).success, true);
+    await emitAck(host, "set-room-locked", { roomCode, isLocked: false });
+    const locks: boolean[] = [];
+    guest.on("room-lock-changed", ({ isLocked }) => { locks.push(isLocked); });
+    connected = waitForEvent(guest, "connect");
+    guest.connect();
+    await connected;
+    assert.equal(guest.recovered, false);
+    assert.notEqual(guest.id, originalId);
+    assert.deepEqual(locks, [], "revoked room packets must not be replayed");
+    assert.equal((await emitAck(guest, "resume-room", { resumeToken: token })).sessionUnavailable, true);
+    const created = await emitAck(guest, "create-room", { playerName: "New host", avatar: dogAvatar });
+    assert.equal(created.success, true);
+    await emitAck(host, "set-room-locked", { roomCode, isLocked: true });
+    // This socket's own update and acknowledgement follow any leaked old-room update.
+    await emitAck(guest, "set-room-locked", { roomCode: created.roomCode, isLocked: false });
+    assert.deepEqual(locks, [false]);
+  } finally { host.disconnect(); guest.disconnect(); await stopServer(server); }
+});
+
+
+test("chat cooldown follows the same player through token restoration", { timeout: 15_000 }, async () => {
+  const { server, url } = await startServer();
+  const host = await connect(url), guest = await connect(url);
+  let restored: Socket | undefined;
+  try {
+    const { roomCode } = await emitAck(host, "create-room", { playerName: "Host", avatar: catAvatar });
+    const joined = await emitAck(guest, "join-room", { roomCode, playerName: "Guest", avatar: dogAvatar });
+    await emitAck(host, "select-game", { roomCode, gameId: fixtureGameId });
+    await emitAck(host, "start-game", { roomCode });
+    assert.equal((await emitAck(guest, "game-chat-send", { roomCode, message: "First" })).success, true);
+    assert.equal((await emitAck(guest, "game-chat-send", { roomCode, message: "Too soon" })).success, false);
+    guest.disconnect();
+    restored = await connect(url);
+    assert.equal((await emitAck(restored, "resume-room", { resumeToken: joined.resumeToken })).success, true);
+    const limited = await emitAck(restored, "game-chat-send", { roomCode, message: "Still too soon" });
+    assert.equal(limited.success, false);
+    assert.match(limited.message ?? "", /wait before sending/);
+    assert.equal((await emitAck(host, "game-chat-send", { roomCode, message: "Another player" })).success, true);
+    await new Promise(resolve => setTimeout(resolve, 760));
+    assert.equal((await emitAck(restored, "game-chat-send", { roomCode, message: "After the wait" })).success, true);
+  } finally { host.disconnect(); guest.disconnect(); restored?.disconnect(); await stopServer(server); }
+});
+
+
+test("explicit host pause during a disconnect pause survives the player's return", { timeout: 15_000 }, async () => {
+  const { server, url } = await startServer({ GAMEHUB_GAME_PACKAGES: "@masonf539/egyptian-war" });
+  const host = await connect(url), guest = await connect(url);
+  let restored: Socket | undefined;
+  let lastPaused: boolean | undefined;
+  host.on("game-state", (envelope: { state: { isPaused: boolean } }) => {
+    lastPaused = envelope.state.isPaused;
+  });
+  try {
+    const { roomCode } = await emitAck(host, "create-room", { playerName: "Host", avatar: "\u{1F431}" });
+    const joined = await emitAck(guest, "join-room", { roomCode, playerName: "Guest", avatar: "\u{1F436}" });
+    assert.equal((await emitAck(host, "select-game", { roomCode, gameId: "egyptian-war" })).success, true);
+    assert.equal((await emitAck(host, "start-game", { roomCode })).success, true);
+    const paused = waitForEvent<{ state: { isPaused: boolean } }>(host, "game-state", envelope => envelope.state.isPaused);
+    guest.disconnect();
+    await paused;
+    assert.equal((await emitAck(host, "toggle-game-pause", { roomCode, isPaused: true })).success, true);
+    restored = await connect(url);
+    const connected = waitForEvent<Array<{ name: string; isConnected: boolean }>>(host, "player-list", list => list.some(member => member.name === "Guest" && member.isConnected));
+    assert.equal((await emitAck(restored, "resume-room", { resumeToken: joined.resumeToken })).success, true);
+    await connected;
+    // Flush earlier room state events through an acknowledgement on the host socket.
+    await emitAck(host, "set-room-locked", { roomCode, isLocked: false });
+    assert.equal(lastPaused, true, "reconnecting must not undo the host's explicit pause");
+    assert.equal((await emitAck(host, "toggle-game-pause", { roomCode, isPaused: false })).success, true);
+    assert.equal(lastPaused, false);
+  } finally {
+    host.disconnect(); guest.disconnect(); restored?.disconnect();
+    await stopServer(server);
+  }
+});

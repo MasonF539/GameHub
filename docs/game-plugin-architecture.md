@@ -234,6 +234,15 @@ keeps authoritative sessions from retaining a player the room has removed.
 
 ## Rejoining and browser storage
 
+Transport recovery is authorized against the current socket-to-room membership
+map before Socket.IO restores rooms or replays missed events. Removed or replaced
+memberships cannot recover a former room subscription; legitimate members retain
+transport recovery, and browser token restoration remains the fallback.
+Authorized transport recovery sends a fresh reconnect token even if the original
+room-entry acknowledgement was lost, preserving restoration after a later refresh.
+The per-member chat cooldown also survives socket replacement; reconnecting does
+not reset its timer or delay another member's chat.
+
 Each tab keeps its own player reconnect token in session storage. Refreshes and
 brief drops restore that player automatically while a Reconnecting screen blocks
 accidental input. After ten seconds without restoration, the client returns to
@@ -256,7 +265,9 @@ identity. Old browser-wide tokens migrate to the same validated offer.
 
 The rejoin modal offers only the most recently seen eligible disconnected player,
 respects explicit room invites, and normally appears once per page visit. An
-offer interrupted by disconnection is checked again after connection recovery. Its footer offers
+offer interrupted by disconnection is checked again after connection recovery.
+If another dialog is open or closing, eligibility is checked again after that
+dialog finishes closing so the offer does not overlap it. Its footer offers
 Rejoin and Join as a new player. Rejoin uses the saved token and bypasses join approval;
 manual rejoining rechecks that the old player is still disconnected. Names alone
 never authorize claiming a seat. Switching devices without the token has no
@@ -341,7 +352,9 @@ sequential-write guarantee and simultaneous-write limit as keybinds.
 Numeric rule schemas follow the host's integer validation. Select choices and
 defaults are integers; range bounds and steps are integers, and the default must
 be in bounds on a step starting at min. Invalid schemas fail registry validation
-rather than producing a settings editor whose default cannot be saved.
+rather than producing a settings editor whose default cannot be saved. Typed
+range values round to a valid step within the bounds, including when max falls
+between steps.
 
 Leaving or exiting through Settings waits for its hidden event before opening
 the next confirmation, preserving Bootstrap's backdrop and body scroll lock.
@@ -370,3 +383,9 @@ obsolete match countdowns after they stop receiving game lifecycle events.
 Join-approval request failures restore the server-confirmed policy rather than
 inverting a possibly newer checkbox value. Replies from an obsolete room
 lifecycle or after loss of host ownership cannot change the current controls.
+
+
+Explicit host pause requests are delegated to the session even when lifecycle
+state is already paused. A game can distinguish a manual host pause from an
+automatic disconnect pause and preserve that intent after reconnection. Resume
+on an already-running game remains a no-op.

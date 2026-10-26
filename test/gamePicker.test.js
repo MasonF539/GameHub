@@ -1146,19 +1146,23 @@ test("presets stay in this browser, normalize old values, and apply only through
   } finally { view.close(); }
 });
 
-test("Space on a panel button activates that control without triggering a gameplay slap", () => {
-  const view = createClient(); let slaps = 0;
-  try {
-    view.handlers.get("available-games")([game({ keybinds: [{ id: "slap", label: "Slap", defaultKey: "Space" }] })]);
-    view.handlers.get("room-resumed")({ roomCode: "ABC123", isHost: false, selectedGameId: "example-game", gameSettings: {},
-      activeGameId: "example-game", role: "player", isLocked: false, isPaused: false, chatEnabled: true });
-    view.gameClientContexts[0].input.onAction("slap", () => slaps++);
-    document.querySelector("#app-settings-button").dispatchEvent(new window.KeyboardEvent("keydown", { code: "Space", bubbles: true }));
-    assert.equal(slaps, 0);
-    document.body.dispatchEvent(new window.KeyboardEvent("keydown", { code: "Space", bubbles: true }));
-    assert.equal(slaps, 1);
-  } finally { view.close(); }
-});
+for (const code of ["Space", "Enter", "NumpadEnter"]) {
+  test(`${code} on a button preserves native activation without triggering a gameplay action`, () => {
+    const view = createClient(); let actions = 0;
+    try {
+      view.handlers.get("available-games")([game({ keybinds: [{ id: "primary", label: "Primary", defaultKey: code }] })]);
+      view.handlers.get("room-resumed")({ roomCode: "ABC123", isHost: false, selectedGameId: "example-game", gameSettings: {},
+        activeGameId: "example-game", role: "player", isLocked: false, isPaused: false, chatEnabled: true });
+      view.gameClientContexts[0].input.onAction("primary", () => actions++);
+      const event = new window.KeyboardEvent("keydown", { code, bubbles: true, cancelable: true });
+      document.querySelector("#app-settings-button").dispatchEvent(event);
+      assert.equal(actions, 0);
+      assert.equal(event.defaultPrevented, false, "the browser can activate the focused button");
+      document.body.dispatchEvent(new window.KeyboardEvent("keydown", { code, bubbles: true }));
+      assert.equal(actions, 1, "the gameplay shortcut still works away from buttons");
+    } finally { view.close(); }
+  });
+}
 
 
 test("lobby Host buttons sit before Kick and only target eligible connected players", () => {
@@ -2240,5 +2244,179 @@ test("Settings pause failures only notify in the requesting game lifecycle", asy
       .respond({ success: false, message: "Current pause failure" });
     await Promise.resolve();
     assert.equal(view.getToastShowCount(), notices + 1);
+  } finally { view.close(); }
+});
+
+
+test("number settings round to a valid step without exceeding the upper bound", () => {
+  for (const [max, expected] of [[14, 10], [15, 15]]) {
+    const view = createClient();
+    try {
+      const definition = game({ settings: [{ type: "number", control: "range", key: "seconds",
+        label: "Wait", description: "Seconds", defaultValue: 5, min: 5, max, step: 5 }] });
+      view.handlers.get("available-games")([definition]);
+      view.handlers.get("room-resumed")({ roomCode: "ABC123", isHost: true, role: "player",
+        selectedGameId: definition.id, gameSettings: { seconds: 5 }, activeGameId: null });
+      view.handlers.get("game-selected")({ gameId: definition.id, settings: { seconds: 5 } });
+      const input = document.querySelector("#setting-seconds");
+      input.value = "14";
+      input.dispatchEvent(new window.Event("change"));
+      assert.equal(Number(input.value), expected);
+      assert.equal(document.querySelector("#settings-modal-body input[type=range]").value, String(expected));
+      document.querySelector("#save-game-settings").click();
+      const save = view.emitted.filter(item => item.event === "update-game-settings").at(-1);
+      assert.equal(save.data.settings.seconds, expected);
+    } finally { view.close(); }
+  }
+});
+
+
+test("a delayed rejoin offer waits until another modal finishes closing", async () => {
+  let releaseQuery;
+  let delay = true;
+  const view = createClient({ savedSessions: [savedPlayer("Guest", "guest")], locks: {
+    query: () => delay ? new Promise(resolve => { releaseQuery = resolve; }) : Promise.resolve({ held: [] })
+  } });
+  try {
+    const settings = document.querySelector("#app-settings-modal");
+    settings.classList.add("show");
+    settings.setAttribute("aria-modal", "true");
+    releaseQuery({ held: [] });
+    delay = false;
+    await settleRejoin();
+    assert.equal(view.getModalShowCount(), 0);
+    settings.classList.remove("show");
+    window.dispatchEvent(new window.StorageEvent("storage", { key: "gamehub:saved-sessions" }));
+    await settleRejoin();
+    assert.equal(view.getModalShowCount(), 0, "a closing modal still owns its backdrop");
+    settings.removeAttribute("aria-modal");
+    settings.dispatchEvent(new window.Event("hidden.bs.modal", { bubbles: true }));
+    await settleRejoin();
+    assert.equal(view.getModalShowCount(), 1);
+    document.querySelector("#rejoin-room").click();
+    assert.equal(view.emitted.filter(item => item.event === "resume-room").at(-1).data.resumeToken, "guest");
+  } finally { view.close(); }
+});
+
+
+test("gameplay shortcuts wait until a closing modal releases its modal state", () => {
+  const view = createClient(); let actions = 0;
+  try {
+    view.handlers.get("available-games")([game({ keybinds: [{ id: "primary", label: "Primary", defaultKey: "KeyR" }] })]);
+    view.handlers.get("room-resumed")({ roomCode: "ABC123", isHost: false, selectedGameId: "example-game", gameSettings: {},
+      activeGameId: "example-game", role: "player", isLocked: false, isPaused: false, chatEnabled: true });
+    view.gameClientContexts[0].input.onAction("primary", () => actions++);
+    const modal = document.querySelector("#app-settings-modal");
+    modal.setAttribute("aria-modal", "true");
+    document.body.dispatchEvent(new window.KeyboardEvent("keydown", { code: "KeyR", bubbles: true }));
+    assert.equal(actions, 0, "closing modal still blocks underlying gameplay");
+    modal.removeAttribute("aria-modal");
+    document.body.dispatchEvent(new window.KeyboardEvent("keydown", { code: "KeyR", bubbles: true }));
+    assert.equal(actions, 1, "gameplay resumes after modal cleanup");
+  } finally { view.close(); }
+});
+
+
+test("Settings shortcut cannot open over another modal's closing transition", () => {
+  const view = createClient();
+  try {
+    const modal = document.querySelector("#leave-game-modal");
+    modal.setAttribute("aria-modal", "true");
+    const before = view.getModalShowCount();
+    document.body.dispatchEvent(new window.KeyboardEvent("keydown", { code: "Escape", bubbles: true }));
+    assert.equal(view.getModalShowCount(), before, "Settings stays closed until the other dialog releases modal state");
+    modal.removeAttribute("aria-modal");
+    document.body.dispatchEvent(new window.KeyboardEvent("keydown", { code: "Escape", bubbles: true }));
+    assert.equal(view.getModalShowCount(), before + 1);
+  } finally { view.close(); }
+});
+
+
+for (const code of ["Space", "Enter", "NumpadEnter"]) {
+  test(`Settings rebound to ${code} preserves focused button activation`, () => {
+    const view = createClient();
+    try {
+      document.querySelector("#keybind-body-general .game-keybind-button").click();
+      document.dispatchEvent(new window.KeyboardEvent("keydown", { code, bubbles: true }));
+      const before = view.getModalShowCount();
+      const event = new window.KeyboardEvent("keydown", { code, bubbles: true, cancelable: true });
+      document.querySelector("#create-room").dispatchEvent(event);
+      assert.equal(view.getModalShowCount(), before, "Settings must not consume a button activation key");
+      assert.equal(event.defaultPrevented, false);
+      document.body.dispatchEvent(new window.KeyboardEvent("keydown", { code, bubbles: true }));
+      assert.equal(view.getModalShowCount(), before + 1, "the rebound Settings shortcut still works elsewhere");
+    } finally { view.close(); }
+  });
+}
+
+
+for (const stale of [false, true]) {
+  test(`${stale ? "obsolete" : "current"} lobby kick replies ${stale ? "stay silent after a room change" : "still notify"}`, () => {
+    const view = createClient();
+    try {
+      document.querySelector("#create-room").click();
+      view.emitted.find(item => item.event === "create-room").respond({ success: true, roomCode: "ABC123", resumeToken: "old-token" });
+      view.handlers.get("player-list")([
+        { id: "host", name: "Host", avatar: "H", isHost: true, isConnected: true },
+        { id: "guest", name: "Guest", avatar: "G", isHost: false, isConnected: true }
+      ]);
+      document.querySelector('#player-list button[aria-label="Kick Guest"]').click();
+      const request = view.emitted.find(item => item.event === "kick-player");
+      if (stale) {
+        view.handlers.get("room-closed")();
+        document.querySelector("#create-room").click();
+        view.emitted.filter(item => item.event === "create-room").at(-1).respond({ success: true, roomCode: "NEW123", resumeToken: "new-token" });
+      }
+      const before = view.getToastShowCount();
+      request.respond({ success: false, message: "The old target is no longer in this room." });
+      assert.equal(view.getToastShowCount(), before + (stale ? 0 : 1));
+    } finally { view.close(); }
+  });
+}
+
+
+for (const action of ["lock", "lobby-transfer", "settings-transfer", "join-review"]) {
+  for (const stale of [false, true]) {
+    test(`${stale ? "obsolete" : "current"} ${action} replies ${stale ? "stay silent after a room change" : "still report failures"}`, () => {
+      const view = createClient();
+      try {
+        document.querySelector("#create-room").click();
+        view.emitted.find(item => item.event === "create-room").respond({ success: true, roomCode: "ABC123", resumeToken: "old-token" });
+        view.handlers.get("player-list")([
+          { id: "host", name: "Host", avatar: "H", isHost: true, isConnected: true },
+          { id: "guest", name: "Guest", avatar: "G", isHost: false, isConnected: true }
+        ]);
+        if (action === "join-review") view.handlers.get("join-requests")([
+          { id: "waiting", name: "Waiting", avatar: "W" }
+        ]);
+        const selector = action === "lock" ? "#toggle-room-lock"
+          : action === "join-review" ? '#pending-join-requests button[aria-label="Accept Waiting"]'
+          : action === "lobby-transfer" ? '#player-list button[aria-label="Make Guest the host"]' : "#transfer-host";
+        document.querySelector(selector).click();
+        const request = view.emitted.find(item => item.event === (action === "lock" ? "set-room-locked" : action === "join-review" ? "review-join-request" : "transfer-host"));
+        assert.ok(request);
+        if (stale) {
+          view.handlers.get("room-closed")();
+          document.querySelector("#create-room").click();
+          view.emitted.filter(item => item.event === "create-room").at(-1).respond({ success: true, roomCode: "NEW123", resumeToken: "new-token" });
+        }
+        const before = view.getToastShowCount();
+        request.respond({ success: false, message: "Old room request failed." });
+        assert.equal(view.getToastShowCount(), before + (stale ? 0 : 1));
+      } finally { view.close(); }
+    });
+  }
+}
+
+
+test("a restored locked-room snapshot immediately shows the confirmed lock state", () => {
+  const view = createClient();
+  try {
+    view.handlers.get("room-resumed")({ roomCode: "ABC123", isHost: true, role: "player",
+      selectedGameId: null, gameSettings: {}, activeGameId: null, isLocked: true });
+    assert.equal(document.querySelector("#room-lock-status").textContent, "Lobby Locked");
+    assert.equal(document.querySelector("#toggle-room-lock").textContent, "Unlock Lobby");
+    document.querySelector("#toggle-room-lock").click();
+    assert.equal(view.emitted.find(item => item.event === "set-room-locked").data.isLocked, false);
   } finally { view.close(); }
 });

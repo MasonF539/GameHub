@@ -76,7 +76,15 @@ function Start-LocalGameHub {
     Write-Host
     Write-Host "Building and starting GameHub locally..." -ForegroundColor Cyan
 
-    docker compose up --build --detach
+    docker compose --profile public stop tunnel
+
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "The public tunnel could not be stopped. Local mode was not started." -ForegroundColor Red
+        Wait-ForUser
+        return
+    }
+
+    docker compose up --build --detach gamehub
 
     if ($LASTEXITCODE -ne 0) {
         Write-Host
@@ -230,6 +238,12 @@ function Stop-GameHub {
     Write-Host "Stopping GameHub..." -ForegroundColor Cyan
 
     docker compose --profile public down
+
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "GameHub could not be stopped. Check the Docker messages above." -ForegroundColor Red
+        Wait-ForUser
+        return
+    }
 
     Write-Host
     Write-Host "GameHub has stopped." -ForegroundColor Green

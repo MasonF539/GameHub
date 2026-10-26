@@ -669,11 +669,12 @@ document.addEventListener("keydown", (event) => {
 
   if (event.repeat || isTextEntryTarget(event.target)) return;
   if (event.ctrlKey || event.metaKey || event.altKey) return;
+  if (["Space", "Enter", "NumpadEnter"].includes(event.code) && event.target?.closest?.("button")) return;
 
   const generalSettings = generalKeybindDefinition.keybinds[0];
   if (event.code === getAssignedKey("general", generalSettings)) {
     const otherModalIsOpen = document.querySelector(
-      ".modal.show:not(#app-settings-modal)"
+      ".modal.show:not(#app-settings-modal), .modal[aria-modal='true']:not(#app-settings-modal)"
     );
     if (!otherModalIsOpen) {
       event.preventDefault();
@@ -686,12 +687,12 @@ document.addEventListener("keydown", (event) => {
   if (
     currentActiveGameId === null ||
     isCurrentUserSpectator ||
-    document.querySelector(".modal.show")
+    document.querySelector(".modal.show, .modal[aria-modal='true']")
   ) {
     return;
   }
 
-  if (event.target?.closest?.('[role="tab"]') || (event.code === "Space" && event.target?.closest?.("button"))) return;
+  if (event.target?.closest?.('[role="tab"]')) return;
   const game = gameDefinitions.find((candidate) => candidate.id === currentActiveGameId);
   const keybind = game?.keybinds?.find(
     (candidate) => getAssignedKey(game.id, candidate) === event.code
@@ -868,7 +869,8 @@ function forgetSavedTokens(tokens) {
 
 async function offerSavedSession() {
   if (!socket.connected || currentRoomCode !== null || isRoomRequestPending || activeResumeSession ||
-      rejoinPromptShown || rejoinCheckPending || rejoinCheckComplete) return;
+      rejoinPromptShown || rejoinCheckPending || rejoinCheckComplete ||
+      document.querySelector(".modal.show, .modal[aria-modal='true']")) return;
   const saved = readSavedSessions().filter(session =>
     !/^[A-Z0-9]{6}$/.test(inviteRoomCode ?? "") || session.roomCode === inviteRoomCode);
   if (saved.length === 0) return;
@@ -883,7 +885,8 @@ async function offerSavedSession() {
   socket.emit("check-resume-sessions", { tokens: saved.map(item => item.resumeToken) }, response => {
     if (generation !== rejoinCheckGeneration) return;
     rejoinCheckPending = false;
-    if (!response.success || !Array.isArray(response.sessions)) return;
+    if (!response.success || !Array.isArray(response.sessions) ||
+        document.querySelector(".modal.show, .modal[aria-modal='true']")) return;
     rejoinCheckComplete = true;
     if (currentRoomCode !== null || isRoomRequestPending || activeResumeSession || rejoinPromptShown) return;
     const valid = new Map(response.sessions.map(item => [item.resumeToken, item]));
@@ -956,6 +959,7 @@ window.addEventListener("storage", event => {
     renderSavedSessions();
   }
 });
+document.addEventListener("hidden.bs.modal", renderSavedSessions);
 window.addEventListener("pagehide", () => { touchResumeSession(); stopReconnecting(); rejoinCheckGeneration++; });
 document.addEventListener("visibilitychange", () => { if (document.hidden) touchResumeSession(); });
 
@@ -1172,6 +1176,7 @@ function createKickPlayerButton(player, className) {
   kickButton.textContent = "Kick";
   kickButton.setAttribute("aria-label", `Kick ${player.name}`);
   kickButton.addEventListener("click", () => {
+    const generation = lifecycleGeneration;
     socket.emit(
       "kick-player",
       {
@@ -1179,6 +1184,7 @@ function createKickPlayerButton(player, className) {
         playerId: player.id
       },
       (response) => {
+        if (generation !== lifecycleGeneration) return;
         if (!response.success) {
           showToast(response.message);
         } else if (response.message) {
@@ -1672,8 +1678,9 @@ function displayGameInformation(game, settings) {
           const clampedValue = Number.isFinite(enteredValue)
             ? Math.min(setting.max, Math.max(setting.min, enteredValue))
             : setting.defaultValue;
-          const steppedValue = Math.round(
-            (clampedValue - setting.min) / setting.step
+          const steppedValue = Math.min(
+            Math.round((clampedValue - setting.min) / setting.step),
+            Math.floor((setting.max - setting.min) / setting.step)
           ) * setting.step + setting.min;
 
           settingInput.value = String(steppedValue);
@@ -1823,6 +1830,7 @@ toggleRoomLockButton.addEventListener("click", () => {
     return;
   }
 
+  const generation = lifecycleGeneration;
   socket.emit(
     "set-room-locked",
     {
@@ -1830,6 +1838,7 @@ toggleRoomLockButton.addEventListener("click", () => {
       isLocked: !isRoomLocked
     },
     (response) => {
+      if (generation !== lifecycleGeneration) return;
       if (!response.success) {
         showToast(response.message);
       }
@@ -1978,10 +1987,10 @@ socket.on("room-resumed", (room) => {
   returningGameMemberIds.clear();
   selectedGameId = room.selectedGameId;
   currentGameSettings = room.gameSettings ?? {};
-  isRoomLocked = room.isLocked;
   isCurrentUserSpectator = room.role === "spectator";
   roomHasActiveGame = room.hasActiveGame === true || room.activeGameId !== null;
   showLobby(room.roomCode, room.isHost);
+  isRoomLocked = room.isLocked;
   updateRoomLockDisplay();
   if (room.activeGameId !== null) {
     mountGameClient({
@@ -2122,9 +2131,12 @@ socket.on("player-list", (players) => {
         hostButton.type = "button";
         hostButton.textContent = "Host";
         hostButton.setAttribute("aria-label", `Make ${player.name} the host`);
-        hostButton.onclick = () => socket.emit("transfer-host", { memberId: player.id }, (result) => {
-          if (!result.success) showToast(result.message);
-        });
+        hostButton.onclick = () => {
+          const generation = lifecycleGeneration;
+          socket.emit("transfer-host", { memberId: player.id }, (result) => {
+            if (generation === lifecycleGeneration && !result.success) showToast(result.message);
+          });
+        };
         actions.appendChild(hostButton);
       }
       actions.appendChild(createKickPlayerButton(player, "btn btn-outline-danger btn-sm"));
@@ -2692,7 +2704,9 @@ socket.on("join-requests", (requests) => {
       button.textContent = accept ? "Accept" : "Decline";
       button.setAttribute("aria-label", button.textContent + " " + request.name);
       button.addEventListener("click", () => {
+        const generation = lifecycleGeneration;
         socket.emit("review-join-request", { memberId: request.id, accept }, (response) => {
+          if (generation !== lifecycleGeneration) return;
           if (!response.success) showToast(response.message);
         });
       });
@@ -2979,9 +2993,10 @@ function updateHostTransferOptions() {
   document.querySelector("#transfer-host").disabled = select.disabled;
 }
 document.querySelector("#transfer-host").onclick = () => {
+  const generation = lifecycleGeneration;
   const memberId = document.querySelector("#host-transfer-player").value;
   if (memberId) socket.emit("transfer-host", { memberId }, result => {
-    if (!result.success) showToast(result.message);
+    if (generation === lifecycleGeneration && !result.success) showToast(result.message);
   });
 };
 function renderRoomStatus() {

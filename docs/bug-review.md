@@ -1,6 +1,6 @@
 # Current bug review
 
-Review date: 2026-10-22. Findings describe the current unpublished checkout.
+Review date: 2026-10-25. Findings describe the current unpublished checkout.
 
 ## Fixed: late room-entry responses replace a newer lobby
 
@@ -436,9 +436,228 @@ list broadcaster after a successful departure. The existing live-server leave
 regression verifies the player changes from playing to waiting in the lobby;
 server transfer authorization remains unchanged.
 
+## Fixed: rounding a numeric setting can exceed its maximum
+
+For a valid plugin range with minimum 5, maximum 14, and step 5, typing 14
+rounded the number box to 15. Save Settings then submitted a value outside the
+allowed range. The rounding expression now caps the step index at the highest
+valid step. A regression covers both an upper bound between steps and an upper
+bound on a step, including the submitted value. Egyptian War's existing ranges
+already have aligned bounds, so its rule choices do not change.
+
+## Fixed: a delayed rejoin offer overlaps Settings
+
+An Edge reproduction delayed the saved-player check, opened Settings, and then
+released the response. Both Settings and the rejoin modal became visible.
+Saved-player offers now wait while a modal is open or finishing its closing
+transition, then reuse the existing eligibility check after hidden.bs.modal.
+No new recovery state is introduced. The regression covers both open and closing
+dialogs and verifies that the eventual offer still submits the saved token.
+The real Edge flow also passes, including a single backdrop and working rejoin.
+All 120 client regressions pass. Live-browser checks cover manual/timed host
+handoff, presets, scoreboard reset, reconnect identity, and pause controls. A
+250-seed session audit passed 123,379 lifecycle/action/timer operations with
+rotating reconnect ids and multiple decks, preserving cards and timer invariants.
+
+## Fixed: revoked transport recovery restores a former room subscription
+
+A live-server reproduction dropped a player's transport, kicked the disconnected
+player, and reconnected the same client. Socket.IO recovered the old socket,
+replayed room-lock updates sent after removal, and retained its former room
+subscription even after the client created a different room. Later old-room
+updates could therefore overwrite the new room's browser controls.
+
+Recovery now checks the existing socket-to-room membership map before returning
+a saved transport session. A revoked session is rejected before Socket.IO can
+replay packets or rejoin its rooms; normal saved-player token handling remains
+available. The live reproduction now receives neither replayed nor future
+former-room updates. The regression also verifies that an authorized member can
+still recover their original socket and that the revoked client can create and
+control a new room. No new membership state or dependency is introduced.
+
+## Fixed: recovered entry without its acknowledgement has no browser token
+
+An Edge reproduction held a successful Create Room acknowledgement, dropped the
+transport, and recovered the room. The browser entered the restored lobby but had
+no saved reconnect token because the normal entry callback never ran. Refreshing
+would lose that identity. Authorized transport recovery now rotates and sends a
+token through the existing snapshot/token path, just as token-based restoration
+does. The Edge flow now persists the token and returns to the same room after a
+refresh. The recovery integration regression also verifies the fresh token works.
+
+## Fixed: token restoration bypasses the chat cooldown
+
+A live-server regression sent a chat message, restored the same player on a new
+socket, and immediately sent another message successfully. The timestamp belonged
+to the previous socket, so restoration reset the cooldown. It now belongs to the
+existing room member through a weak map. Reconnects retain the wait; other players
+can still send independently, and sending works after the cooldown expires.
+The timestamp is not exposed in player data, written to disk, or retained after
+the member object is discarded. No cleanup timer or stable-id map is needed.
+
+Verification: all 35 server integration tests pass. Edge checks cover kicked
+transport recovery and lost-entry-acknowledgement recovery through a refresh.
+An 80-step mixed room audit preserves membership, active-player eligibility,
+host ownership, and connection state across leaving, spectating, restarting,
+transferring hosting, and token restoration.
+
 ## Accepted small-screen limit
 
 Eight Egyptian War players and multiple disconnected-seat controls can leave a
 very small central pile at 740 by 360 pixels. Further layout redesign is deferred
 at the user's request. Normal landscape checks do not establish readability in
 that crowded state. See the game's design and implementation documents.
+
+At 280 pixels wide, opened side-panel tab names can clip. Checks at 320, 360,
+and 390 pixels pass with readable tab names and no panel/control overlap in
+both normal and expanded modes. Further shrinking for the 280-pixel case is
+deferred under the same extreme-screen boundary rather than adding more layout
+rules.
+
+## Fixed: shortcuts override focused buttons
+
+A game action bound to Enter intercepted focused buttons, submitted gameplay,
+and prevented native activation. General Settings bound to Space or Enter had
+the same problem before the game-only guard ran. The existing native-button
+check now runs before both shortcut paths and covers Space, Enter, and
+NumpadEnter; keybind capture still runs first. Regression groups reproduce the
+old behavior, preserve native button activation, and verify shortcuts continue
+working away from buttons. Saved bindings and presets are unchanged.
+
+## Fixed: shortcuts resume before a modal finishes closing
+
+Bootstrap removes show before a dialog's closing transition releases aria-modal
+and its backdrop. Gameplay keys could act through the fading dialog, and the
+Settings shortcut could open a second modal over another closing confirmation.
+Both existing guards now include aria-modal, matching saved-player offers.
+Regressions check the closing state and normal behavior after cleanup. Real
+Edge checks verify actual Bootstrap transitions and native Enter activation.
+
+## Fixed: an explicit host pause is dropped during a disconnect pause
+
+The server treated Pause as a no-op whenever a game was already paused. That
+also discarded a host's explicit pause during Egyptian War's automatic
+reconnection pause. The player's return then resumed the game despite the
+successful host request. Explicit pauses now reach the game's existing manual
+pause handler; already-running Resume remains a no-op. A live-server regression
+restores the disconnected player by token, verifies the game stays paused, and
+checks that the host can resume. No extra pause state is introduced.
+
+## Fixed: delayed room-control replies notify in another room
+
+Held Kick, Lock Lobby, and host-transfer acknowledgements could display old
+success/errors after closing their room and entering another. Their callbacks
+now use the existing lifecycle generation. Paired regressions verify obsolete
+responses stay silent and current failures still report. Room policies and
+server permissions are unchanged; no new request tracking state is added.
+
+## Fixed: room restoration discards the snapshot's lock state
+
+The room-resumed handler assigned the server's lock state before showLobby,
+which reset it to unlocked. It relied on a later room-lock-changed event to
+correct the label and toggle direction. The assignment now follows showLobby.
+The regression checks a locked snapshot immediately displays Locked and submits
+an unlock request without requiring another event. Server lock enforcement is
+unchanged.
+
+## Fixed: vulnerable body-parser in the production lockfile
+
+npm audit identified body-parser 2.3.0 under Express 5.2.1 as affected by
+[GHSA-27r3-jxmh-p828](https://github.com/advisories/GHSA-27r3-jxmh-p828), a crash
+in compressed request-body handling. GameHub currently serves static assets
+and uses Socket.IO without enabling Express body-parser middleware, so this
+review did not reproduce an exposed GameHub request path for the advisory.
+The compatible targeted update locks body-parser 2.4.0 and its required qs
+6.16.1, leaving Express and package.json unchanged. npm audit --omit=dev now
+reports zero known production vulnerabilities. A fresh offline production
+installation still applies Egyptian War's existing patch and matches every
+packaged runtime file.
+
+## Fixed: undici advisories in browser-test dependencies
+
+GameHub's jsdom dependency locked undici 8.11.2, and Egyptian War locked
+8.12.1. npm audit reported affected EventSource, integrity-check, and response
+content-encoding paths, including
+[GHSA-xjj6-f33q-929c](https://github.com/advisories/GHSA-xjj6-f33q-929c).
+Both development lockfiles now resolve the compatible 8.12.3 patch. Direct
+dependency declarations are unchanged. These packages are test dependencies,
+not Egyptian War's published runtime. Full npm audits for both repositories
+now report zero known vulnerabilities.
+
+## Corrected: README overstates chat-history lifetime
+
+The README still described room-lifetime chat history after the match-isolation
+fix. It now matches the server and architecture guide: only current-match viewers
+receive history, lobby waiters do not, and history clears on match start/end.
+No chat behavior or persistence setting changes in this documentation correction.
+
+## Latest audit verification
+
+- All 138 client regressions and all 36 live-server integration tests pass.
+- All 206 root tests pass after the launcher and join-review corrections. Full type checks
+  and the SDK's nine tests also pass.
+- The actual npm run verify:packages check passes using the registry game
+  artifact, a packed SDK, and the current patch in an isolated consumer.
+- A clean Linux Node 24 container also passes fresh npm ci (including the game
+  patch), full type checks, all 202 cross-platform root tests, and nine SDK tests.
+  The four Windows launcher tests are skipped there and pass on Windows.
+- The scoped SDK metadata and tarball can be downloaded without credentials.
+- Egyptian War's 95 tests, type checks, and package dry-run pass in clean source
+  copies on Windows and in a Linux Node 24 container. The Linux run installs
+  dependencies fresh from the registry without npm credentials. This verifies
+  the workflow commands on Linux, not a completed GitHub-hosted Actions run.
+- A real eight-player Edge match finished in 209 moves without script errors or
+  visible card-count drift. Keyboard/modal behavior passed separate Edge checks.
+- Twenty repeated Edge match start/exit cycles kept exactly two game-action
+  handlers, one keybind listener, and one display listener per mounted client.
+  All subscriptions cleared on exit, with no browser script errors.
+- All eight packaged audio files load and decode in Edge without media errors;
+  physical audible output is not verified.
+- One hundred eight-player slap races retained accepted attempts across a
+  contender's disconnect/id remap, awarded one winner/stat, conserved all 54
+  cards, and resumed their timers.
+- Randomized session audits covered 267,297 manual-pause operations and another
+  425,990 operations across randomized rules, deck counts, reconnect IDs, and
+  membership changes without violating their timer/card invariants.
+- An independent slap oracle matched 741,952 short-pile cases across all 64
+  optional-rule combinations and every face-down penalty boundary.
+- Permission checks denied 72 non-host mutations and 12 malformed host requests;
+  80 mixed room transitions preserved membership and host eligibility.
+- A further 304 malformed/unprivileged requests across 19 Socket.IO operations
+  were rejected by an isolated server. Legitimate host pause/resume and guest
+  gameplay still worked afterward; no additional fix was required.
+- Native and token host recovery both clear handoff countdowns for other members
+  and preserve host control; neither reproduced a stale countdown.
+
+The new fixes change GameHub code, not Egyptian War's packaged runtime. Its
+existing install patch remains unchanged. No package was published or repository
+pushed during this audit.
+
+
+## Local launcher retained a public tunnel
+
+Switching from Public to Local left the existing tunnel running: omitting a
+Compose profile does not stop services that are already running. Local mode now
+explicitly stops the tunnel and starts only the GameHub service. If stopping the
+tunnel fails, it aborts instead of reporting local-only operation.
+
+Reproduced with isolated Docker services without exposing ports or touching the
+running GameHub stack. Launcher regression tests stub Docker and verify both the
+successful transition and the stop-failure path. See the [Compose profiles
+documentation](https://docs.docker.com/compose/how-tos/profiles/).
+
+
+## Delayed join-review errors belonged to an old room
+
+Accept/Decline replies could still display an obsolete error after the host left
+and created another room. They now use the existing room lifecycle guard, as
+other room controls do. The paired regression cases reproduce the stale error
+before the fix and verify that current-room failures still display afterward.
+
+
+## Stop launcher falsely reported success after Docker failure
+
+The Stop action always printed "GameHub has stopped", even when Compose failed
+and containers could still be running. It now checks Docker's exit code and
+reports failure before returning. Stubbed launcher tests cover success and
+failure without stopping any actual containers.

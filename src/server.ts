@@ -255,9 +255,21 @@ const maxLobbyPlayers = 12;
 const maxPendingJoinsPerAddress = 2;
 const rooms = new Map<string, Room>();
 const socketRoomCodes = new Map<string, string>();
+// Recovery replays missed packets before the connection handler runs. Reject
+// revoked memberships here so neither old packets nor old rooms are restored.
+const roomAdapter = io.of("/").adapter;
+const restoreTransportSession = roomAdapter.restoreSession.bind(roomAdapter);
+roomAdapter.restoreSession = async (pid, offset) => {
+  const session = await restoreTransportSession(pid, offset);
+  if (session && !socketRoomCodes.has(session.sid)) {
+    throw new Error("The saved room membership is no longer active.");
+  }
+  return session;
+};
 const pendingJoinRoomCodes = new Map<string, string>();
 const disconnectedPlayerTimers =
   new Map<string, ReturnType<typeof setTimeout>>();
+const lastGameChatAt = new WeakMap<Player, number>();
 const playerResumeTokens = new Map<
   string,
   { roomCode: string; playerId: string; createdAt: number }
@@ -970,7 +982,8 @@ io.on("connection", (socket) => {
         roomMember.member.isConnected = true;
       }
       socket.join(roomCode);
-      sendRoomSnapshot(socket, roomCode, room);
+      removePlayerResumeTokens(socket.id);
+      sendRoomSnapshot(socket, roomCode, room, createPlayerResumeToken(roomCode, socket.id));
     } else {
       const revokedMessage = revokedSocketMessages.get(socket.id);
       if (revokedMessage) {
@@ -2113,7 +2126,9 @@ io.on("connection", (socket) => {
     }
 
     const lifecycle = room.gameSession.getLifecycleState();
-    if (data.isPaused === lifecycle.isPaused) {
+    // An explicit pause must reach the game even during an automatic pause,
+    // so reconnecting cannot erase the host's decision to keep it paused.
+    if (!data.isPaused && !lifecycle.isPaused) {
       respond({ success: true });
       return;
     }
@@ -2231,10 +2246,7 @@ io.on("connection", (socket) => {
     }
 
     const now = Date.now();
-    const lastMessageAt =
-      typeof socket.data.lastGameChatAt === "number"
-        ? socket.data.lastGameChatAt
-        : 0;
+    const lastMessageAt = lastGameChatAt.get(roomMember.member) ?? 0;
 
     if (now - lastMessageAt < 750) {
       respond({
@@ -2244,7 +2256,7 @@ io.on("connection", (socket) => {
       return;
     }
 
-    socket.data.lastGameChatAt = now;
+    lastGameChatAt.set(roomMember.member, now);
     const chatMessage: ChatMessage = {
       senderId: roomMember.member.id,
       senderName: roomMember.member.name,

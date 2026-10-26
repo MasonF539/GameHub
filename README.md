@@ -42,11 +42,13 @@ their versions do not need to match the GameHub application version.
 
 Game events and game-specific sounds are sent only to people currently viewing the active board. A lobby member therefore cannot hear a delayed game-win effect. When a game ends, people already waiting in the lobby hear a separate GameHub completion chime; returning participants are not mistaken for new joins and do not trigger the player-join sound.
 
-Room chat keeps the latest 50 messages in server memory and restores them when
-joining, reconnecting, or returning as a spectator. History lasts until the room
-closes or the server restarts. Chat size, minimized state, and slap-rule visibility
-are saved locally in the browser; phones default to minimized chat and collapsed
-rules when there are no saved preferences.
+Room chat keeps the latest 50 messages for the active match in server memory.
+It restores them only for people viewing that match when joining, reconnecting,
+or returning as a spectator; lobby waiters do not receive them. History clears
+when a match starts or ends, when the room closes, or when the server restarts.
+Chat size, minimized state, and slap-rule visibility are saved locally in the
+browser; phones default to minimized chat and collapsed rules when there are
+no saved preferences.
 
 Browser fullscreen is available through Settings where supported and is enabled
 only when you choose it.
@@ -87,7 +89,7 @@ Q. Exit controls
 
 ### Local mode
 
-Local mode starts GameHub at:
+Local mode stops any existing public tunnel, then starts GameHub at:
 
 ```text
 http://localhost:3000
@@ -219,6 +221,11 @@ GameHub/
 - PowerShell
 
 ## Development dependencies
+
+For local development, use Node.js 24.15.0 or later in the Node 24 line, matching
+the Docker build. The locked jsdom test dependency supports Node 22.22.2+, Node
+24.15.0+, or Node 26+; an older Node installation may run production code but
+cannot run this dependency set's development checks reliably.
 
 `npm ci` installs the pinned game release directly. Egyptian War declares the SDK
 as a compatible peer dependency so it shares the hub's SDK installation.
