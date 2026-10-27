@@ -3,7 +3,7 @@ const { readFileSync } = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
 
-const hubCss = readFileSync(path.join(__dirname, "../public/style.css"), "utf8");
+const hubCss = readFileSync(path.join(__dirname, "../public/style.css"), "utf8").replace(/\r\n/g, "\n");
 
 // A rule block for an exact selector, e.g. ".foo::before".
 function ruleBody(css, selector) {

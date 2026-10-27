@@ -914,3 +914,11 @@ GameHub 1.1.0 now installs that registry version, without a game patch, and
 shares the host SDK. Fresh registry artifact verification passes; source and
 installed browser/definition files match. The game commit's GitHub verification
 passed before preparing the GitHub releases.
+
+
+Hosted stable-release verification first encountered npm's publication delay:
+version metadata appeared before the public tarball became downloadable. A
+later uncached, unauthenticated download matched the reviewed integrity, and a
+fresh production npm ci passed without game patches. Windows CI then exposed
+an LF-only selector matcher in the new menu style regression. The test now
+normalizes CRLF before matching; application CSS and layout are unchanged.
