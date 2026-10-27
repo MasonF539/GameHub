@@ -730,3 +730,65 @@ integration tests, and 16 mocked Windows launcher tests. Real Edge checks cover
 offline game APIs, focused lobby controls, and live invite-cache updates. The
 Egyptian War runtime/patch and the two scaffold runtimes were not changed again
 in this additional pass. No Docker daemon or live tunnel was used.
+
+
+## Follow-up on the external bundle report (2026-10-26)
+
+The report predates the SDK peer fixes in the template and Loaded Roulette,
+Loaded Roulette's separate package/game identity, and Egyptian War's workflow.
+Those changes are already present. GameHub's missing workflow is now added for
+Node 24 on Linux and Windows, including package-artifact verification. The hub
+now declares the same >=20 production runtime minimum as the SDK and games;
+README guidance distinguishes this from newer development dependency needs.
+
+The beta.6 JavaScript/browser patch omitted generated declarations and package
+docs. Beta.7 now publishes the complete build, including scoreboard/slap-reason
+declarations and both design and implementation notes. The artifact passed fresh
+installation, 96 game tests, and TypeScript consumer checks with both stable and
+prerelease SDKs. After the user approved the release and completed npm browser
+authentication, beta.7 was published under the beta tag. GameHub now pins it and
+the obsolete beta.6 patch is removed. The stable latest tag remains at 1.0.0.
+
+The eight-player rules/seat overlap was reproduced: one seat was 29% covered at
+1366x768 and 75% at 1024x768 with default rules. Expanded rules now scroll in the
+available space above neighboring seats. Edge measurements show no rules/seat
+overlap at the six tested laptop/phone viewports with default or all rules.
+The normal GameHub build now receives the fix directly from the beta.7 package.
+Phone panel assertions also pass at 320, 360, and 390 pixels in both panel sizes.
+This does not change the accepted crowding limit on extremely short screens.
+
+
+A separate clean GameHub checkout using the complete beta.7 tarball and no game
+patch passes type checks and all 228 root tests. The source checkout reproduces
+the exact reviewed artifact, whose published integrity matches the candidate.
+The beta.6 patched build passed all tests before the upgrade; post-upgrade checks
+use beta.7 from the registry without a game patch. The new workflow YAML is
+validated locally; hosted results are checked after pushing the release changes.
+
+
+Post-release verification: beta.7 is available from npm with the reviewed artifact
+integrity and the beta tag; latest remains 1.0.0. The normal registry installation
+and a fresh production npm ci use no game patch and include the corrected
+TypeScript declarations and current design/implementation docs. GameHub's 228
+root tests, nine SDK tests, Egyptian War's 96 tests, full type checks, and
+registry artifact verification pass. Eight-player viewport checks also pass
+using the published package. The game resolves the hub's single SDK copy.
+See release-testing.md for the subsequent production Docker and live public-join checks.
+
+
+## Production release smoke test (2026-10-27)
+
+The actual Docker build passed its Linux tests, SDK tests, and registry package
+verification using beta.7 without a game patch. The launcher passed Local,
+Public, and Public-to-Local transitions in an isolated Compose project. The
+first Quick Tunnel attempt returned HTTP 429; a later retry succeeded.
+
+A real Edge guest joined through the public HTTPS invite while the host stayed
+on localhost. Eight players started Egyptian War; card play, pause/resume, and
+public refresh/rejoin passed without browser errors. Laptop and emulated-phone
+checks found no seat/rules overlap or seats crossing the action controls. All
+eight audio assets loaded and decoded through the tunnel. Temporary test
+containers, network, tunnel, and the test image were removed afterwards.
+
+Physical phones, audible playback, and a complete human-played match still need
+manual testing. See [release testing](release-testing.md) for the checklist.

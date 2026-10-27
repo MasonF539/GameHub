@@ -1,7 +1,7 @@
 # GameHub
 
 First official GameHub release: **1.0.0**. This branch pins Egyptian War to
-**1.0.1-beta.6** and the shared SDK to **1.1.0-beta.0**.
+**1.0.1-beta.7** and the shared SDK to **1.1.0-beta.0**.
 
 GameHub is a self-hosted, real-time browser game platform. A host creates a room, players join from their browsers, and the host chooses which game to start.
 
@@ -224,6 +224,9 @@ GameHub/
 
 ## Development dependencies
 
+The declared Node.js >=20 range is the production runtime minimum, matching the
+SDK and game packages. Development dependencies can require newer Node versions.
+
 For local development, use Node.js 24.15.0 or later in the Node 24 line, matching
 the Docker build. The locked jsdom test dependency supports Node 22.22.2+, Node
 24.15.0+, or Node 26+; an older Node installation may run production code but
@@ -276,3 +279,12 @@ These can be set as environment variables (the Docker compose file passes them t
 | `GAMEHUB_MAX_ROOMS` | `200` | Maximum number of rooms the server holds at once. |
 | `GAMEHUB_PUBLIC_URL` | Unset | Optional public base URL for copied room invites. The Windows Public launcher registers its detected TryCloudflare URL automatically; this override is useful for other launch methods or a fixed domain. |
 | `CLOUDFLARED_VERSION` | `latest` | Cloudflare tunnel image tag. Set it to a specific release to pin the tunnel version. |
+
+
+## Continuous verification
+
+The [verification workflow](.github/workflows/verify.yml) runs on pushes and pull
+requests using Node 24 on Linux and Windows. It performs a locked installation,
+type checks, the full test suite, and package-artifact verification. Windows also
+runs the PowerShell launcher regressions that are skipped on Linux. The workflow
+has read-only repository permissions and does not publish packages.

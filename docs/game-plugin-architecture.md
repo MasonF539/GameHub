@@ -16,6 +16,8 @@ version-specific patch in `patches/`. The install hook applies it to the npm
 package, including in Docker, so normal build/start commands run the changes.
 The independent game repository remains the source for the next package release.
 Remove the patch once the dependency is updated to a release containing the fix.
+Egyptian War beta.7 includes the previously patched changes, so no game patch is
+currently required.
 
 The Docker build runs `npm run verify:packages` after the test suite. That
 check packs the local SDK, reads every enabled game from `gamehub.config.json`,
@@ -148,7 +150,7 @@ or client-reported scores are accepted. Host procedures are described under
 GameHub **1.0.0** is the first official application release, distributed through
 GitHub and built with Docker. Its version is independent of the npm package
 versions: this branch uses `@masonf539/game-sdk@1.1.0-beta.0` and
-`@masonf539/egyptian-war@1.0.1-beta.6`. Updating the application version does not
+`@masonf539/egyptian-war@1.0.1-beta.7`. Updating the application version does not
 require republishing either npm package unless that package itself changes.
 
 The independently buildable `@masonf539/game-sdk` workspace under
