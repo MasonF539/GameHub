@@ -11,3 +11,13 @@ package version is published, track a version-specific `patch-package` patch in
 Docker installation stages. Patch only files needed by the running package.
 When adopting a published version containing the fix, remove its obsolete patch.
 Do not publish packages just to enable local testing unless the user asks.
+
+
+# Settings controls
+
+Use a sliding On/Off switch by default for boolean settings, including new
+general settings and game-rule settings. Reuse the `.settings-switch` markup
+and styles: a native checkbox with `role="switch"`, an associated label, and
+the `.settings-switch-state` visual On/Off indicator. Preserve native keyboard
+behavior, disabled permissions, and existing save/preset handling. Numeric
+sliders, dropdowns, and action buttons keep their appropriate control types.

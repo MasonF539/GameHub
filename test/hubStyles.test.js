@@ -41,3 +41,11 @@ test("in-game utility controls do not apply the phone safe area twice", () => {
   assert.match(controls ?? "", /right:\s*var\(--hub-toolbar-edge\)/);
   assert.doesNotMatch(controls ?? "", /safe-area-inset/);
 });
+
+
+test("main menu and lobby retain their shared fluid sizing independently of blur", () => {
+  const sizing = ruleBody(hubCss, "#entry-view,\n#lobby-view");
+  assert.match(sizing ?? "", /width:\s*100%/);
+  assert.match(sizing ?? "", /flex:\s*0 1 auto/);
+  assert.doesNotMatch(sizing ?? "", /backdrop-filter/);
+});

@@ -226,6 +226,11 @@
                 data-bs-target="#app-settings-game-panel">
                 Game
               </button>
+              <button id="app-settings-graphics-tab" class="app-settings-navigation-button nav-link" type="button"
+                role="tab" aria-selected="false" aria-controls="app-settings-graphics-panel" data-bs-toggle="pill"
+                data-bs-target="#app-settings-graphics-panel">
+                Graphics
+              </button>
               <button id="app-settings-audio-tab" class="app-settings-navigation-button nav-link" type="button"
                 role="tab" aria-selected="false" aria-controls="app-settings-audio-panel" data-bs-toggle="pill"
                 data-bs-target="#app-settings-audio-panel">
@@ -286,11 +291,6 @@
                       disabled>Exit</button>
                   </div>
                 </section>
-                <section class="game-settings-group" aria-labelledby="game-display-options-title">
-                  <h4 id="game-display-options-title" class="game-settings-group-title">Display Options</h4>
-                  <p class="text-body-secondary small">Personal card and table styles, saved on this device.</p>
-                  <div id="game-display-sections"></div>
-                </section>
                 <p id="app-disconnect-status" class="small" aria-live="off"></p>
                 <section id="host-transfer-controls" class="game-settings-group" hidden>
                   <h4 class="game-settings-group-title">Host control</h4>
@@ -303,13 +303,96 @@
                 <section id="room-join-controls" class="game-settings-group" aria-labelledby="room-join-title" hidden>
                   <h4 id="room-join-title" class="game-settings-group-title">Joining</h4>
                   <label class="game-setting-row" for="require-join-approval">
-                    <span>Host approves players and spectators</span>
-                    <input id="require-join-approval" class="form-check-input" type="checkbox">
+                    <span class="join-approval-copy">
+                      <strong class="d-block">Host approves players and spectators</strong>
+                      <small id="join-approval-description" class="d-block text-body-secondary">Requests expire after one minute. Approval does not bypass the lobby lock or room capacity.</small>
+                    </span>
+                    <span class="settings-switch form-check form-switch">
+                      <input id="require-join-approval" class="form-check-input" type="checkbox" role="switch" aria-describedby="join-approval-description">
+                      <span class="settings-switch-state" aria-hidden="true"></span>
+                    </span>
                   </label>
-                  <p class="small text-body-secondary">Requests expire after one minute. Approval does not bypass the lobby lock or room capacity.</p>
                   <div id="pending-join-requests" aria-live="polite"></div>
                 </section>
               </div>
+              </section>
+
+              <section id="app-settings-graphics-panel" class="app-settings-section tab-pane fade" role="tabpanel"
+                aria-labelledby="app-settings-graphics-tab" tabindex="0">
+                <div class="app-settings-section-heading">
+                  <h3 class="h5 mb-1">Graphics</h3>
+                  <p class="mb-0 text-body-secondary">Personal settings, saved in this browser.</p>
+                </div>
+                <div class="game-settings-groups">
+                  <section class="game-settings-group general-graphics-options" aria-labelledby="general-graphics-title">
+                    <h4 id="general-graphics-title" class="game-settings-group-title">General Graphics</h4>
+                    <label class="game-setting-row" for="background-blur">
+                      <span>
+                        <strong class="d-block">Background blur</strong>
+                        <small class="text-body-secondary">Applies to the main menu, lobby, and games. Leave off for better performance on some devices.</small>
+                      </span>
+                      <span class="settings-switch form-check form-switch">
+                        <input id="background-blur" class="form-check-input" type="checkbox" role="switch">
+                        <span class="settings-switch-state" aria-hidden="true"></span>
+                      </span>
+                    </label>
+                    <label class="game-setting-row" for="reduce-shadows">
+                      <span>
+                        <strong class="d-block">Reduced shadows</strong>
+                        <small class="text-body-secondary">Simplify shadows on windows, panels, and buttons.</small>
+                      </span>
+                      <span class="settings-switch form-check form-switch">
+                        <input id="reduce-shadows" class="form-check-input" type="checkbox" role="switch">
+                        <span class="settings-switch-state" aria-hidden="true"></span>
+                      </span>
+                    </label>
+                    <label class="game-setting-row" for="simple-backgrounds">
+                      <span>
+                        <strong class="d-block">Simple backgrounds</strong>
+                        <small class="text-body-secondary">Replace interface background gradients with solid colors.</small>
+                      </span>
+                      <span class="settings-switch form-check form-switch">
+                        <input id="simple-backgrounds" class="form-check-input" type="checkbox" role="switch">
+                        <span class="settings-switch-state" aria-hidden="true"></span>
+                      </span>
+                    </label>
+                    <label class="game-setting-row" for="reduce-interface-motion">
+                      <span>
+                        <strong class="d-block">Reduced interface motion</strong>
+                        <small class="text-body-secondary">Remove window fades, tab transitions, and hover movement. Game effects have separate controls.</small>
+                      </span>
+                      <span class="settings-switch form-check form-switch">
+                        <input id="reduce-interface-motion" class="form-check-input" type="checkbox" role="switch">
+                        <span class="settings-switch-state" aria-hidden="true"></span>
+                      </span>
+                    </label>
+                    <label class="game-setting-row" for="disable-game-previews">
+                      <span>
+                        <strong class="d-block">Disable game previews</strong>
+                        <small class="text-body-secondary">Show still images instead of playing videos in the game picker.</small>
+                      </span>
+                      <span class="settings-switch form-check form-switch">
+                        <input id="disable-game-previews" class="form-check-input" type="checkbox" role="switch">
+                        <span class="settings-switch-state" aria-hidden="true"></span>
+                      </span>
+                    </label>
+                    <label class="game-setting-row" for="reduce-transparency">
+                      <span>
+                        <strong class="d-block">Reduced transparency</strong>
+                        <small class="text-body-secondary">Use opaque window and panel backgrounds. Background blur is also bypassed while enabled.</small>
+                      </span>
+                      <span class="settings-switch form-check form-switch">
+                        <input id="reduce-transparency" class="form-check-input" type="checkbox" role="switch">
+                        <span class="settings-switch-state" aria-hidden="true"></span>
+                      </span>
+                    </label>
+                  </section>
+                  <section class="game-settings-group" aria-labelledby="game-display-options-title">
+                    <h4 id="game-display-options-title" class="game-settings-group-title">Game-Specific Graphics</h4>
+                    <p class="text-body-secondary small">Personal card and table styles, saved on this device.</p>
+                    <div id="game-display-sections"></div>
+                  </section>
+                </div>
               </section>
 
               <section id="app-settings-audio-panel" class="app-settings-section tab-pane fade" role="tabpanel"

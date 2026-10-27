@@ -792,3 +792,125 @@ containers, network, tunnel, and the test image were removed afterwards.
 
 Physical phones, audible playback, and a complete human-played match still need
 manual testing. See [release testing](release-testing.md) for the checklist.
+
+
+## Phone frame-rate follow-up (2026-10-27)
+
+The reported recovery during resolution animations points to the turn timer,
+which stops rendering while hidden. It previously changed width every 100 ms
+while Bootstrap applied a 600 ms width transition. The source and beta.7 install
+patch now use a left-origin scale transform with a 100 ms linear transition.
+Seconds text and accessible percentage values are rewritten only when changed.
+No blur, card rendering, server timing, or game rules were changed.
+
+All 97 game tests pass, including unchanged-text mutation and timer fill/reset
+regressions. Real Edge checks at 390x844 and 1366x768 confirm the half-full bar
+has unchanged layout width, the expected transform/transition, and a working
+live countdown. Registry artifact verification applies the patch successfully
+to a fresh package installation. Physical-phone frame-rate improvement remains
+unconfirmed; compare active play with resolutions on the reporting phone.
+
+
+The physical-phone follow-up reported substantially smoother play, with an
+occasional timer twitch. Repeated 100 ms transitions are now replaced with one
+linear browser transform animation over the server-provided remaining time.
+Pausing cancels and freezes the fill; resuming uses the remaining duration.
+Normal, custom, and the server's four-second final-card slap window share this
+code. The inherited gameplay backdrop blur is also disabled for the requested
+comparison, leaving lobby blur intact.
+
+All 98 game tests pass. Real Edge checks confirm one persistent 15-second
+animation, frozen half-full pause, a 7.5-second resume, the four-second slap
+duration, cleanup on unmount, gameplay blur disabled, and lobby blur preserved.
+The updated patch applies to a fresh registry installation. The reporting
+phone still needs testing for timer smoothness and any benefit from blur removal.
+
+
+Gameplay blur is now an optional, default-off platform preference in Settings >
+Graphics > General Graphics. The tab follows Game and also contains the existing
+per-game dropdowns under Game-Specific Graphics. The Egyptian War stylesheet no
+longer forces blur off, so users can compare it immediately. The preference is
+browser-local, survives reload, and follows cross-tab changes without touching
+rule presets or card/table preferences. Client coverage passes all 148 tests;
+real Edge checks at widths 320, 360, 390, and 1366 show unclipped tabs, a fitting
+graphics panel, gameplay blur toggling, and unchanged lobby blur.
+
+
+Egyptian War now offers Shadows and glows (Full/Reduced), Flying hands and cards
+(On/Off), and Table detail (Textured/Simple) in its existing Graphics dropdown
+group. Defaults preserve the current appearance; options apply immediately and
+use the existing browser-local display storage. These only change rendering: the
+card pile, text, current/winner borders, sound cues, and server timings remain.
+All 98 game tests pass, including live display subscription coverage. Real Edge
+checks at 390x844 and 1366x768 confirm reduced seat/card shadows, hidden transient
+effects, stopped dealing animation, simple felt retaining the chosen color,
+visible card/turn feedback, and restoration of full visuals. Generated game
+definitions and browser files are included in the beta.7 install patch, which
+also passes fresh registry package verification. Phone performance benefit
+remains for the user to compare with each setting individually.
+
+
+The graphics follow-up exposed a menu regression: the newly inserted blur rule
+split the shared `#entry-view, #lobby-view` selector and removed the menu's fluid
+width/flex declarations. The original shared rule is restored and covered by a
+style regression. Real Edge comparisons against the committed pre-graphics
+stylesheet show identical menu width and height at 320x640, 390x844, 1024x768,
+and 1920x1080, independent of the blur toggle.
+
+At the user's request, Background blur now applies to the main menu, lobby,
+games, and Settings button. It remains default-off and browser-local; the
+original storage key is retained so existing choices survive. All 152 focused
+client/style tests pass, and browser checks confirm all four targets switch
+filters without changing menu dimensions.
+
+
+All five general performance switches are now available in Graphics: reduced
+shadows, simple backgrounds, reduced interface motion, disabled game previews,
+and reduced transparency. They default off and save independently per browser.
+Preview disabling explicitly pauses/unloads old videos and keeps only posters,
+including after picker rerenders. Existing OS reduced-motion behavior remains
+when videos are re-enabled. Opaque mode bypasses blur while preserving its saved
+choice. Keyboard focus rings and the selected settings-tab highlight remain.
+
+All 154 focused client/style tests pass, covering persistence, reload, cross-tab
+updates, clearing preferences, preview stop/unload/restoration, and unchanged
+menu sizing. Real Edge checks at 320x640, 390x844, and 1366x768 confirm fitting
+controls, unchanged menu dimensions, removed interface shadows/gradients/motion,
+opaque windows with no blur, and unchanged game dealing animation. Physical
+device performance benefits remain for comparison.
+
+
+Boolean game settings and join approval now reuse the same sliding On/Off
+switches as General Graphics. Generated game-rule controls retain their input
+IDs, checked values, host-only disabling, and preset/save behavior; descriptions
+are associated through aria-describedby. Numeric sliders and dropdowns are
+unchanged. The shared switch convention is recorded in AGENTS.md for future
+settings. All 154 focused client/style tests pass, including host handoff and
+preset regressions.
+
+
+Join approval's title and description now share the left text column, reserving
+a 16px gap before its switch at tested phone and laptop sizes. The description
+is linked with aria-describedby. Editable game-rule On/Off labels use dark text
+on the light settings modal; disabled controls retain muted labels. Opaque mode
+leaves already-opaque modals in their existing light/dark palette rather than
+overriding light modal backgrounds with a dark fill.
+
+
+## Stable release preflight (2026-10-27)
+
+The quick pre-publication pass found that the source client's three graphics
+dataset assignments were missing while the installed patch still contained
+them. The game test suite caught the mismatch. Restoring the assignments makes
+source client/style files match the tested installed package; live display
+regressions pass again. GameHub's full preflight passed type checks, 232 root
+tests, and nine SDK tests. Publishing is deferred until the corrected stable
+artifact passes the remaining checks.
+
+
+Stable publication completed after npm browser authorization: Egyptian War
+1.0.1 is available with the reviewed tarball integrity and the latest tag.
+GameHub 1.1.0 now installs that registry version, without a game patch, and
+shares the host SDK. Fresh registry artifact verification passes; source and
+installed browser/definition files match. The game commit's GitHub verification
+passed before preparing the GitHub releases.

@@ -1139,6 +1139,64 @@ document.addEventListener("fullscreenchange", updateFullscreenButton);
 document.addEventListener("webkitfullscreenchange", updateFullscreenButton);
 updateFullscreenButton();
 
+// Keep the original key so existing graphics choices remain saved.
+const backgroundBlurStorageKey = "gamehub:gameplay-blur";
+const backgroundBlurInput = document.querySelector("#background-blur");
+function applyBackgroundBlur(enabled) {
+  backgroundBlurInput.checked = enabled;
+  document.body.classList.toggle("background-blur-enabled", enabled);
+}
+function restoreBackgroundBlur() {
+  try { applyBackgroundBlur(localStorage.getItem(backgroundBlurStorageKey) === "true"); }
+  catch { applyBackgroundBlur(false); }
+}
+restoreBackgroundBlur();
+backgroundBlurInput.addEventListener("change", () => {
+  applyBackgroundBlur(backgroundBlurInput.checked);
+  try { localStorage.setItem(backgroundBlurStorageKey, String(backgroundBlurInput.checked)); }
+  catch { showToast("Graphics settings will only last for this visit; browser storage is unavailable."); }
+});
+window.addEventListener("storage", event => {
+  if (event.key === backgroundBlurStorageKey || event.key === null) restoreBackgroundBlur();
+});
+
+const generalPerformanceOptions = [
+  "reduce-shadows", "simple-backgrounds", "reduce-interface-motion",
+  "disable-game-previews", "reduce-transparency"
+];
+function applyGeneralPerformanceOption(id, enabled, updatePreviews = false) {
+  const input = document.getElementById(id);
+  const changed = document.body.classList.contains(id) !== enabled;
+  input.checked = enabled;
+  document.body.classList.toggle(id, enabled);
+  if (id === "disable-game-previews" && changed && updatePreviews) {
+    for (const video of gamePickerGrid.querySelectorAll("video")) {
+      video.pause();
+      video.removeAttribute("src");
+      video.load();
+    }
+    updateGamePicker();
+  }
+}
+for (const id of generalPerformanceOptions) {
+  const storageKey = `gamehub:graphics:${id}`;
+  const restore = (updatePreviews = false) => {
+    let enabled = false;
+    try { enabled = localStorage.getItem(storageKey) === "true"; } catch {}
+    applyGeneralPerformanceOption(id, enabled, updatePreviews);
+  };
+  restore();
+  document.getElementById(id).addEventListener("change", event => {
+    const enabled = event.target.checked;
+    applyGeneralPerformanceOption(id, enabled, true);
+    try { localStorage.setItem(storageKey, String(enabled)); }
+    catch { showToast("Graphics settings will only last for this visit; browser storage is unavailable."); }
+  });
+  window.addEventListener("storage", event => {
+    if (event.key === storageKey || event.key === null) restore(true);
+  });
+}
+
 appGamePauseButton.addEventListener("click", async () => {
   if (appGamePauseButton.disabled) return;
   const generation = lifecycleGeneration;
@@ -1428,6 +1486,7 @@ function createGamePreview(game) {
   if (game.preview?.videoPath && game.preview?.posterPath) {
     preview.classList.add("has-media");
     preview.style.backgroundImage = `url("${game.preview.posterPath}")`;
+    if (document.body.classList.contains("disable-game-previews")) return preview;
     const previewVideo = document.createElement("video");
     const prefersReducedPreviewMotion = window.matchMedia(
       "(prefers-reduced-motion: reduce)"
@@ -1639,7 +1698,7 @@ function displayGameInformation(game, settings) {
     settingContainer.className =
       setting.type === "number"
         ? "mb-4"
-        : "form-check form-switch mb-4";
+        : "game-setting-toggle mb-4";
 
     let settingInput;
     let settingControl;
@@ -1722,9 +1781,15 @@ function displayGameInformation(game, settings) {
       settingInput = document.createElement("input");
       settingInput.className = "form-check-input";
       settingInput.type = "checkbox";
+      settingInput.setAttribute("role", "switch");
       settingInput.checked =
         settings[setting.key] ?? setting.defaultValue;
-      settingControl = settingInput;
+      settingControl = document.createElement("span");
+      settingControl.className = "settings-switch form-check form-switch";
+      const state = document.createElement("span");
+      state.className = "settings-switch-state";
+      state.setAttribute("aria-hidden", "true");
+      settingControl.append(settingInput, state);
     }
 
     settingInput.id = `setting-${setting.key}`;
@@ -1749,11 +1814,11 @@ function displayGameInformation(game, settings) {
         settingDescription
       );
     } else {
-      settingContainer.append(
-        settingControl,
-        settingLabel,
-        settingDescription
-      );
+      settingDescription.id = `${settingInput.id}-description`;
+      settingInput.setAttribute("aria-describedby", settingDescription.id);
+      const copy = document.createElement("div");
+      copy.append(settingLabel, settingDescription);
+      settingContainer.append(copy, settingControl);
     }
 
     settingsModalBody.appendChild(settingContainer);

@@ -1,7 +1,8 @@
 # GameHub
 
-First official GameHub release: **1.0.0**. This branch pins Egyptian War to
-**1.0.1-beta.7** and the shared SDK to **1.1.0-beta.0**.
+Current GameHub application release: **1.1.0**. This branch pins Egyptian War to
+**1.0.1 stable** and the shared SDK to **1.1.0-beta.0**. GameHub 1.0.0 was the
+first official application release.
 
 GameHub is a self-hosted, real-time browser game platform. A host creates a room, players join from their browsers, and the host chooses which game to start.
 
@@ -288,3 +289,13 @@ requests using Node 24 on Linux and Windows. It performs a locked installation,
 type checks, the full test suite, and package-artifact verification. Windows also
 runs the PowerShell launcher regressions that are skipped on Linux. The workflow
 has read-only repository permissions and does not publish packages.
+
+
+### Personal graphics settings
+
+Settings > Graphics > General Graphics offers background blur, reduced shadows,
+simple backgrounds, reduced interface motion, disabled game preview videos, and
+reduced transparency. These apply immediately across the interface and save in
+your browser. Blur defaults off; the other performance switches are opt-in.
+Opaque windows bypass blur while retaining the saved blur choice. Game-Specific
+Graphics contains each game's existing visual choices and performance options.

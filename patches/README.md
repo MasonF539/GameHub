@@ -1,9 +1,9 @@
 # Game package patches
 
 No game patches are currently required. GameHub installs
-`@masonf539/egyptian-war@1.0.1-beta.7` directly from npm, including its runtime,
-generated TypeScript declarations, design notes, and implementation notes.
-The obsolete beta.6 patch was removed when adopting that release.
+`@masonf539/egyptian-war@1.0.1` directly from npm, including the continuous timer,
+personal graphics options, generated TypeScript declarations, and game docs.
+The temporary beta.7 patch was removed when adopting the stable release.
 
 For future unpublished game fixes, edit the independent game repository first,
 refresh the installed package, and track a version-specific patch here. Normal

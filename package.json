@@ -1,6 +1,6 @@
 {
   "name": "gamehub",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "A self-hosted real-time browser game platform.",
   "main": "dist/server.js",
   "workspaces": [
@@ -27,7 +27,7 @@
   "license": "PolyForm-Noncommercial-1.0.0",
   "type": "commonjs",
   "dependencies": {
-    "@masonf539/egyptian-war": "1.0.1-beta.7",
+    "@masonf539/egyptian-war": "1.0.1",
     "@masonf539/game-sdk": "1.1.0-beta.0",
     "bootstrap": "^5.3.8",
     "express": "^5.2.1",

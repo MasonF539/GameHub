@@ -690,7 +690,10 @@ body:has(:is(#entry-view, #lobby-view):not(.d-none)) > .hub-shell {
   .app-settings-navigation-button {
     width: auto;
     flex: 1 1 0;
+    min-width: 0;
     min-height: auto;
+    padding-inline: clamp(0.25rem, 1vw, 0.75rem);
+    font-size: clamp(0.8rem, 2.8vw, 1rem);
     text-align: center;
     border-radius: 0.7rem 0.7rem 0 0 !important;
   }
@@ -728,6 +731,11 @@ body:has(:is(#entry-view, #lobby-view):not(.d-none)) > .hub-shell {
   border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 1.25rem;
   backdrop-filter: blur(12px);
+}
+
+body:not(.background-blur-enabled) :is(.game-card, .app-settings-button) {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 #lobby-view {
@@ -1267,3 +1275,116 @@ body:has(:is(#entry-view, #lobby-view):not(.d-none)) > .hub-shell {
 }
 #rejoin-room-modal .modal-footer > button { margin: 0; min-width: 0; height: 100%; }
 #rejoin-room { max-width: 100%; overflow-wrap: anywhere; }
+
+
+/* Global interface options are separate from each game's visual effects. */
+body.reduce-shadows :is(.game-card, .modal-content, .btn, .app-settings-button,
+  .app-settings-section, .game-settings-group, .game-picker-card, .list-group-item,
+  .selected-game-panel, .app-settings-navigation-button) {
+  box-shadow: none !important;
+}
+
+body.reduce-shadows :is(.btn, .app-settings-navigation-button):focus-visible {
+  outline: 2px solid #8bb9fe;
+  outline-offset: 2px;
+}
+
+body.simple-backgrounds,
+body.simple-backgrounds :is(.game-card, .modal-content, .selected-game-panel,
+  .app-settings-section, .game-settings-group, .game-picker-card,
+  .app-settings-navigation-button) {
+  background-image: none !important;
+}
+
+body.simple-backgrounds .app-settings-navigation .app-settings-navigation-button.active {
+  background-color: #0d6efd;
+}
+
+body.reduce-interface-motion :is(.modal.fade .modal-dialog, .fade, .btn,
+  .game-picker-card, .app-settings-navigation-button) {
+  transition: none !important;
+}
+
+body.reduce-interface-motion :is(.btn, .game-picker-card):hover {
+  transform: none !important;
+}
+
+body.reduce-transparency :is(.game-card, .app-settings-button,
+  .app-settings-section, .game-settings-group, .game-picker-card,
+  .selected-game-panel, .list-group-item) {
+  background-color: #1e222d !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+
+.general-graphics-options > .game-setting-row {
+  padding-block: 0.75rem;
+}
+
+.general-graphics-options > .game-setting-row + .game-setting-row {
+  border-top: 1px solid rgba(255, 255, 255, 0.16);
+}
+
+.settings-switch {
+  display: inline-flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+  margin: 0;
+  padding: 0;
+}
+
+.settings-switch .form-check-input {
+  width: 2.75rem;
+  height: 1.5rem;
+  margin: 0;
+  cursor: pointer;
+}
+
+.settings-switch-state {
+  color: #cbd5e1;
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.settings-switch-state::after {
+  content: "Off";
+}
+
+.settings-switch input:checked + .settings-switch-state::after {
+  content: "On";
+}
+
+body.reduce-interface-motion .settings-switch .form-check-input {
+  transition: none;
+}
+
+
+.game-setting-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.game-setting-toggle > div {
+  min-width: 0;
+}
+
+.settings-switch .form-check-input:disabled {
+  cursor: not-allowed;
+}
+
+
+.join-approval-copy {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+
+#settings-modal .settings-switch input:enabled + .settings-switch-state {
+  color: #343a40;
+}

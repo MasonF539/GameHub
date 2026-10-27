@@ -5,7 +5,7 @@ const path = require("node:path");
 const { JSDOM } = require("jsdom");
 const { GameClientHost } = require("../public/gameHost.js");
 
-function createClient({ prefersReducedMotion = false, mobile = false, fullscreenRequest, savedRoom, savedSessions = [], legacyRoom, locks, navigationType, sessionStatuses, savedRules, url = "http://localhost" } = {}) {
+function createClient({ prefersReducedMotion = false, mobile = false, fullscreenRequest, savedRoom, savedSessions = [], legacyRoom, locks, navigationType, sessionStatuses, savedRules, savedGameplayBlur, savedGraphics = {}, url = "http://localhost" } = {}) {
   const html = fs.readFileSync(
     path.join(__dirname, "..", "public", "index.html"),
     "utf8"
@@ -39,6 +39,8 @@ function createClient({ prefersReducedMotion = false, mobile = false, fullscreen
   if (locks) Object.defineProperty(window.navigator, "locks", { value: locks, configurable: true });
   if (navigationType) window.performance.getEntriesByType = () => [{ type: navigationType }];
   if (savedRules) localStorage.setItem("gamehub:rule-presets", JSON.stringify(savedRules));
+  if (savedGameplayBlur !== undefined) localStorage.setItem("gamehub:gameplay-blur", savedGameplayBlur);
+  for (const [id, enabled] of Object.entries(savedGraphics)) localStorage.setItem(`gamehub:graphics:${id}`, String(enabled));
   global.CSS = dom.window.CSS ?? { escape: (value) => String(value) };
   if (!global.CSS.escape) {
     global.CSS.escape = (value) => String(value);
@@ -1226,6 +1228,8 @@ test("an in-game host handoff restores preset controls when the match ends", () 
     assert.ok(document.querySelector("#rule-preset"));
     assert.equal(document.querySelector("#setting-fast").checked, true);
     assert.equal(document.querySelector("#setting-fast").disabled, false);
+    assert.equal(document.querySelector("#setting-fast").getAttribute("role"), "switch");
+    assert.ok(document.querySelector("#setting-fast").closest(".settings-switch"));
   } finally { view.close(); }
 });
 
@@ -2497,3 +2501,84 @@ for (const action of ["lock", "kick", "transfer", "approval"]) {
     } finally { view.close(); }
   });
 }
+
+
+test("graphics preferences default off, persist, and follow cross-tab updates without changing themes", () => {
+  let view = createClient();
+  try {
+    const tabs = [...document.querySelectorAll(".app-settings-navigation [role=tab]")].map(tab => tab.textContent.trim());
+    assert.deepEqual(tabs, ["Game", "Graphics", "Audio", "Keybinds"]);
+    assert.ok(document.querySelector("#app-settings-graphics-panel #game-display-sections"));
+    const toggle = document.querySelector("#background-blur");
+    assert.equal(toggle.checked, false);
+    assert.equal(document.body.classList.contains("background-blur-enabled"), false);
+    localStorage.setItem("gamehub:display-options", '{"example-game":{"cardStyle":"midnight"}}');
+    toggle.click();
+    assert.equal(localStorage.getItem("gamehub:gameplay-blur"), "true");
+    assert.equal(document.body.classList.contains("background-blur-enabled"), true);
+    assert.equal(JSON.parse(localStorage.getItem("gamehub:display-options"))["example-game"].cardStyle, "midnight");
+  } finally { view.close(); }
+  view = createClient({ savedGameplayBlur: "true" });
+  try {
+    assert.equal(document.querySelector("#background-blur").checked, true);
+    assert.equal(document.body.classList.contains("background-blur-enabled"), true);
+    localStorage.removeItem("gamehub:gameplay-blur");
+    window.dispatchEvent(new window.StorageEvent("storage", { key: "gamehub:gameplay-blur" }));
+    assert.equal(document.querySelector("#background-blur").checked, false);
+    assert.equal(document.body.classList.contains("background-blur-enabled"), false);
+  } finally { view.close(); }
+});
+
+
+test("general performance controls persist independently and follow storage changes", () => {
+  const ids = ["reduce-shadows", "simple-backgrounds", "reduce-interface-motion", "disable-game-previews", "reduce-transparency"];
+  let view = createClient();
+  try {
+    for (const id of ids) {
+      const input = document.getElementById(id);
+      assert.equal(input.checked, false);
+      assert.ok(document.querySelector("#app-settings-graphics-panel").contains(input));
+      input.click();
+      assert.equal(document.body.classList.contains(id), true);
+      assert.equal(localStorage.getItem(`gamehub:graphics:${id}`), "true");
+    }
+    assert.equal(localStorage.getItem("gamehub:gameplay-blur"), null);
+    assert.equal(localStorage.getItem("gamehub:display-options"), null);
+  } finally { view.close(); }
+  view = createClient({ savedGraphics: Object.fromEntries(ids.map(id => [id, true])) });
+  try {
+    for (const id of ids) {
+      assert.equal(document.getElementById(id).checked, true);
+      assert.equal(document.body.classList.contains(id), true);
+    }
+    localStorage.removeItem("gamehub:graphics:reduce-shadows");
+    window.dispatchEvent(new window.StorageEvent("storage", { key: "gamehub:graphics:reduce-shadows" }));
+    assert.equal(document.body.classList.contains("reduce-shadows"), false);
+    assert.equal(document.body.classList.contains("reduce-transparency"), true);
+    localStorage.clear();
+    window.dispatchEvent(new window.StorageEvent("storage", { key: null }));
+    for (const id of ids) assert.equal(document.body.classList.contains(id), false);
+  } finally { view.close(); }
+});
+
+test("disabling previews stops and unloads videos and keeps poster-only previews after rerenders", () => {
+  const view = createClient();
+  try {
+    let paused = 0, unloaded = 0;
+    window.HTMLMediaElement.prototype.pause = () => { paused++; };
+    window.HTMLMediaElement.prototype.load = () => { unloaded++; };
+    view.handlers.get("available-games")([game()]);
+    const original = document.querySelector(".game-picker-preview-video");
+    assert.ok(original);
+    document.querySelector("#disable-game-previews").click();
+    assert.equal(paused, 1);
+    assert.equal(unloaded, 1);
+    assert.equal(original.hasAttribute("src"), false);
+    assert.equal(document.querySelector(".game-picker-preview-video"), null);
+    assert.match(document.querySelector(".game-picker-preview").style.backgroundImage, /poster.webp/);
+    view.handlers.get("available-games")([game()]);
+    assert.equal(document.querySelector("video"), null);
+    document.querySelector("#disable-game-previews").click();
+    assert.equal(document.querySelector(".game-picker-preview-video").autoplay, true);
+  } finally { view.close(); }
+});

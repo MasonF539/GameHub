@@ -24,3 +24,12 @@ Emulation and audio decoding do not replace physical-device and audible checks.
 
 Loaded Roulette currently remains a scaffold with a documented implementation
 plan; roulette gameplay is not available for testing yet.
+
+
+## Stable graphics release preflight
+
+GameHub 1.1.0 passes type checks, 232 root tests, and nine SDK tests. Egyptian
+War 1.0.1 passes type checks and all 98 tests. The pre-publication pass restored
+three missing source graphics hooks; the reviewed stable artifact now matches
+the tested source client/styles and installs with the stable SDK. Existing
+manual checks above remain useful for physical-device comparison.

@@ -16,7 +16,7 @@ version-specific patch in `patches/`. The install hook applies it to the npm
 package, including in Docker, so normal build/start commands run the changes.
 The independent game repository remains the source for the next package release.
 Remove the patch once the dependency is updated to a release containing the fix.
-Egyptian War beta.7 includes the previously patched changes, so no game patch is
+Egyptian War 1.0.1 includes the previously patched changes, so no game patch is
 currently required.
 
 The Docker build runs `npm run verify:packages` after the test suite. That
@@ -150,7 +150,7 @@ or client-reported scores are accepted. Host procedures are described under
 GameHub **1.0.0** is the first official application release, distributed through
 GitHub and built with Docker. Its version is independent of the npm package
 versions: this branch uses `@masonf539/game-sdk@1.1.0-beta.0` and
-`@masonf539/egyptian-war@1.0.1-beta.7`. Updating the application version does not
+`@masonf539/egyptian-war@1.0.1`. Updating the application version does not
 require republishing either npm package unless that package itself changes.
 
 The independently buildable `@masonf539/game-sdk` workspace under
@@ -404,3 +404,47 @@ per second and broadcasts only changes to the validated address, including its
 removal. Connected clients cache that value for Copy Link. A configured
 GAMEHUB_PUBLIC_URL takes precedence and skips the file observer. The observer
 is removed when the HTTP server closes.
+
+
+## Graphics preferences
+
+Settings categories are ordered Game, Graphics, Audio, and Keybinds. Graphics
+contains General Graphics and Game-Specific Graphics. Background blur is a
+general browser-local boolean (the original `gamehub:gameplay-blur` storage key
+is retained), defaults off, applies immediately, and follows cross-tab storage
+updates. It controls the main menu, lobby, gameplay containers, and Settings
+button. It changes backdrop filters without changing their dimensions.
+Storage failures retain the current choice for that visit and show a notice.
+Existing per-game card/table dropdowns and previews live in Game-Specific
+Graphics, retaining their display-option schema and existing saved preferences.
+No room setting, preset, server state, or SDK change is required.
+
+
+General Graphics also provides five independent, default-off personal switches:
+Reduced shadows, Simple backgrounds, Reduced interface motion, Disable game
+previews, and Reduced transparency. They use separate boolean storage keys
+`gamehub:graphics:<control-id>` to avoid overwriting other tabs' preferences;
+changes apply immediately and follow storage events. Storage failures keep the
+current choice for the visit and report that it could not be saved.
+
+These controls target platform windows, panels, and buttons across the menu,
+lobby, and gameplay. Reduced shadows preserves visible keyboard focus outlines;
+simple backgrounds preserves the selected settings tab's solid highlight.
+Reduced interface motion removes fades/transitions and hover movement without
+changing game animation or turn timing. Disabling previews pauses and unloads
+existing picker videos and renders poster-only previews on subsequent picker
+updates. Re-enabling previews restores video creation, still honoring the OS
+reduced-motion preference. Reduced transparency makes panels opaque and bypasses
+backdrop blur without altering the saved blur switch. Game-specific graphics
+preferences remain separate and retain their existing storage/schema.
+
+General Graphics options are separated by thin dividers and use native checkbox
+inputs with switch semantics, a circular sliding thumb, and visible On/Off
+labels. Label clicks and keyboard Space preserve native behavior; saved values
+and per-game dropdowns are unchanged.
+
+Sliding On/Off switches are the standard for boolean settings throughout
+GameHub, including schema-generated game rules and join approval. Shared
+`.settings-switch` styling keeps native checkbox state, switch semantics,
+keyboard access, host-only disabling, and existing preset/Save Settings
+behavior. Numeric sliders, selections, and action buttons retain their types.
