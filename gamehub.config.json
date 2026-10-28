@@ -1,5 +1,6 @@
 {
   "gamePackages": [
-    "@masonf539/egyptian-war"
+    "@masonf539/egyptian-war",
+    "@masonf539/loaded-roulette"
   ]
 }

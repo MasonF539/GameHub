@@ -16,7 +16,8 @@
     "check": "npm run build:workspaces && npm run check --workspaces --if-present && tsc --noEmit && tsc --noEmit -p tsconfig.test.json",
     "test": "npm run build && npm run test --workspaces --if-present && npm run build:test && node --test dist-test/*.test.js test/*.test.js",
     "verify:packages": "node scripts/verify-package-artifacts.mjs",
-    "start": "node dist/server.js"
+    "start": "node dist/server.js",
+    "update:roulette": "node scripts/update-roulette.mjs"
   },
   "keywords": [
     "browser-game",
@@ -29,6 +30,7 @@
   "dependencies": {
     "@masonf539/egyptian-war": "1.0.1",
     "@masonf539/game-sdk": "1.1.0-beta.0",
+    "@masonf539/loaded-roulette": "file:vendor/masonf539-loaded-roulette-0.1.0.tgz",
     "bootstrap": "^5.3.8",
     "express": "^5.2.1",
     "patch-package": "8.0.1",

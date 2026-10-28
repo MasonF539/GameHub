@@ -922,3 +922,26 @@ later uncached, unauthenticated download matched the reviewed integrity, and a
 fresh production npm ci passed without game patches. Windows CI then exposed
 an LF-only selector matcher in the new menu style regression. The test now
 normalizes CRLF before matching; application CSS and layout are unchanged.
+
+
+## Basic Loaded Roulette prototype verification
+
+The Add 1 scaffold is replaced by real, authoritative roulette reservations,
+edits, lock/unlock, timers, once-only draws and settlement, qualifying ties, and
+reconnect-safe ownership. Thirty-nine game tests and hub type checks, 232 root
+tests, nine SDK tests, and two-package fresh-consumer verification pass.
+Real Edge phone/laptop checks exercise click and actual chip dragging onto seam
+targets, wheel reveal, payouts, and cleanup without browser errors or horizontal
+overflow. An actual twelve-player hub match passed betting, host pause/resume,
+server-result reveal, settlement, and the return to lobby. The production Docker
+build and runtime package load also pass. Isolated server/browser resources and
+the uniquely named Docker test image were cleaned up.
+
+Chips are monetary representations rather than a finite inventory. A stack
+starts at a $1 stake, increases per 10% of settled bankroll to ten chips, and
+uses five 20% bands on phones. Exact stakes remain editable before locking.
+A sticky chip tray keeps touch dragging usable while the board scrolls.
+
+The reviewed private tarball is integrated into normal installation and Docker
+without publishing to npm. Physical-phone touch/performance still needs the
+user's check. Cards, shops, loans, and late entry remain explicitly unfinished.

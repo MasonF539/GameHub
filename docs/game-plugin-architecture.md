@@ -448,3 +448,19 @@ GameHub, including schema-generated game rules and join approval. Shared
 `.settings-switch` styling keeps native checkbox state, switch semantics,
 keyboard access, host-only disabling, and existing preset/Save Settings
 behavior. Numeric sliders, selections, and action buttons retain their types.
+
+
+## Private game prototype integration
+
+Loaded Roulette's playable basic prototype is installed through
+`file:vendor/masonf539-loaded-roulette-0.1.0.tgz`; its independent source remains
+in the sibling repository. `npm run update:roulette` checks/tests that source,
+packs it, updates the file dependency and lock integrity, and runs artifact
+verification. Both Docker stages copy vendor/ before npm ci. The artifact check
+accepts only locked local archives within vendor/, validates their real path and
+integrity metadata, and verifies a fresh consumer just as it does registry games.
+
+The prototype supports twelve simultaneous participants and all 157 conventional
+single-zero bet targets. It does not implement cards, shops, loans, or mid-match
+player admission; those remain separate milestones and do not change the SDK
+contract in this integration. No game package is published for local testing.

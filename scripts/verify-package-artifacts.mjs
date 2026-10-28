@@ -5,6 +5,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  realpathSync,
   rmSync,
   writeFileSync
 } from "node:fs";
@@ -48,8 +49,22 @@ assert.equal(
   "Configured game package names must be unique."
 );
 
+/** Lock metadata supplies the reviewed version/integrity for private local development archives. */
+const rootLock = JSON.parse(readFileSync(path.join(workspaceRoot, "package-lock.json"), "utf8"));
+
 const gamePackageSpecs = gamePackageNames.map((packageName) => {
   const version = rootPackage.dependencies?.[packageName];
+  if (typeof version === "string" && version.startsWith("file:")) {
+    assert.match(version, /^file:vendor\/[a-zA-Z0-9._+-]+\.tgz$/, "Local game packages must be reviewed tarballs in vendor/.");
+    const archive = realpathSync(path.resolve(workspaceRoot, version.slice(5)));
+    const vendorRoot = realpathSync(path.join(workspaceRoot, "vendor")) + path.sep;
+    assert.ok(archive.startsWith(vendorRoot), "Local game tarballs must stay within vendor/.");
+    const locked = rootLock.packages?.[`node_modules/${packageName}`];
+    assert.match(locked?.version ?? "", exactVersionPattern, "Local games need an exact locked package version.");
+    assert.equal(locked?.resolved, version, "Local package and lockfile must reference the same archive.");
+    assert.ok(locked?.integrity, "Local games need a locked artifact integrity.");
+    return { packageName, version: locked.version, packageSpec: archive };
+  }
   assert.match(
     version ?? "",
     exactVersionPattern,

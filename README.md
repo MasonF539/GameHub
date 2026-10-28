@@ -299,3 +299,19 @@ reduced transparency. These apply immediately across the interface and save in
 your browser. Blur defaults off; the other performance switches are opt-in.
 Opaque windows bypass blur while retaining the saved blur choice. Game-Specific
 Graphics contains each game's existing visual choices and performance options.
+
+
+### Loaded Roulette prototype (development build)
+
+The current development branch also includes the private basic Loaded Roulette
+prototype as a locked `vendor/` tarball. It supports 2?12 players, conventional
+single-zero betting (including split/corner/edge targets), click/drag chips,
+custom whole stakes, proportional stacks, timed rounds, and a shared animated
+wheel. Cards, shops, loans, and late entry are not implemented yet.
+
+Rebuild/start GameHub normally, then select Loaded Roulette in the lobby. After
+editing the sibling Loaded-Roulette source, run `npm run update:roulette` from
+GameHub, then rebuild/restart. Install source development dependencies with
+`npm ci` in Loaded-Roulette once on a fresh checkout. The update helper checks
+and tests the source, builds/packs it, refreshes the locked dependency, and checks
+a fresh consumer. No npm publication is required.
