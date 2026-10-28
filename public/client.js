@@ -1,5 +1,6 @@
 const socket = io();
 
+/** Sends an online socket request and reports disconnection instead of buffering a mutation. */
 function emitRequest(event, data, respond) {
   if (!socket.connected) {
     respond?.({ success: false, message: "Connection lost. Wait for reconnection." });
@@ -37,7 +38,9 @@ const lobbyView = document.querySelector("#lobby-view");
 const gameplayView = document.querySelector("#gameplay-view");
 const gameRoot = document.querySelector("#game-root");
 const gameHubAudio = window.GameHubAudio ?? {
+  /** Provides a no-op fallback when the host audio service is unavailable. */
   playEffect() {},
+  /** Provides a no-op fallback when the host audio service is unavailable. */
   setScene() {}
 };
 const gameClientHost = new window.GameHubGameClientHost({
@@ -45,6 +48,7 @@ const gameClientHost = new window.GameHubGameClientHost({
   createContext: (gameId) => ({
     memberId: socket.id ?? "",
     role: isCurrentUserSpectator ? "spectator" : "player",
+    /** Returns whether the local member currently owns the room. */
     get isHost() { return isCurrentUserHost; },
     resetScoreboard: () => resetRoomScoreboard(gameId),
     audio: gameHubAudio,
@@ -260,16 +264,19 @@ const assignableSpecialKeyCodes = new Set([
   "NumpadDecimal", "NumpadEnter", "NumpadEqual", "NumpadComma"
 ]);
 
+/** Checks whether a keyboard code is available for configurable shortcuts. */
 function isAllowedKeybindCode(code) {
   if (typeof code !== "string") return false;
   if (/^(Key[A-Z]|Digit[0-9]|Numpad[0-9])$/.test(code)) return true;
   return assignableSpecialKeyCodes.has(code);
 }
 
+/** Checks whether a key code represents a modifier pressed on its own. */
 function isStandaloneModifierCode(code) {
   return /^(Shift|Control|Alt|Meta)(Left|Right)$/.test(code);
 }
 
+/** Reads saved keyboard bindings and falls back safely when storage is unavailable. */
 function loadKeybindOverrides(fallback = Object.create(null)) {
   try {
     const saved = JSON.parse(localStorage.getItem(keybindStorageKey) ?? "{}");
@@ -294,6 +301,7 @@ function loadKeybindOverrides(fallback = Object.create(null)) {
 }
 
 const unsavedKeybindChanges = [];
+/** Persists the current custom keyboard bindings. */
 function saveKeybindOverrides(change) {
   for (const listener of bindingChangeListeners) listener();
   unsavedKeybindChanges.push(change);
@@ -316,6 +324,7 @@ function saveKeybindOverrides(change) {
   }
 }
 
+/** Returns the general and installed-game shortcut definitions. */
 function getKeybindDefinitions() {
   return [
     generalKeybindDefinition,
@@ -325,12 +334,14 @@ function getKeybindDefinitions() {
   ];
 }
 
+/** Looks up a shortcut definition by game and action ID. */
 function getKeybindDefinition(groupId, actionId) {
   return getKeybindDefinitions()
     .find((group) => group.id === groupId)
     ?.keybinds.find((keybind) => keybind.id === actionId) ?? null;
 }
 
+/** Returns an action's saved binding or its default keyboard code. */
 function getAssignedKey(groupId, keybind) {
   const override = keybindOverrides[groupId]?.[keybind.id];
   if (override === null) return null;
@@ -339,6 +350,7 @@ function getAssignedKey(groupId, keybind) {
     : keybind.defaultKey;
 }
 
+/** Formats a browser keyboard code as a readable key hint. */
 function formatKeyCode(code) {
   const labels = {
     null: "Unbound",
@@ -376,6 +388,7 @@ function formatKeyCode(code) {
   return code;
 }
 
+/** Updates an action's binding, saves it, and refreshes affected controls. */
 function setKeybind(groupId, actionId, code) {
   const definition = getKeybindDefinition(groupId, actionId);
   if (!definition || (code !== null && !isAllowedKeybindCode(code))) return false;
@@ -393,18 +406,22 @@ function setKeybind(groupId, actionId, code) {
   return saveKeybindOverrides({ groupId, actionId, code, reset: code === definition.defaultKey });
 }
 
+/** Creates the keyboard-input service exposed to a mounted game. */
 function createGameInput(gameId) {
   return {
     hasKeyboard: () => keyboardSeen || keyboardMedia.matches,
+    /** Returns the current readable binding for a game action. */
     getBinding(actionId) {
       const definition = getKeybindDefinition(gameId, actionId);
       const code = definition ? getAssignedKey(gameId, definition) : null;
       return code ? formatKeyCode(code) : null;
     },
+    /** Subscribes to binding changes and returns the unsubscribe function. */
     onBindingsChanged(handler) {
       bindingChangeListeners.add(handler);
       return () => bindingChangeListeners.delete(handler);
     },
+    /** Subscribes a game handler to a bound input action and returns its cleanup function. */
     onAction(actionId, handler) {
       if (typeof handler !== "function") {
         throw new TypeError("A game input action handler must be a function.");
@@ -434,12 +451,15 @@ function createGameInput(gameId) {
   };
 }
 
+/** Builds the identifier used to track a conflicting shortcut assignment. */
 function keybindConflictId(groupId, actionId) {
   return `${groupId}\u0000${actionId}`;
 }
 
+/** Finds shortcuts whose current keyboard assignments conflict. */
 function findKeybindConflicts(groups) {
   const conflicts = new Set();
+  /** Marks duplicate shortcut assignments in the current conflict collection. */
   const markDuplicates = (group) => {
     const actionsByCode = new Map();
     for (const keybind of group.keybinds) {
@@ -478,6 +498,7 @@ function findKeybindConflicts(groups) {
   return conflicts;
 }
 
+/** Builds the settings controls for one group of configurable shortcuts. */
 function createKeybindSection(group, expanded, conflicts) {
   const section = document.createElement("section");
   section.className = "game-keybind-section";
@@ -565,6 +586,7 @@ function createKeybindSection(group, expanded, conflicts) {
         groupId: group.id,
         actionId: keybind.id,
         button: keyButton,
+        /** Cancels key capture and restores the shortcut control without changing its binding. */
         cancel() {
           keyButton.textContent = originalText;
           keyButton.classList.remove("is-listening");
@@ -613,6 +635,7 @@ function createKeybindSection(group, expanded, conflicts) {
   return section;
 }
 
+/** Rebuilds shortcut settings from the installed definitions and saved bindings. */
 function renderKeybindSettings() {
   pendingKeybindCapture?.cancel();
   gameKeybindSections.replaceChildren();
@@ -632,12 +655,14 @@ function renderKeybindSettings() {
   }
 }
 
+/** Checks whether a keyboard event originated in an editable control. */
 function isTextEntryTarget(target) {
   return Boolean(target && typeof target.closest === "function" &&
     target.closest("input, textarea, select, [contenteditable='true']")
   );
 }
 
+/** Opens or closes the application settings dialog. */
 function toggleAppSettings() {
   const modal = bootstrap.Modal.getOrCreateInstance(appSettingsModalElement);
   if (appSettingsModalElement.classList.contains("show")) modal.hide();
@@ -730,11 +755,13 @@ document.addEventListener("keydown", (event) => {
 
 renderKeybindSettings();
 
+/** Reads reconnect data from browser storage with a safe fallback. */
 function readResumeStorage(storage, key, fallback) {
   try { return JSON.parse(window[storage].getItem(key) ?? "null") ?? fallback; }
   catch { return fallback; }
 }
 
+/** Writes reconnect data to browser storage while handling unavailable storage. */
 function writeResumeStorage(storage, key, value) {
   try {
     if (value === null) window[storage].removeItem(key);
@@ -742,22 +769,26 @@ function writeResumeStorage(storage, key, value) {
   } catch { /* The current page can still reconnect from memory. */ }
 }
 
+/** Checks whether a stored value has the required reconnect-session fields. */
 function isResumeSession(value) {
   return value && /^[A-Z0-9]{6}$/.test(value.roomCode) &&
     typeof value.resumeToken === "string" && value.resumeToken.length > 0 &&
     typeof value.playerName === "string" && value.playerName.length <= 20;
 }
 
+/** Reads and validates the browser's saved player identities. */
 function readSavedSessions() {
   const saved = readResumeStorage("localStorage", savedSessionsStorageKey, []);
   return Array.isArray(saved) ? saved.filter(session => isResumeSession(session) &&
     Number.isFinite(session.savedAt) && Date.now() < (session.expiresAt ?? session.savedAt + 24 * 60 * 60 * 1000)).slice(0, 20) : [];
 }
 
+/** Builds the key used to identify a saved reconnect session. */
 function resumeSessionKey(session) {
   return `${session.roomCode}:${session.playerName.toLocaleLowerCase()}`;
 }
 
+/** Claims a saved identity for this tab and releases its prior claim. */
 function useResumeClaim(session, onClaim) {
   const key = resumeSessionKey(session);
   if (!window.navigator.locks?.request || resumeClaimKey === key) { onClaim(); return; }
@@ -798,6 +829,7 @@ function useResumeClaim(session, onClaim) {
   });
 }
 
+/** Saves the current room and reconnect token for refresh or later rejoining. */
 function saveResumeSession(roomCode, resumeToken, playerName = playerNameInput.value.trim()) {
   const previousToken = activeResumeSession?.resumeToken;
   const session = { roomCode, resumeToken, playerName, savedAt: Date.now(), lastSeen: Date.now() };
@@ -810,6 +842,7 @@ function saveResumeSession(roomCode, resumeToken, playerName = playerNameInput.v
   renderSavedSessions();
 }
 
+/** Removes the selected saved reconnect identity from browser storage. */
 function clearResumeSession(roomCode = null, forgetSaved = true) {
   stopReconnecting();
   pendingResumeClaim = null;
@@ -826,12 +859,14 @@ function clearResumeSession(roomCode = null, forgetSaved = true) {
   renderSavedSessions();
 }
 
+/** Stops the reconnect screen and its pending timeout. */
 function stopReconnecting() {
   clearTimeout(reconnectTimeout);
   reconnectTimeout = null;
   reconnectingOverlay.hidden = true;
 }
 
+/** Shows reconnect progress and starts the bounded recovery wait. */
 function beginReconnecting() {
   if (reconnectTimeout !== null) return;
   reconnectingOverlay.hidden = false;
@@ -848,6 +883,7 @@ function beginReconnecting() {
   }, 10_000);
 }
 
+/** Refreshes the last-seen time of the current saved identity. */
 function touchResumeSession() {
   if (!activeResumeSession) return;
   activeResumeSession.lastSeen = Date.now();
@@ -858,6 +894,7 @@ function touchResumeSession() {
 }
 
 let dismissingRejoinOffer = false;
+/** Dismisses the offered saved identity without taking over its player. */
 function dismissRejoinOffer() {
   // Lifecycle cleanup must close the modal even while a room request is pending.
   dismissingRejoinOffer = true;
@@ -871,11 +908,13 @@ function dismissRejoinOffer() {
   }
 }
 
+/** Removes the specified reconnect tokens from the saved identity list. */
 function forgetSavedTokens(tokens) {
   writeResumeStorage("localStorage", savedSessionsStorageKey,
     readSavedSessions().filter(item => !tokens.has(item.resumeToken)));
 }
 
+/** Offers the latest eligible inactive identity for rejoining. */
 async function offerSavedSession() {
   if (!socket.connected || currentRoomCode !== null || isRoomRequestPending || activeResumeSession ||
       rejoinPromptShown || rejoinCheckPending || rejoinCheckComplete ||
@@ -922,6 +961,7 @@ async function offerSavedSession() {
   });
 }
 
+/** Refreshes the saved-player rejoin offer after checking current eligibility. */
 function renderSavedSessions() {
   rejoinRoomButton.disabled = isRoomRequestPending || !rejoinCandidate;
   newPlayerButton.disabled = isRoomRequestPending || !rejoinCandidate;
@@ -972,6 +1012,7 @@ document.addEventListener("hidden.bs.modal", renderSavedSessions);
 window.addEventListener("pagehide", () => { touchResumeSession(); stopReconnecting(); rejoinCheckGeneration++; });
 document.addEventListener("visibilitychange", () => { if (document.hidden) touchResumeSession(); });
 
+/** Requests a host pause or resume for the active game. */
 function requestGamePause(isPaused) {
   return new Promise((resolve) => {
     if (currentRoomCode === null) {
@@ -987,6 +1028,7 @@ function requestGamePause(isPaused) {
   });
 }
 
+/** Updates controls while a room operation is awaiting a response. */
 function setRoomRequestPending(isPending) {
   isRoomRequestPending = isPending;
   renderSavedSessions();
@@ -1003,6 +1045,7 @@ function setRoomRequestPending(isPending) {
   }
 }
 
+/** Refreshes the selected avatar shown beside the player-name controls. */
 function updateAvatarPreview() {
   const selectedAvatar = avatars[selectedAvatarIndex];
 
@@ -1029,6 +1072,7 @@ nextAvatarButton.addEventListener("click", () => {
 
 updateAvatarPreview();
 
+/** Shows a user-facing notification message. */
 function showToast(message) {
   gameHubToastMessage.textContent = message;
 
@@ -1039,10 +1083,12 @@ function showToast(message) {
   toast.show();
 }
 
+/** Returns the element currently in fullscreen, including the browser fallback API. */
 function getFullscreenElement() {
   return document.fullscreenElement ?? document.webkitFullscreenElement ?? null;
 }
 
+/** Refreshes the fullscreen control to match current support and display mode. */
 function updateFullscreenButton() {
   if (!supportsFullscreen) {
     fullscreenButton.disabled = true;
@@ -1065,6 +1111,7 @@ function updateFullscreenButton() {
   );
 }
 
+/** Refreshes active-game settings controls and host-only permissions. */
 function updateGameSettingsControls() {
   const hasActiveGame = currentActiveGameId !== null;
 
@@ -1084,6 +1131,7 @@ function updateGameSettingsControls() {
   appGameExitButton.disabled = !hasActiveGame;
 }
 
+/** Shows the appropriate leave-game confirmation for the current role. */
 function showLeaveGameConfirmation() {
   const modalElement = isCurrentUserSpectator
     ? leaveSpectatorModalElement
@@ -1091,6 +1139,7 @@ function showLeaveGameConfirmation() {
   bootstrap.Modal.getOrCreateInstance(modalElement).show();
 }
 
+/** Updates lobby controls for the selected game and the member's role. */
 function updateLobbyGameAction() {
   const canSpectate =
     currentRoomCode !== null &&
@@ -1103,6 +1152,7 @@ function updateLobbyGameAction() {
   spectateGameButton.disabled = !canSpectate;
 }
 
+/** Moves the shared settings controls to the active application view. */
 function placeAppUtilityControls(inGameplay = false) {
   if (inGameplay) {
     gameplayView.append(appUtilityControls);
@@ -1112,6 +1162,7 @@ function placeAppUtilityControls(inGameplay = false) {
   document.body.prepend(appUtilityControls);
 }
 
+/** Enters or exits browser fullscreen and reports unsupported or rejected requests. */
 async function toggleFullscreen() {
   try {
     if (getFullscreenElement() !== null) {
@@ -1142,10 +1193,12 @@ updateFullscreenButton();
 // Keep the original key so existing graphics choices remain saved.
 const backgroundBlurStorageKey = "gamehub:gameplay-blur";
 const backgroundBlurInput = document.querySelector("#background-blur");
+/** Applies the browser's background-blur preference and synchronizes its switch. */
 function applyBackgroundBlur(enabled) {
   backgroundBlurInput.checked = enabled;
   document.body.classList.toggle("background-blur-enabled", enabled);
 }
+/** Restores background blur from saved preferences, defaulting off on failure. */
 function restoreBackgroundBlur() {
   try { applyBackgroundBlur(localStorage.getItem(backgroundBlurStorageKey) === "true"); }
   catch { applyBackgroundBlur(false); }
@@ -1164,6 +1217,7 @@ const generalPerformanceOptions = [
   "reduce-shadows", "simple-backgrounds", "reduce-interface-motion",
   "disable-game-previews", "reduce-transparency"
 ];
+/** Applies one general graphics preference and refreshes previews when needed. */
 function applyGeneralPerformanceOption(id, enabled, updatePreviews = false) {
   const input = document.getElementById(id);
   const changed = document.body.classList.contains(id) !== enabled;
@@ -1180,6 +1234,7 @@ function applyGeneralPerformanceOption(id, enabled, updatePreviews = false) {
 }
 for (const id of generalPerformanceOptions) {
   const storageKey = `gamehub:graphics:${id}`;
+  /** Restores this graphics option from browser storage and optionally refreshes previews. */
   const restore = (updatePreviews = false) => {
     let enabled = false;
     try { enabled = localStorage.getItem(storageKey) === "true"; } catch {}
@@ -1207,6 +1262,7 @@ appGamePauseButton.addEventListener("click", async () => {
 appGameExitButton.addEventListener("click", () => {
   if (appGameExitButton.disabled || pendingSettingsExit) return;
   const generation = lifecycleGeneration;
+  /** Shows the pending lifecycle confirmation once settings have closed. */
   const showConfirmation = () => {
     pendingSettingsExit = null;
     if (generation !== lifecycleGeneration || currentActiveGameId === null) return;
@@ -1236,6 +1292,7 @@ appSettingsModalElement.addEventListener("hidden.bs.modal", () => {
 });
 updateGameSettingsControls();
 
+/** Builds a button that requests removal of the specified member. */
 function createKickPlayerButton(player, className) {
   const kickButton = document.createElement("button");
   kickButton.className = className;
@@ -1264,6 +1321,7 @@ function createKickPlayerButton(player, className) {
   return kickButton;
 }
 
+/** Refreshes the room code's hidden or revealed presentation. */
 function updateRoomCodeDisplay() {
   createdRoom.textContent = roomCodeHidden
     ? "Room code: ••••••"
@@ -1282,6 +1340,7 @@ function updateRoomCodeDisplay() {
   toggleRoomCodeButton.title = action;
 }
 
+/** Refreshes the room lock controls and their current state. */
 function updateRoomLockDisplay() {
   roomLockStatus.textContent = isRoomLocked
     ? "Lobby Locked"
@@ -1310,12 +1369,15 @@ for (const element of lifecycleModals) {
   element.addEventListener("show.bs.modal", () => activeLifecycleModals.add(element));
   element.addEventListener("hidden.bs.modal", () => activeLifecycleModals.delete(element));
 }
+/** Hides a lifecycle dialog safely, including while it is still opening. */
 function hideLifecycleModal(element) {
   // show.bs.modal fires before the backdrop and dialog opening transitions.
   if (!activeLifecycleModals.has(element) && !element.classList.contains("show")) return;
   if (pendingLifecycleModalHides.has(element)) return;
   const modal = bootstrap.Modal.getOrCreateInstance(element);
+  /** Hides the dialog once its opening transition has completed. */
   const hideAfterShow = () => modal.hide();
+  /** Releases the listeners and resources owned by this operation. */
   const cleanup = () => {
     element.removeEventListener("shown.bs.modal", hideAfterShow);
     element.removeEventListener("hidden.bs.modal", cleanup);
@@ -1326,6 +1388,7 @@ function hideLifecycleModal(element) {
   element.addEventListener("hidden.bs.modal", cleanup, { once: true });
   modal.hide();
 }
+/** Invalidates outstanding lifecycle replies and pending confirmations. */
 function invalidateLifecycleRequests() {
   lifecycleGeneration++;
   if (pendingSettingsExit) {
@@ -1340,6 +1403,7 @@ function invalidateLifecycleRequests() {
   for (const element of lifecycleModals) hideLifecycleModal(element);
 }
 
+/** Switches the interface to the current room's lobby. */
 function showLobby(roomCode, isHost) {
   invalidateLifecycleRequests();
   if (inviteRoomCode != null) {
@@ -1387,6 +1451,7 @@ function showLobby(roomCode, isHost) {
   }
 }
 
+/** Switches the interface back to the main menu. */
 function showEntry() {
   document.querySelector("#room-join-controls").hidden = true;
   document.querySelector("#host-transfer-controls").hidden = true;
@@ -1409,6 +1474,7 @@ function showEntry() {
   renderSavedSessions();
 }
 
+/** Returns a departing player or spectator to the appropriate lobby state. */
 function showLobbyAfterLeavingGame(hasActiveGame = true, wasSpectator = false) {
   cancelScoreReset?.();
   placeAppUtilityControls(false);
@@ -1431,6 +1497,7 @@ function showLobbyAfterLeavingGame(hasActiveGame = true, wasSpectator = false) {
     : "You left the game and returned to the lobby.";
 }
 
+/** Clears the current room's transient state and associated controls. */
 function resetRoomState() {
   invalidateLifecycleRequests();
   pendingEntryRequest = null;
@@ -1478,6 +1545,7 @@ function resetRoomState() {
   updateGamePicker();
 }
 
+/** Builds a game-picker video preview or a still poster when previews are disabled. */
 function createGamePreview(game) {
   const preview = document.createElement("span");
   preview.className = "game-picker-preview";
@@ -1512,6 +1580,7 @@ function createGamePreview(game) {
   return preview;
 }
 
+/** Refreshes the selected game's name and supported player count. */
 function updateSelectedGameSummary() {
   const selectedGame = gameDefinitions.find(
     (game) => game.id === selectedGameId
@@ -1530,6 +1599,7 @@ function updateSelectedGameSummary() {
     `${selectedGame.minPlayers}–${selectedGame.maxPlayers} players`;
 }
 
+/** Rebuilds the picker cards from the current game list and room permissions. */
 function updateGamePicker() {
   openGamePickerButton.disabled = gameDefinitions.length === 0;
   gamePickerHelp.textContent = isCurrentUserHost
@@ -1613,6 +1683,7 @@ function updateGamePicker() {
   updateSelectedGameSummary();
 }
 
+/** Requests that the host select a game for the room. */
 function requestGameSelection(gameId) {
   const selectedGame = gameDefinitions.find(
     (game) => game.id === gameId
@@ -1657,6 +1728,7 @@ function requestGameSelection(gameId) {
   );
 }
 
+/** Invalidates pending game-selection replies after the picker lifecycle changes. */
 function invalidateGameSelection() {
   pendingGameSelection = null;
   isGameSelectionPending = false;
@@ -1666,6 +1738,7 @@ for (const event of ["show.bs.modal", "hide.bs.modal", "hidden.bs.modal"]) {
   gamePickerModalElement.addEventListener(event, invalidateGameSelection);
 }
 
+/** Renders a game's rules, setting controls, and available rule presets. */
 function displayGameInformation(game, settings) {
   rulesModalTitle.textContent = `${game.name}: How to Play`;
   rulesModalBody.replaceChildren();
@@ -1830,6 +1903,7 @@ function displayGameInformation(game, settings) {
   );
 }
 
+/** Updates whether the host can start the selected game with the current players. */
 function updateStartGameAvailability() {
   const selectedGame = gameDefinitions.find(
     (game) => game.id === selectedGameId
@@ -1920,6 +1994,7 @@ toggleRoomLockButton.addEventListener("click", () => {
   );
 });
 
+/** Requests reconnecting to the room using the selected saved identity. */
 function resumeSavedRoom(roomCode, resumeToken, playerName = activeResumeSession?.playerName ?? "", onlyDisconnected = false) {
   if (resumeRequestPending) return;
   resumeRequestPending = true;
@@ -1953,6 +2028,7 @@ function resumeSavedRoom(roomCode, resumeToken, playerName = activeResumeSession
   });
 }
 
+/** Attempts automatic recovery of this tab's current saved room session. */
 function tryResumeCurrentTab() {
   const session = activeResumeSession;
   if (!session || (/^[A-Z0-9]{6}$/.test(inviteRoomCode ?? "") && session.roomCode !== inviteRoomCode)) return false;
@@ -2278,6 +2354,7 @@ socket.on(
   }
 );
 
+/** Mounts the selected game's browser module with the current room services. */
 function mountGameClient(game) {
   invalidateLifecycleRequests();
   cancelScoreReset?.();
@@ -2390,6 +2467,7 @@ socket.on("kicked-from-room", ({ message }) => {
   showToast(message);
 });
 
+/** Requests leaving the active game and restores the appropriate lobby view. */
 function leaveActiveGame(confirmButton, modalElement) {
   if (currentRoomCode === null || currentActiveGameId === null || isCurrentUserHost) {
     return;
@@ -2701,6 +2779,7 @@ joinRoomButton.addEventListener("click", () => {
   );
 });
 
+/** Applies the successful join response and enters the room. */
 function finishJoiningRoom(response, request) {
   if (!request || request.type !== "join" || pendingEntryRequest !== request || currentRoomCode !== null) return;
   if (response.pendingApproval) {
@@ -2800,6 +2879,7 @@ document.querySelector("#require-join-approval").addEventListener("change", (eve
     if (!response.success) { event.target.checked = roomRequiresJoinApproval; showToast(response.message); }
   });
 });
+/** Copies the public invite link when available, otherwise the current site's room link. */
 async function copyRoomInvite() {
   const roomCode = currentRoomCode;
   if (!roomCode) return;
@@ -2815,6 +2895,7 @@ async function copyRoomInvite() {
   }
 }
 socket.on("public-invite-url", (url) => { publicInviteUrl = url; });
+/** Copies the room code without requiring it to be revealed on screen. */
 async function copyRoomCode() {
   const roomCode = currentRoomCode;
   if (!roomCode) return;
@@ -2830,6 +2911,7 @@ document.querySelector("#copy-room-code").addEventListener("click", copyRoomCode
 
 const displayStorageKey = "gamehub:display-options";
 const displayChangeListeners = new Map();
+/** Reads saved personal game graphics choices with a safe fallback. */
 function readDisplayPreferences(fallback = {}) {
   try {
     const saved = JSON.parse(localStorage.getItem(displayStorageKey) ?? "{}");
@@ -2838,10 +2920,12 @@ function readDisplayPreferences(fallback = {}) {
 }
 let displayPreferences = readDisplayPreferences();
 const unsavedDisplayChanges = new Map();
+/** Saves one game graphics choice while preserving other saved preferences. */
 function saveDisplayChoice(gameId, key, value) {
   const current = displayPreferences[gameId];
   displayPreferences[gameId] = { ...(current && typeof current === "object" ? current : {}), [key]: value };
   unsavedDisplayChanges.set(gameId, { ...unsavedDisplayChanges.get(gameId), [key]: value });
+  /** Merges pending graphics choices into the latest stored preferences. */
   const persist = () => {
     const latest = readDisplayPreferences(displayPreferences);
     for (const [id, changes] of unsavedDisplayChanges) {
@@ -2863,16 +2947,20 @@ function saveDisplayChoice(gameId, key, value) {
   } else persist();
 }
 
+/** Returns a saved display choice when still valid, otherwise the definition's default. */
 function displayValue(gameId, option) {
   const saved = displayPreferences[gameId]?.[option.key];
   return option.choices.some((choice) => choice.value === saved) ? saved : option.defaultValue;
 }
+/** Creates the personal display-preference service exposed to a mounted game. */
 function createGameDisplay(gameId) {
   return {
+    /** Returns the current value of the requested game display option. */
     get(key) {
       const option = gameDefinitions.find((game) => game.id === gameId)?.displayOptions?.find((option) => option.key === key);
       return option ? displayValue(gameId, option) : null;
     },
+    /** Subscribes to personal display changes and returns the unsubscribe function. */
     onChange(handler) {
       if (!displayChangeListeners.has(gameId)) displayChangeListeners.set(gameId, new Set());
       const listeners = displayChangeListeners.get(gameId);
@@ -2881,6 +2969,7 @@ function createGameDisplay(gameId) {
     }
   };
 }
+/** Builds each game's saved graphics dropdowns and preview images. */
 function renderDisplayOptions() {
   const container = document.querySelector("#game-display-sections");
   container.replaceChildren();
@@ -2903,6 +2992,7 @@ function renderDisplayOptions() {
       select.value = displayValue(game.id, option);
       const image = document.createElement("img");
       image.className = "game-display-preview";
+      /** Refreshes the image for the currently selected graphics choice. */
       const updatePreview = () => {
         const choice = option.choices.find((choice) => choice.value === select.value);
         image.hidden = !choice?.previewPath;
@@ -2924,6 +3014,7 @@ function renderDisplayOptions() {
 
 // Presets are browser-only and always validated against the current game's schema.
 const ruleStorageKey = "gamehub:rule-presets";
+/** Reads saved named presets and last-confirmed rules from browser storage. */
 function readRulePreferences(fallback = {}) {
   try {
     const saved = JSON.parse(localStorage.getItem(ruleStorageKey) ?? "{}");
@@ -2933,6 +3024,7 @@ function readRulePreferences(fallback = {}) {
 let rulePreferences = readRulePreferences();
 let unsavedRuleChanges = [];
 let refreshPresetControls = null;
+/** Applies one queued preset or last-confirmed-rule change to saved rule data. */
 function applyRuleChange(preferences, change) {
   const previous = preferences[change.gameId];
   if (change.type === "last") {
@@ -2943,12 +3035,15 @@ function applyRuleChange(preferences, change) {
   if (change.type === "save") presets.push({ name: change.name, settings: change.settings });
   preferences[change.gameId] = { ...previous, presets };
 }
+/** Merges current saved rules with changes that have not yet been persisted. */
 function refreshRulePreferences() {
   rulePreferences = readRulePreferences(rulePreferences);
   // Replay only unpersisted edits, preserving unrelated updates from other tabs.
   for (const change of unsavedRuleChanges) applyRuleChange(rulePreferences, change);
 }
+/** Persists a rule-preference change while preserving concurrent browser updates. */
 function updateRulePreferences(change, notify = false, onSaved = () => {}) {
+  /** Merges and persists the pending rule-preference operation. */
   const apply = () => {
     refreshRulePreferences();
     if (change.type === "save" && savedRulePresets(rulePreferences, change.gameId)
@@ -2977,11 +3072,13 @@ window.addEventListener("storage", event => {
   refreshRulePreferences();
   refreshPresetControls?.();
 });
+/** Returns valid named rule presets for the requested game. */
 function savedRulePresets(preferences, gameId) {
   const saved = preferences[gameId]?.presets;
   return Array.isArray(saved) ? saved.filter(preset => typeof preset?.name === "string" &&
     preset.settings && typeof preset.settings === "object" && !Array.isArray(preset.settings)) : [];
 }
+/** Validates saved rule values against the game's current setting schema. */
 function validSavedRules(game, source) {
   if (!source || typeof source !== "object") return null;
   return Object.fromEntries(game.settings.map((setting) => {
@@ -2993,18 +3090,22 @@ function validSavedRules(game, source) {
     return [setting.key, valid ? value : setting.defaultValue];
   }));
 }
+/** Returns valid last-confirmed rules for the requested game. */
 function savedRuleSettings(game) {
   refreshRulePreferences();
   return validSavedRules(game, rulePreferences[game.id]?.last);
 }
+/** Records the game's latest confirmed rules in browser-local preferences. */
 function rememberRules(gameId, settings) {
   updateRulePreferences({ type: "last", gameId, settings });
 }
+/** Reads the current boolean and numeric game settings from the settings form. */
 function readRuleDraft() {
   return Object.fromEntries([...settingsModalBody.querySelectorAll("[data-setting-key]")].map((input) => [
     input.dataset.settingKey, input.dataset.settingType === "number" ? Number(input.value) : input.checked
   ]));
 }
+/** Builds the host's named-preset loading, saving, and deletion controls. */
 function renderPresetControls(game) {
   refreshPresetControls = null;
   if (!isCurrentUserHost || roomHasActiveGame) return;
@@ -3012,7 +3113,9 @@ function renderPresetControls(game) {
   toolbar.className = "rule-presets mb-4";
   toolbar.innerHTML = '<label class="form-label" for="rule-preset">Load a preset</label><div class="d-flex gap-2 mb-3"><select id="rule-preset" class="form-select form-select-sm" aria-label="Saved rule preset"></select><button class="btn btn-outline-danger btn-sm" type="button" data-preset-action="delete">Delete</button></div><label class="form-label" for="rule-preset-name">Create a preset</label><div class="d-flex gap-2"><input id="rule-preset-name" class="form-control form-control-sm" maxlength="40" placeholder="Preset name" aria-label="Preset name"><button class="btn btn-outline-primary btn-sm" type="button" data-preset-action="save">Save preset</button></div><p class="small text-body-secondary mb-0 mt-1">Saved in this browser. Selecting a preset loads this draft. Use Save Settings to apply it to the room.</p>';
   const select = toolbar.querySelector("select"), name = toolbar.querySelector("input");
+  /** Returns the named presets currently available for this game. */
   const presets = () => savedRulePresets(rulePreferences, game.id);
+  /** Refreshes the preset list while preserving its current selection when possible. */
   const refresh = () => {
     const selected = select.value;
     select.replaceChildren();
@@ -3053,6 +3156,7 @@ const roomScoreboards = new Map();
 let hostRecovery = null;
 let roomClockOffset = 0;
 let gameDisconnections = [];
+/** Lists connected players eligible to receive room ownership. */
 function updateHostTransferOptions() {
   const section = document.querySelector("#host-transfer-controls");
   section.hidden = !isCurrentUserHost || currentRoomCode === null;
@@ -3073,8 +3177,10 @@ document.querySelector("#transfer-host").onclick = () => {
     if (generation === lifecycleGeneration && !result.success) showToast(result.message);
   });
 };
+/** Refreshes host-recovery and disconnected-player status text. */
 function renderRoomStatus() {
   const now = Date.now() + roomClockOffset;
+  /** Converts a deadline to a nonnegative, rounded-up number of seconds remaining. */
   const seconds = (deadline) => Math.max(0, Math.ceil((deadline - now) / 1000));
   document.querySelector("#room-host-status").hidden = !hostRecovery;
   document.querySelector("#room-host-status").textContent = hostRecovery
@@ -3109,6 +3215,7 @@ socket.on("room-host", ({ hostId, recoveryDeadline, serverNow }) => {
 });
 let pendingScoreReset = null;
 let cancelScoreReset = null;
+/** Requests scoreboard reset only after the host confirms the modal dialog. */
 function resetRoomScoreboard(gameId) {
   if (!isCurrentUserHost || currentRoomCode === null || currentActiveGameId !== gameId) {
     return Promise.resolve({ success: false, message: "Only the host can reset totals for the active game." });
@@ -3118,8 +3225,10 @@ function resetRoomScoreboard(gameId) {
   const element = document.querySelector("#reset-scoreboard-modal");
   const button = document.querySelector("#confirm-reset-scoreboard");
   const modal = bootstrap.Modal.getOrCreateInstance(element);
+  /** Closes the current confirmation dialog. */
   const hide = () => {
     // Bootstrap ignores hide() during the opening transition.
+    /** Hides the dialog once its opening transition has completed. */
     const hideAfterShow = () => modal.hide();
     element.addEventListener("shown.bs.modal", hideAfterShow, { once: true });
     element.addEventListener("hidden.bs.modal", () => {
@@ -3129,6 +3238,7 @@ function resetRoomScoreboard(gameId) {
   };
   pendingScoreReset = new Promise(resolve => {
     let finished = false;
+    /** Completes this operation and releases its pending resources. */
     const finish = result => {
       if (finished) return;
       finished = true;
@@ -3139,8 +3249,10 @@ function resetRoomScoreboard(gameId) {
       cancelScoreReset = null;
       resolve(result);
     };
+    /** Cancels the scoreboard-reset confirmation and resolves its pending request. */
     const cancel = () => finish({ success: true });
     cancelScoreReset = () => { cancel(); hide(); };
+    /** Confirms the pending operation and sends its request. */
     const confirm = () => {
       if (button.disabled) return;
       if (currentRoomCode !== roomCode || currentActiveGameId !== gameId || !isCurrentUserHost) {

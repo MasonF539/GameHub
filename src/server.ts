@@ -93,6 +93,7 @@ const configuredGamePackages = process.env.GAMEHUB_GAME_PACKAGES === undefined
     .map((packageName) => packageName.trim())
     .filter(Boolean);
 
+/** Loads and validates an installed game's plugin exports and public asset directory. */
 function loadGamePackage(packageName: string): GamePluginPackage {
   const packageExports = require(packageName) as {
     gameHubPlugin?: GamePluginPackage;
@@ -136,6 +137,7 @@ const gamePluginRegistry = new GamePluginRegistry(
 );
 const availableGames = gamePluginRegistry.listDefinitions();
 
+/** Looks up an installed game's definition by its game ID. */
 function getGameDefinition(gameId: string | null) {
   return gameId === null
     ? null
@@ -153,6 +155,7 @@ const gameStyleMarker = "<!-- game-plugin-styles -->";
 const gameScriptMarker = "<!-- game-plugin-scripts -->";
 const gameHubConfigMarker = "<!-- gamehub-config -->";
 
+/** Replaces a required template marker and rejects templates where it is missing. */
 function replaceRequiredMarker(
   html: string,
   marker: string,
@@ -165,6 +168,7 @@ function replaceRequiredMarker(
   return html.replace(marker, () => replacement);
 }
 
+/** Builds the hub URL for an asset inside a game's public directory. */
 function gamePublicUrl(gameId: string, resourcePath: string): string {
   return `/games/${gameId}/${resourcePath}`;
 }
@@ -336,6 +340,7 @@ for (const gamePackage of installedGamePackages) {
 
 app.use(express.static(path.join(process.cwd(), "public")));
 
+/** Creates an unused room code for a new lobby. */
 function generateRoomCode(): string {
   const characters = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   let code = "";
@@ -352,6 +357,7 @@ function generateRoomCode(): string {
   return code;
 }
 
+/** Broadcasts the room's player and spectator membership lists. */
 function sendRoomMemberLists(roomCode: string, room: Room): void {
   const players = Array.from(room.players.values()).map((player) => ({
     ...player,
@@ -364,6 +370,7 @@ function sendRoomMemberLists(roomCode: string, room: Room): void {
   io.to(roomCode).emit("spectator-list", spectators);
 }
 
+/** Finds a room member by the current member ID. */
 function getRoomMember(
   room: Room,
   memberId: string
@@ -379,11 +386,13 @@ function getRoomMember(
     : null;
 }
 
+/** Checks whether a room member is allowed to receive the active game's data. */
 function isActiveGameViewer(room: Room, memberId: string): boolean {
   return room.spectators.has(memberId) ||
     room.activeGamePlayerIds.has(memberId);
 }
 
+/** Returns all room spectators to the player list and broadcasts the updated membership. */
 function promoteSpectatorsToPlayers(
   roomCode: string,
   room: Room
@@ -396,7 +405,9 @@ function promoteSpectatorsToPlayers(
   sendRoomMemberLists(roomCode, room);
 }
 
+/** Starts periodic socket round-trip measurements and cleans them up on disconnect. */
 function monitorSocketLatency(socket: Socket): void {
+  /** Measures a socket round trip and reports the latency estimate. */
   const measureRoundTripTime = (): void => {
     const startedAt = performance.now();
     socket.timeout(3_000).emit(
@@ -419,6 +430,7 @@ function monitorSocketLatency(socket: Socket): void {
   socket.on("disconnect", () => clearInterval(interval));
 }
 
+/** Issues a reconnect token for a room member. */
 function createPlayerResumeToken(
   roomCode: string,
   playerId: string
@@ -432,6 +444,7 @@ function createPlayerResumeToken(
   return token;
 }
 
+/** Invalidates saved reconnect tokens belonging to a player. */
 function removePlayerResumeTokens(
   playerId: string,
   revokedMessage?: string
@@ -450,6 +463,7 @@ function removePlayerResumeTokens(
 }
 
 // A saved token proves ownership; names are never used to claim a seat.
+/** Resolves a saved reconnect token to its room and player when still eligible. */
 function findSavedPlayer(token: string) {
   const session = playerResumeTokens.get(token);
   if (!session || Date.now() - session.createdAt > resumeTokenMaxAgeMs) {
@@ -461,15 +475,18 @@ function findSavedPlayer(token: string) {
   return room && found ? { session, room, found } : null;
 }
 
+/** Selects a connected player eligible to take over hosting. */
 function hostSuccessor(room: Room, memberId: string) {
   return [...room.players.values()].find(player => player.isConnected && player.id !== memberId &&
     (room.activeGameId === null || room.activeGamePlayerIds.has(player.id)));
 }
 
+/** Normalizes a submitted room code for lookup. */
 function normalizeRoomCode(value: unknown): string {
   return String(value ?? "").trim().toUpperCase();
 }
 
+/** Cancels the scheduled expiry for a disconnected member. */
 function clearDisconnectTimer(memberId: string): void {
   const timer = disconnectedPlayerTimers.get(memberId);
 
@@ -479,6 +496,7 @@ function clearDisconnectTimer(memberId: string): void {
   }
 }
 
+/** Restores a disconnected player's membership using the new socket identity. */
 function markPlayerReconnected(
   roomCode: string,
   playerId: string,
@@ -501,12 +519,14 @@ function markPlayerReconnected(
 const disallowedNameCharacters =
   /[\u0000-\u001F\u007F\u061C\u200B\u200E\u200F\u2028\u2029\u202A-\u202E\u2060\u2066-\u2069\uFEFF]/;
 
+/** Checks whether a submitted name satisfies the room's naming rules. */
 function isValidPlayerName(playerName: string): boolean {
   return /[^\s\p{Default_Ignorable_Code_Point}\u2800]/u.test(playerName) &&
     playerName.length <= 20 &&
     !disallowedNameCharacters.test(playerName);
 }
 
+/** Checks whether another member already owns the requested name. */
 function isPlayerNameTaken(room: Room, playerName: string): boolean {
   const wanted = playerName.toLocaleLowerCase();
 
@@ -517,6 +537,7 @@ function isPlayerNameTaken(room: Room, playerName: string): boolean {
 
 type SocketResponse = (response: unknown) => void;
 
+/** Registers a socket request handler with shared validation and error handling. */
 function onSocketRequest(
   socket: Socket,
   event: string,
@@ -547,6 +568,7 @@ function onSocketRequest(
   });
 }
 
+/** Determines the socket client's address using the configured proxy trust rules. */
 function getSocketClientAddress(socket: Socket): string {
   return resolveClientAddress(
     socket.handshake.headers,
@@ -555,6 +577,7 @@ function getSocketClientAddress(socket: Socket): string {
   );
 }
 
+/** Sends the room snapshot and reconnect information to a returning player. */
 function sendRoomResumed(
   socket: Socket,
   roomCode: string,
@@ -584,12 +607,14 @@ function sendRoomResumed(
 }
 
 // Lock state, selected game and member lists: what a (re)joining browser needs.
+/** Broadcasts the current host and any pending host-recovery deadline. */
 function sendRoomHost(roomCode: string, room: Room, target?: Socket): void {
   const payload = { hostId: room.hostId, recoveryDeadline: room.hostRecoveryDeadline, serverNow: Date.now() };
   if (target) target.emit("room-host", payload);
   else io.to(roomCode).emit("room-host", payload);
 }
 
+/** Transfers room ownership and refreshes host controls for its members. */
 function transferRoomHost(roomCode: string, room: Room, memberId: string): void {
   const oldHost = room.hostId;
   room.hostId = memberId;
@@ -605,6 +630,7 @@ function transferRoomHost(roomCode: string, room: Room, memberId: string): void 
   }
 }
 
+/** Finds or creates the room scoreboard row for a player name. */
 function ensureScore(room: Room, gameId: string, memberId: string): ScoreRow | null {
   const member = room.players.get(memberId);
   const columns = getGameDefinition(gameId)?.scoreboard;
@@ -626,6 +652,7 @@ function ensureScore(room: Room, gameId: string, memberId: string): ScoreRow | n
   return row ?? null;
 }
 
+/** Sends the relevant room scoreboard to its intended recipients. */
 function sendScoreboard(roomCode: string, room: Room, gameId: string, target?: Socket): void {
   const columns = getGameDefinition(gameId)?.scoreboard;
   if (!columns?.length) return;
@@ -641,6 +668,7 @@ function sendScoreboard(roomCode: string, room: Room, gameId: string, target?: S
   else io.to(roomCode).emit("room-scoreboard", payload);
 }
 
+/** Records a game statistic in the room's scoreboard. */
 function recordRoomStat(roomCode: string, room: Room, gameId: string, memberId: string, key: string): void {
   if (!getGameDefinition(gameId)?.scoreboard?.some((column) => column.key === key)) return;
   const row = ensureScore(room, gameId, memberId);
@@ -649,12 +677,14 @@ function recordRoomStat(roomCode: string, room: Room, gameId: string, memberId: 
   sendScoreboard(roomCode, room, gameId);
 }
 
+/** Sends the current pending join requests to the host. */
 function sendJoinRequests(room: Room): void {
   io.to(room.hostId).emit("join-requests", [...room.pendingJoinRequests].map(([id, request]) => ({
     id, name: request.name, avatar: request.avatar
   })));
 }
 
+/** Broadcasts the room's current lobby state. */
 function sendLobbyState(socket: Socket, roomCode: string, room: Room): void {
   sendRoomHost(roomCode, room, socket);
   for (const gameId of room.scores.keys()) sendScoreboard(roomCode, room, gameId, socket);
@@ -672,6 +702,7 @@ function sendLobbyState(socket: Socket, roomCode: string, room: Room): void {
   sendRoomMemberLists(roomCode, room);
 }
 
+/** Sends a member the current room and active-game snapshot. */
 function sendRoomSnapshot(
   socket: Socket,
   roomCode: string,
@@ -689,6 +720,7 @@ function sendRoomSnapshot(
   sendLobbyState(socket, roomCode, room);
 }
 
+/** Removes a pending join request and cancels its expiry timer. */
 function removeJoinRequest(id: string) {
   const roomCode = pendingJoinRoomCodes.get(id);
   const room = roomCode ? rooms.get(roomCode) : undefined;
@@ -702,6 +734,7 @@ function removeJoinRequest(id: string) {
   return request;
 }
 
+/** Closes a room and releases its sessions, timers, requests, and memberships. */
 function closeRoom(roomCode: string, room: Room, logMessage: string): void {
   for (const id of room.pendingJoinRequests.keys()) {
     removeJoinRequest(id);
@@ -729,6 +762,7 @@ function closeRoom(roomCode: string, room: Room, logMessage: string): void {
 
 // Takes a member out of a room. Pass `kickedMessage` when the host removed
 // them: they are told why, and a reconnecting browser sees the same message.
+/** Removes a member and updates the room, active game, and host ownership. */
 function removeMemberFromRoom(
   roomCode: string,
   room: Room,
@@ -766,6 +800,7 @@ function removeMemberFromRoom(
 // a missing host hands control to an eligible connected player or closes the
 // room if nobody can take over. Lobby players and spectators are removed;
 // active-game players remain subject to the game's offline policy.
+/** Schedules cleanup or host transfer for a member who stays disconnected. */
 function scheduleDisconnectExpiry(
   roomCode: string,
   room: Room,
@@ -817,6 +852,7 @@ function scheduleDisconnectExpiry(
   disconnectedPlayerTimers.set(memberId, timer);
 }
 
+/** Builds a game's initial settings from its definition's default values. */
 function createDefaultSettings(
   gameId: string
 ): Record<string, GameSettingValue> | null {
@@ -834,6 +870,7 @@ function createDefaultSettings(
   );
 }
 
+/** Checks a proposed setting against its definition and allowed values. */
 function validateGameSetting(
   setting: GameSetting,
   value: unknown
@@ -850,6 +887,7 @@ function validateGameSetting(
   return typeof value === "boolean";
 }
 
+/** Disposes an active game session and releases its owned resources. */
 function disposeGameSession(room: Room): void {
   const session = room.gameSession;
   room.gameSession = null;
@@ -860,6 +898,7 @@ function disposeGameSession(room: Room): void {
   }
 }
 
+/** Builds the viewer identity supplied to a game's public-state function. */
 function getGameViewer(room: Room, memberId: string): GameViewer | null {
   if (room.activeGamePlayerIds.has(memberId)) {
     return { memberId, role: "player" };
@@ -868,6 +907,7 @@ function getGameViewer(room: Room, memberId: string): GameViewer | null {
   return null;
 }
 
+/** Sends a game event only to members allowed to view the active game. */
 function emitToActiveGameViewers(
   room: Room,
   eventName: string,
@@ -888,12 +928,14 @@ function emitToActiveGameViewers(
   }
 }
 
+/** Builds and sends viewer-specific snapshots of the active game. */
 function sendActiveGameState(
   roomCode: string,
   room: Room,
   targetSocket?: Socket
 ): void {
   if (room.activeGameId === null || room.gameSession === null) return;
+  /** Sends the current operation's payload to its selected recipient. */
   const send = (memberId: string, target: Socket) => {
     const viewer = getGameViewer(room, memberId);
     if (!viewer || room.activeGameId === null || room.gameSession === null) return;
@@ -918,6 +960,7 @@ function sendActiveGameState(
   }
 }
 
+/** Ends the active game and restores the room's lobby state. */
 function finishActiveGame(
   roomCode: string,
   room: Room,
@@ -949,6 +992,7 @@ function finishActiveGame(
 
 const publicInviteUrlFile = path.join(tmpdir(), "gamehub-public-url");
 
+/** Returns the validated public invite origin from configuration or tunnel registration. */
 function getPublicInviteUrl(): string | null {
   let publicUrl = process.env.GAMEHUB_PUBLIC_URL?.trim() ?? "";
   if (!publicUrl) {
@@ -968,6 +1012,7 @@ function getPublicInviteUrl(): string | null {
 // The launcher can register or clear a tunnel while local clients are connected.
 if (!process.env.GAMEHUB_PUBLIC_URL?.trim()) {
   let previousPublicUrl = getPublicInviteUrl();
+  /** Broadcasts an updated public invite origin to connected clients. */
   const publishPublicUrl = () => {
     const publicUrl = getPublicInviteUrl();
     if (publicUrl === previousPublicUrl) return;
@@ -1270,6 +1315,7 @@ io.on("connection", (socket) => {
     });
   });
 
+  /** Validates and admits a new room member, including lock, capacity, and approval rules. */
   function joinRoom(data: any, respond: SocketResponse, approved = false): void {
     if (!socket.connected) { respond({ success: false, message: "That player disconnected." }); return; }
     if (socketRoomCodes.has(socket.id)) {

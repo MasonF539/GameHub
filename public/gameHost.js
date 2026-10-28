@@ -6,6 +6,7 @@
   };
 
   class GameClientHost {
+    /** Creates the browser game host and initializes its module and subscription tracking. */
     constructor({ root, createContext }) {
       if (!root) {
         throw new Error("A game client root is required.");
@@ -25,6 +26,7 @@
       this.activeInputCleanups = new Set();
     }
 
+    /** Registers a game client module under its game ID. */
     register(gameId, gameModule) {
       if (typeof gameId !== "string" || gameId.trim() === "") {
         throw new Error("A game client module must have an id.");
@@ -39,6 +41,7 @@
       this.modules.set(gameId, gameModule);
     }
 
+    /** Checks whether a client module has been registered for a game. */
     has(gameId) {
       if (!this.modules.has(gameId) && pendingModules.has(gameId)) {
         this.register(gameId, pendingModules.get(gameId));
@@ -46,6 +49,7 @@
       return this.modules.has(gameId);
     }
 
+    /** Mounts the game client with its context and subscribes its controls to platform services. */
     mount(gameId, launchData = {}) {
       const gameModule = this.has(gameId) ? this.modules.get(gameId) : null;
       if (!gameModule) {
@@ -65,6 +69,7 @@
       this.setActiveStyles(gameId);
       const baseContext = this.createContext(gameId) ?? {};
       const inputCleanups = new Set();
+      /** Tracks a service's unsubscribe functions so unmount can release them. */
       const trackSubscriptions = (api, methods) => {
         if (!api) return api;
         const wrapped = { ...api };
@@ -76,6 +81,7 @@
               throw new Error(`Game client subscription ${gameId}.${method} did not return a cleanup function.`);
             }
             let active = true;
+            /** Releases the listeners and resources owned by this operation. */
             const cleanup = () => {
               if (!active) return;
               active = false;
@@ -92,6 +98,7 @@
       const display = trackSubscriptions(baseContext.display, ["onChange"]);
       const context = {
         ...baseContext,
+        /** Returns whether the local member currently owns the room. */
         get isHost() { return baseContext.isHost; },
         ...(input ? { input } : {}),
         ...(display ? { display } : {}),
@@ -125,22 +132,26 @@
       }
     }
 
+    /** Passes an authoritative game snapshot to the currently mounted client. */
     receiveState({ gameId, state }) {
       if (gameId === this.activeGameId) {
         this.activeInstance?.receiveState(state);
       }
     }
 
+    /** Delivers a game-specific event to the mounted client. */
     receiveEvent({ gameId, event }) {
       if (gameId === this.activeGameId && event) {
         this.activeInstance?.receiveEvent(event);
       }
     }
 
+    /** Delivers a platform event such as host, chat, spectator, or scoreboard changes. */
     receivePlatformEvent(event) {
       this.activeInstance?.receivePlatformEvent?.(event);
     }
 
+    /** Enables the styles belonging to the active game and disables other game styles. */
     setActiveStyles(gameId) {
       const ownerDocument = this.root.ownerDocument ?? globalScope.document;
       if (typeof ownerDocument?.querySelectorAll !== "function") return;
@@ -150,6 +161,7 @@
       }
     }
 
+    /** Destroys the mounted game and releases subscriptions and active game styles. */
     unmount() {
       const instance = this.activeInstance;
       const inputCleanups = this.activeInputCleanups;

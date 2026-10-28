@@ -6,6 +6,7 @@ type AttemptWindow = {
 export class FailedAttemptLimiter {
   readonly #attempts = new Map<string, AttemptWindow>();
 
+  /** Creates a bounded failed-attempt limiter with the configured failure threshold and window. */
   constructor(
     private readonly maximumFailures: number,
     private readonly windowMs: number,
@@ -16,6 +17,7 @@ export class FailedAttemptLimiter {
     }
   }
 
+  /** Checks whether a key has reached its failure limit within the current time window. */
   isBlocked(key: string, now = Date.now()): boolean {
     const window = this.#attempts.get(key);
     if (!window) return false;
@@ -26,6 +28,7 @@ export class FailedAttemptLimiter {
     return window.failures >= this.maximumFailures;
   }
 
+  /** Records a failed attempt, starting a new window when the previous one expired. */
   recordFailure(key: string, now = Date.now()): void {
     const window = this.#attempts.get(key);
     if (!window || window.expiresAt <= now) {
@@ -39,12 +42,14 @@ export class FailedAttemptLimiter {
     window.failures += 1;
   }
 
+  /** Clears a key's recorded failures after successful validation. */
   clear(key: string): void {
     this.#attempts.delete(key);
   }
 
   // Only does work when the map is full, so a failure never costs a full scan
   // and a flood of unique keys cannot grow the map without limit.
+  /** Evicts expired and then oldest entries when the bounded limiter map is full. */
   #makeRoom(now: number): void {
     if (this.#attempts.size < this.maximumKeys) return;
 

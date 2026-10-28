@@ -11,6 +11,7 @@ type RateWindow = {
 export class RateLimiter {
   readonly #windows = new Map<string, RateWindow>();
 
+  /** Creates a bounded fixed-window rate limiter with the configured event and key limits. */
   constructor(
     private readonly maximumEvents: number,
     private readonly windowMs: number,
@@ -35,10 +36,12 @@ export class RateLimiter {
     return existing.count <= this.maximumEvents;
   }
 
+  /** Removes a key's rate-limit window. */
   forget(key: string): void {
     this.#windows.delete(key);
   }
 
+  /** Evicts expired and then oldest entries when the bounded limiter map is full. */
   #makeRoom(now: number): void {
     if (this.#windows.size < this.maximumKeys) {
       return;

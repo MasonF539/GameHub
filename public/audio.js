@@ -47,6 +47,7 @@
     });
   }
 
+  /** Converts a volume to a finite value between zero and one, using the fallback when invalid. */
   function clampVolume(value, fallback = 1) {
     const number = Number(value);
 
@@ -57,6 +58,7 @@
     return Math.min(1, Math.max(0, number));
   }
 
+  /** Converts saved audio preferences to the current per-category volume format. */
   function normalizeSettings(candidate) {
     const normalized = {};
 
@@ -76,6 +78,7 @@
     return normalized;
   }
 
+  /** Reads audio preferences, migrating older mute settings and falling back safely. */
   function loadSettings(fallback = defaultSettings) {
     try {
       const saved = localStorage.getItem(settingsStorageKey);
@@ -98,6 +101,7 @@
     return normalizeSettings(fallback);
   }
 
+  /** Persists changed audio categories while merging the latest saved preferences. */
   function saveSettings(changedCategories = categories) {
     for (const category of changedCategories) unsavedCategories.add(category);
     try {
@@ -111,6 +115,7 @@
     }
   }
 
+  /** Starts audio playback and handles browser playback rejection. */
   function safelyPlay(audio) {
     const playResult = audio.play();
 
@@ -121,10 +126,12 @@
     }
   }
 
+  /** Checks whether a sound category currently permits playback. */
   function categoryCanPlay(category) {
     return settings[category] > 0;
   }
 
+  /** Refreshes the audio controls from the current preferences. */
   function syncControls(category) {
     const control = controls.get(category);
     const categoryVolume = settings[category];
@@ -142,6 +149,7 @@
     }
   }
 
+  /** Applies the current music volume and playback preferences to the music element. */
   function applyMusicSettings() {
     music.volume = musicBaseVolume * settings.music;
 
@@ -153,6 +161,7 @@
     playCurrentMusic();
   }
 
+  /** Starts the music assigned to the current scene when playback is permitted. */
   function playCurrentMusic() {
     if (
       !categoryCanPlay("music") ||
@@ -166,11 +175,13 @@
     safelyPlay(music);
   }
 
+  /** Unlocks browser audio playback after a user interaction. */
   function unlock() {
     isUnlocked = true;
     playCurrentMusic();
   }
 
+  /** Enables or silences an audio category and updates saved preferences. */
   function setCategoryEnabled(category, enabled) {
     if (!categories.includes(category)) {
       return;
@@ -187,6 +198,7 @@
     }
   }
 
+  /** Changes an audio category's volume and updates saved preferences. */
   function setCategoryVolume(category, volume) {
     if (!categories.includes(category)) {
       return;
@@ -201,6 +213,7 @@
     }
   }
 
+  /** Updates the shared audio mute state. */
   function setMuted(nextMuted) {
     const volume = nextMuted ? 0 : 1;
 
@@ -213,6 +226,7 @@
     applyMusicSettings();
   }
 
+  /** Selects the music scene for the current application or game view. */
   function setScene(scene) {
     const source = musicSources[scene] ?? null;
 
@@ -236,6 +250,7 @@
     playCurrentMusic();
   }
 
+  /** Registers a game's music source under its scene name. */
   function registerMusicScene(name, source) {
     if (
       typeof name !== "string" ||
@@ -249,6 +264,7 @@
     musicSources[name] = source;
   }
 
+  /** Registers a sound-effect source and its playback options. */
   function registerEffect(
     name,
     { source, category = "game", volume = 1 }
@@ -272,6 +288,7 @@
     effectTemplates.set(name, template);
   }
 
+  /** Plays a registered sound effect when its audio category permits playback. */
   function playEffect(name) {
     const category = effectCategories[name];
 
