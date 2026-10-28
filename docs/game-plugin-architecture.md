@@ -464,3 +464,13 @@ The prototype supports twelve simultaneous participants and all 157 conventional
 single-zero bet targets. It does not implement cards, shops, loans, or mid-match
 player admission; those remain separate milestones and do not change the SDK
 contract in this integration. No game package is published for local testing.
+
+### Optional game toolbar placement
+
+A game may include a `data-game-settings-slot` element inside its plugin root.
+When mounting that game, the hub places its existing Settings control in that
+slot; otherwise it uses the default gameplay corner. The hub restores its
+control when returning to a menu. `data-game-connection-status` and
+`data-game-network-ping` elements receive the existing socket connection and
+latency displays, alongside Egyptian War's legacy element IDs. These optional
+markup hooks need no SDK version change or extra client polling.

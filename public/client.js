@@ -10,8 +10,8 @@ function emitRequest(event, data, respond) {
 }
 
 const connectionStatus = document.querySelector("#connection-status");
-const gameplayConnectionStatus =
-  document.querySelector("#gameplay-connection-status");
+const gameplayConnectionStatuses =
+  document.querySelectorAll("#gameplay-connection-status, [data-game-connection-status]");
 const gameHubToastElement =
   document.querySelector("#gamehub-toast");
 const gameHubToastMessage =
@@ -93,7 +93,7 @@ const gameClientHost = new window.GameHubGameClientHost({
   })
 });
 gameHubAudio.setScene("menu");
-const networkPing = document.querySelector("#network-ping");
+const networkPingElements = document.querySelectorAll("#network-ping, [data-game-network-ping]");
 const confirmCloseLobbyButton =
   document.querySelector("#confirm-close-lobby");
 const confirmExitGameButton =
@@ -1153,9 +1153,11 @@ function updateLobbyGameAction() {
 }
 
 /** Moves the shared settings controls to the active application view. */
-function placeAppUtilityControls(inGameplay = false) {
+function placeAppUtilityControls(inGameplay = false, gameId = null) {
   if (inGameplay) {
-    gameplayView.append(appUtilityControls);
+    const slot = [...gameRoot.querySelectorAll("[data-game-settings-slot]")].find(element =>
+      element.closest("[data-game-plugin-root]")?.dataset.gamePluginRoot === gameId);
+    (slot ?? gameplayView).append(appUtilityControls);
     return;
   }
 
@@ -2054,7 +2056,7 @@ socket.on("connect", () => {
   );
 
   connectionStatus.classList.add("text-bg-success");
-  if (gameplayConnectionStatus) {
+  for (const gameplayConnectionStatus of gameplayConnectionStatuses) {
     gameplayConnectionStatus.textContent = "Connected to server";
     gameplayConnectionStatus.classList.remove(
       "text-bg-warning",
@@ -2071,8 +2073,8 @@ socket.on("latency-probe", (acknowledge) => {
 });
 
 socket.on("latency-update", ({ rttMs }) => {
-  if (networkPing && Number.isFinite(rttMs) && rttMs >= 0) {
-    networkPing.textContent = `${Math.round(rttMs)} ms`;
+  if (Number.isFinite(rttMs) && rttMs >= 0) {
+    for (const networkPing of networkPingElements) networkPing.textContent = `${Math.round(rttMs)} ms`;
   }
 });
 
@@ -2107,7 +2109,7 @@ socket.on("disconnect", () => {
   );
 
   connectionStatus.classList.add("text-bg-danger");
-  if (gameplayConnectionStatus) {
+  for (const gameplayConnectionStatus of gameplayConnectionStatuses) {
     gameplayConnectionStatus.textContent = "Disconnected from server";
     gameplayConnectionStatus.classList.remove(
       "text-bg-warning",
@@ -2115,7 +2117,7 @@ socket.on("disconnect", () => {
     );
     gameplayConnectionStatus.classList.add("text-bg-danger");
   }
-  if (networkPing) networkPing.textContent = "-- ms";
+  for (const networkPing of networkPingElements) networkPing.textContent = "-- ms";
 
   if (currentRoomCode !== null) {
     showToast(
@@ -2365,7 +2367,7 @@ function mountGameClient(game) {
 
   lobbyView.classList.add("d-none");
   gameplayView.classList.remove("d-none");
-  placeAppUtilityControls(true);
+  placeAppUtilityControls(true, game.gameId);
   currentActiveGameId = game.gameId;
   roomHasActiveGame = true;
   updateHostTransferOptions();

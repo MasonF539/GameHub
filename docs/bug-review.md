@@ -928,7 +928,7 @@ normalizes CRLF before matching; application CSS and layout are unchanged.
 
 The Add 1 scaffold is replaced by real, authoritative roulette reservations,
 edits, lock/unlock, timers, once-only draws and settlement, qualifying ties, and
-reconnect-safe ownership. Thirty-nine game tests and hub type checks, 232 root
+reconnect-safe ownership. Forty-two game tests and hub type checks, 232 root
 tests, nine SDK tests, and two-package fresh-consumer verification pass.
 Real Edge phone/laptop checks exercise click and actual chip dragging onto seam
 targets, wheel reveal, payouts, and cleanup without browser errors or horizontal
@@ -940,8 +940,63 @@ the uniquely named Docker test image were cleaned up.
 Chips are monetary representations rather than a finite inventory. A stack
 starts at a $1 stake, increases per 10% of settled bankroll to ten chips, and
 uses five 20% bands on phones. Exact stakes remain editable before locking.
-A sticky chip tray keeps touch dragging usable while the board scrolls.
+The complete table fits without scrolling in either orientation. Seats 1-6 sit
+below the board, with seats 7-12 above when present; the timer and chip tray
+follow the lower seats. The information panel stays right in landscape and below in portrait.
+Real Edge checks at five viewport sizes verify the twelve-player ordering and
+fit. The ball eases into its pocket, then follows the wheel during one second
+of braking; animation regression tests verify continuity and final alignment.
 
 The reviewed private tarball is integrated into normal installation and Docker
 without publishing to npm. Physical-phone touch/performance still needs the
 user's check. Cards, shops, loans, and late entry remain explicitly unfinished.
+
+The roulette shell now reuses Egyptian War's safe-area-aware full-window frame
+with a 100rem width cap. Real-hub resize checks from 1920px through phone sizes
+confirm stable game width while outer margins contract, continuous widths at
+1400/1200/992px breakpoints, and no page or table scrolling.
+
+Remaining roulette size jumps at compact-width/short-height breakpoints are
+removed. Board-relative label and seam sizes include the vertical table; the
+chip tray retains one layout while controls and spacing scale continuously.
+Checks on both sides of 650px width and 450px height show small continuous
+dimension changes with no page or board scrolling.
+
+Roulette's ball now orbits outside its smaller colored ring and moves inward
+on capture, with an 800ms startup ramp. Portrait gives the board a 58dvh cap
+and larger surrounding controls. The shared Settings button mounts beside the
+game actions through an optional toolbar slot; connection status and latency
+reuse existing socket events. Real-hub checks confirm no button overlap from
+360px to desktop widths, working settings, connected status/ping, return of the
+shared toolbar after the match, and a complete twelve-player round. All 42 game
+and 232 hub tests pass, along with SDK tests and type checks.
+
+The roulette presentation now includes a spin-clock hand flick, static felt and
+rail detail, and raised owner-colored chips with amount labels below the discs.
+Outside labels use EVEN/ODD and 2 to 1; red/black wagers use accessible diamonds.
+Portrait lets the bet panel fill leftover space beneath the chip tray. Wheel
+numbers face inward inside separately bordered outer boxes; the ball crosses
+that ring to land in an inner pocket. A pause-safe result zoom centers the
+winning slot; reduced motion keeps only its highlight. All 45 roulette tests
+pass. Real Edge phone/laptop checks verify hand timing, dragging, payout, and
+winning-pocket camera alignment; a twelve-player hub match and multi-size
+portrait gap/toolbar checks also pass.
+
+Roulette now offers hover/focus/touch-hold coverage and stake previews, direct
+editing from owned chip stacks, green seats with a diagonal LOCKED IN stamp,
+and a scrollable per-bet result modal after the winning-pocket zoom. Receipts
+include personal stake/return/net totals and can reopen during the match.
+Native Escape/focus behavior is retained; phase advancement closes dialogs,
+and lifecycle cleanup cancels popup/hold timers. All 50 game tests pass.
+Real phone/laptop Edge checks exercise editing, synthetic-click suppression,
+readiness, 60-card scrolling, modal reopening and Escape without page overflow;
+a twelve-player GameHub round and toolbar/lobby restoration also pass. Sound
+cues remain deferred.
+
+Roulette's circular seam markers are replaced by oriented gold split strips,
+corner squares, and labeled rectangular edge tabs. Desktop inside decorations
+reveal near the pointer or on keyboard focus/drop; touch and hybrid devices
+keep them visible. Chips and hit areas never hide. Cached geometry avoids
+layout reads on every pointer move. All 51 game tests and fresh-package checks
+pass. Real Edge checks verify desktop proximity/focus, touch visibility, chip
+persistence, dragging/editing, and per-bet result dialogs without overflow.
