@@ -1000,3 +1000,25 @@ keep them visible. Chips and hit areas never hide. Cached geometry avoids
 layout reads on every pointer move. All 51 game tests and fresh-package checks
 pass. Real Edge checks verify desktop proximity/focus, touch visibility, chip
 persistence, dragging/editing, and per-bet result dialogs without overflow.
+
+## Post-push roulette interaction review
+
+Reproduced and fixed reconnects moving a seat to the end of the player list,
+normal state broadcasts dismissing manually reopened summaries, queued close
+events clearing a newly reopened editor, canceled touch holds submitting their
+synthetic click, and stale winner announcements after the server revokes a
+pending win. Regression tests exercise each case. GameHub's shortcut routing
+now recognizes native dialogs so Escape dismisses them instead of opening
+Settings behind them; verified in the real hub. Type checks, 55 game tests,
+232 hub tests, and SDK tests pass. These are targeted lifecycle/input fixes;
+round timing, betting rules, saved presets, and published versions are unchanged.
+
+Before committing the review fixes, an actual twelve-player GameHub/Edge session
+passed the complete checklist: seat order after a socket-token reconnect,
+rapid dialog close/reopen followed by a real edit, native Escape dismissal,
+revoking a pending winner after removal, keeping reopened results visible while
+another player bets, canceling a touch gesture without placing a wager, a normal
+subsequent tap placing its wager, and toolbar restoration on return to lobby.
+No browser errors occurred. A separate 250-game randomized lifecycle run covered
+10,264 actions and 236 reconnects with valid bankroll/reservation invariants,
+stable seats, and exactly one completion per game.

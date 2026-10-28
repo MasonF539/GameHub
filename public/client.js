@@ -707,7 +707,7 @@ document.addEventListener("keydown", (event) => {
   const generalSettings = generalKeybindDefinition.keybinds[0];
   if (event.code === getAssignedKey("general", generalSettings)) {
     const otherModalIsOpen = document.querySelector(
-      ".modal.show:not(#app-settings-modal), .modal[aria-modal='true']:not(#app-settings-modal)"
+      "dialog[open], .modal.show:not(#app-settings-modal), .modal[aria-modal='true']:not(#app-settings-modal)"
     );
     if (!otherModalIsOpen) {
       event.preventDefault();
@@ -721,7 +721,7 @@ document.addEventListener("keydown", (event) => {
     currentActiveGameId === null ||
     !socket.connected ||
     isCurrentUserSpectator ||
-    document.querySelector(".modal.show, .modal[aria-modal='true']")
+    document.querySelector("dialog[open], .modal.show, .modal[aria-modal='true']")
   ) {
     return;
   }
