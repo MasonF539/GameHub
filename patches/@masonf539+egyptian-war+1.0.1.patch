@@ -1,0 +1,44 @@
+diff --git a/node_modules/@masonf539/egyptian-war/public/style.css b/node_modules/@masonf539/egyptian-war/public/style.css
+--- a/node_modules/@masonf539/egyptian-war/public/style.css
++++ b/node_modules/@masonf539/egyptian-war/public/style.css
+@@ -369,6 +369,19 @@
+   pointer-events: none;
+ }
+ 
++/* Static cross-hatching stays inside the felt, below seats, cards, labels, and trim. */
++.egyptian-war-felt-hatching {
++  position: absolute;
++  z-index: 0;
++  inset: 1.15rem;
++  pointer-events: none;
++  background:
++    radial-gradient(ellipse, #042b1d1a, transparent 80%),
++    repeating-linear-gradient(45deg, #9fb79818 0 1px, transparent 1px 9px),
++    repeating-linear-gradient(-45deg, #9fb79818 0 1px, transparent 1px 9px);
++  mask-image: radial-gradient(ellipse, #000 15%, #0008 48%, transparent 90%);
++}
++
+ /* The measured seats bound a stable label, card, and message grid. */
+ .egyptian-war-table-info {
+   position: absolute;
+@@ -1910,6 +1923,7 @@
+   background: #702e43;
+ }
+ 
+-[data-table-detail="simple"] .egyptian-war-felt::after {
++[data-table-detail="simple"] .egyptian-war-felt::after,
++[data-table-detail="simple"] .egyptian-war-felt-hatching {
+   display: none;
+ }
+diff --git a/node_modules/@masonf539/egyptian-war/public/template.html b/node_modules/@masonf539/egyptian-war/public/template.html
+--- a/node_modules/@masonf539/egyptian-war/public/template.html
++++ b/node_modules/@masonf539/egyptian-war/public/template.html
+@@ -103,7 +103,7 @@
+         <div id="egyptian-war-arena" class="egyptian-war-arena">
+           <div id="egyptian-war-animation-layer" class="egyptian-war-animation-layer"
+             aria-hidden="true"></div>
+-          <div class="egyptian-war-felt"></div>
++          <div class="egyptian-war-felt"><div class="egyptian-war-felt-hatching" aria-hidden="true"></div></div>
+             <div class="egyptian-war-table-info">
+               <p class="egyptian-war-pile-label mb-2">
+                 Central pile: <span id="egyptian-war-pile-count">0 cards</span>

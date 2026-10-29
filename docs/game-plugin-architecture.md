@@ -461,9 +461,10 @@ accepts only locked local archives within vendor/, validates their real path and
 integrity metadata, and verifies a fresh consumer just as it does registry games.
 
 The prototype supports twelve simultaneous participants and all 157 conventional
-single-zero bet targets. It does not implement cards, shops, loans, or mid-match
-player admission; those remain separate milestones and do not change the SDK
-contract in this integration. No game package is published for local testing.
+single-zero bet targets, plus private card inventory and timed reward drafts.
+Card effects, shops, loans, and mid-match admission remain separate milestones.
+Viewer-specific snapshots carry only the viewer's hand and reward offers; this
+uses the existing SDK contract. No game package is published for local testing.
 
 ### Optional game toolbar placement
 
