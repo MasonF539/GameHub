@@ -47,7 +47,7 @@ real Edge checks at 1366x768, 1024x768, 844x390, 390x844, and 360x740 with no pa
 overflow; real two-player GameHub reward rounds 2-4, private hands, pause/resume,
 selection, and Escape dismissal with no browser errors.
 
-To inspect manually, finish the first round, choose a card, and click Open cards.
+To inspect manually, finish the first round, choose a card, and click Check cards.
 Rounds 2/3 offer temporaries and round 4 permanents. Check polarity top left,
 name top middle, duplicate count top right, and effect underneath. Wide screens
 split chips and the fan evenly; portrait stacks them. Effects and payouts do
@@ -60,7 +60,7 @@ Card presentation follow-up: real Edge checks at the five sizes above verify
 no overlap between full-size card rows, immediate hover glow and one-second
 single-card enlargement, and fan clicks leaving the collection closed.
 Unresolved reward selection has no Close button; Escape and native close
-requests cannot dismiss it. Confirmed choices now close immediately. Optional Open cards
+requests cannot dismiss it. Confirmed choices now close immediately. Optional Check cards
 inspection keeps Close/Escape, and a server phase transition closes rewards.
 
 
@@ -84,7 +84,7 @@ dark-green gradient. The upper-left card shine is softened and spread out.
 
 Felt patches are now native CSS layers anchored to visible green betting lanes
 in each orientation. The SVG texture asset is obsolete and removed. Reward
-selection auto-closes on the trusted state confirming a choice; Open cards
+selection auto-closes on the trusted state confirming a choice; Check cards
 remains usable while other players finish choosing.
 
 Reward cards now support clicking the whole card or the separate Choose card
@@ -97,3 +97,20 @@ Portrait patches are roughly a quarter smaller and scale with board dimensions.
 The upper-left patch clears the top rail while extending above the numbered
 grid. Card-dialog initial focus goes to its heading, avoiding a false initial
 first-card highlight while preserving mouse and keyboard choice.
+
+
+Loaded Roulette now has a 30-second Final Preparations phase after betting.
+Check lock/unlock separately in both phases, play cards through Check cards,
+and confirm Profit up, More draws, and Double or nothing consume one copy per
+accepted play. Free wagers must not reserve or lose cash; results must show
+card-adjusted returns and the separate profit gamble. Other cards remain
+Preview only. Test pause/resume and refresh during preparations in both board
+orientations. The updated private tarball is used by normal GameHub starts.
+
+
+Call Bank and Last round results share a row below Loaded Roulette's wallet. Test quick amount buttons,
+slider/input synchronization, fee previews, once-per-round borrowing, repayment
+from available cash only, pause/lock restrictions, reconnect, and private loan
+history. Verify that borrowing alone cannot win, and qualifying settlement
+pays debt before winner comparison. Check bank scrolling at phone and short
+landscape sizes. The bank shell is separate for future shark-mouth artwork.

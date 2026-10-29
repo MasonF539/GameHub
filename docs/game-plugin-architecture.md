@@ -462,7 +462,11 @@ integrity metadata, and verifies a fresh consumer just as it does registry games
 
 The prototype supports twelve simultaneous participants and all 157 conventional
 single-zero bet targets, plus private card inventory and timed reward drafts.
-Card effects, shops, loans, and mid-match admission remain separate milestones.
+Final Preparations supports three personal card effects through the existing
+action and viewer-state contracts. Bank loans and repayments use the same action/state contracts, with private
+loan history and public debt/net balances. Net balance is cash minus outstanding
+debt and is used for winner comparisons. Other effects, shops, and mid-match
+admission remain separate milestones.
 Viewer-specific snapshots carry only the viewer's hand and reward offers; this
 uses the existing SDK contract. No game package is published for local testing.
 

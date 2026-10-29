@@ -1022,3 +1022,24 @@ subsequent tap placing its wager, and toolbar restoration on return to lobby.
 No browser errors occurred. A separate 250-game randomized lifecycle run covered
 10,264 actions and 236 reconnects with valid bankroll/reservation invariants,
 stable seats, and exactly one completion per game.
+
+
+## Loaded Roulette cards and bank review (2026-10-29)
+
+Reproduced and fixed a tiebreaker continuing after all contenders fell below
+the goal. Once a tiebreaker is active, the highest net balance wins regardless
+of the original threshold. The regression includes a loan, ensuring gross cash
+cannot beat a higher cash-minus-debt balance. The completion reason now identifies
+a tiebreaker win rather than incorrectly claiming the goal was reached.
+
+The review also checks card consumption/retries, free-bet accounting, the
+profit gamble, loan limits/repayments, net-balance winner ordering, private
+history, reconnect retention, dialog lifecycle, and responsive player slots.
+
+Verification passed: 90 Loaded Roulette tests, 232 GameHub tests, 9 SDK tests,
+type checks, and fresh-consumer package/patch verification. Edge checks covered
+card effects on phone/laptop, bank controls and fixed headers at five sizes,
+seven-/twelve-player seat sizing at five sizes, and a live two-player GameHub
+session exercising loans, repayment, rewards, pause, and both readiness phases.
+No browser errors or document overflow were observed in those checks. Physical
+phone performance, audio, and public-tunnel play were not retested in this pass.

@@ -307,8 +307,10 @@ The current development branch also includes the private basic Loaded Roulette
 prototype as a locked `vendor/` tarball. It supports 2?12 players, conventional
 single-zero betting (including split/corner/edge targets), click/drag chips,
 custom whole stakes, proportional stacks, timed rounds, and a shared animated
-wheel. Private card inventory and reward drafts start in round 2; card effects,
-shops, loans, and late entry are not implemented yet.
+wheel. Private card inventory and reward drafts start in round 2. A 30-second
+Final Preparations phase supports Profit up, More draws, and Double or nothing.
+Call Bank provides once-per-round loans and repayments with net-balance winner
+checks (net balance is cash minus outstanding debt). Other card effects, shops, and late entry are not implemented yet.
 
 Rebuild/start GameHub normally, then select Loaded Roulette in the lobby. After
 editing the sibling Loaded-Roulette source, run `npm run update:roulette` from
