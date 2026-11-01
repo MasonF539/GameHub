@@ -3,6 +3,68 @@ const path = require("node:path");
 const { spawnSync } = require("node:child_process");
 const test = require("node:test");
 
+test("controls menu waits for a new selection after Docker is unavailable", {
+  skip: process.platform !== "win32"
+}, () => {
+  const script = `
+$global:dockerCalls = 0
+$global:selectionCalls = 0
+function global:docker { $global:dockerCalls++; $global:LASTEXITCODE = 1 }
+function global:Read-Host {
+  $prompt = [string]$args[0]
+  if ($prompt -eq "Choose an option") {
+    $global:selectionCalls = $global:selectionCalls + 1
+    if ($global:selectionCalls -eq 1) { return "1" }
+    if ($global:selectionCalls -eq 2) { return "" }
+    return "Q"
+  }
+  return ""
+}
+function global:Clear-Host {}
+function global:Write-Host {}
+& $env:GAMEHUB_LAUNCHER_TEST_PATH -Action Menu
+[pscustomobject]@{ dockerCalls = $global:dockerCalls; selectionCalls = $global:selectionCalls } | ConvertTo-Json -Compress
+`;
+  const result = spawnSync("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-EncodedCommand", Buffer.from(script, "utf16le").toString("base64")], {
+    encoding: "utf8", timeout: 10_000,
+    env: { ...process.env, GAMEHUB_LAUNCHER_TEST_PATH: path.resolve(__dirname, "../GameHub.ps1") }
+  });
+  assert.equal(result.status, 0, result.stderr);
+  const outcome = JSON.parse(result.stdout.trim().split(/\r?\n/).at(-1));
+  assert.equal(outcome.dockerCalls, 1, "an unavailable Docker engine must not continue into startup");
+  assert.equal(outcome.selectionCalls, 3, "the menu should safely ignore an empty selection before accepting another option");
+});
+
+test("direct local launch returns to the menu after Docker is unavailable", {
+  skip: process.platform !== "win32"
+}, () => {
+  const script = `
+$global:dockerCalls = 0
+$global:readCalls = 0
+function global:docker { $global:dockerCalls++; $global:LASTEXITCODE = 1 }
+function global:Read-Host {
+  $global:readCalls = $global:readCalls + 1
+  switch ($global:readCalls) {
+    1 { return "" }
+    2 { return "1" }
+    3 { return "" }
+    4 { return "Q" }
+  }
+}
+function global:Clear-Host {}
+& $env:GAMEHUB_LAUNCHER_TEST_PATH -Action Local
+[pscustomobject]@{ dockerCalls = $global:dockerCalls; readCalls = $global:readCalls } | ConvertTo-Json -Compress
+`;
+  const result = spawnSync("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-EncodedCommand", Buffer.from(script, "utf16le").toString("base64")], {
+    encoding: "utf8", timeout: 10_000,
+    env: { ...process.env, GAMEHUB_LAUNCHER_TEST_PATH: path.resolve(__dirname, "../GameHub.ps1") }
+  });
+  assert.equal(result.status, 0, result.stderr);
+  const outcome = JSON.parse(result.stdout.trim().split(/\r?\n/).at(-1));
+  assert.equal(outcome.dockerCalls, 2, `the menu should allow a second launch attempt:\n${result.stdout}`);
+  assert.equal(outcome.readCalls, 4);
+});
+
 for (const stopFails of [false, true]) {
   test(`Local launcher ${stopFails ? "aborts when the public tunnel cannot stop" : "stops the public tunnel before starting only GameHub"}`, {
     skip: process.platform !== "win32"

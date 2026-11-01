@@ -1043,3 +1043,20 @@ seven-/twelve-player seat sizing at five sizes, and a live two-player GameHub
 session exercising loans, repayment, rewards, pause, and both readiness phases.
 No browser errors or document overflow were observed in those checks. Physical
 phone performance, audio, and public-tunnel play were not retested in this pass.
+
+
+## Loaded Roulette shop review (2026-11-01)
+
+Fixed stale details after rerolling while the signboard is hidden and then
+widening the viewport. Resize now selects from current stock. A delayed compact
+inspection also ignores an offer replaced before the click delay finishes.
+The review keeps shop cards stationary, hand-only lift transitions, the board
+corner discount tag, equal permanent-card spacing, and the sign-only Buy button.
+
+Verification passed: 124 game tests, 234 hub tests, 9 SDK tests, source type
+checks, and fresh-consumer package verification. Edge checks at eight sizes
+covered all stock and controls without scroll, click selection, direct/sign
+purchases, touch double-taps, disabled purchases, bank, pause, and readiness.
+A real two-player hub session passed purchases, private stock, bank actions,
+pause/resume, lock-in, native Escape, and return to lobby without browser errors.
+Public tunnels, audio, and physical-device performance were not retested.

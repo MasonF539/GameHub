@@ -465,8 +465,8 @@ single-zero bet targets, plus private card inventory and timed reward drafts.
 Final Preparations supports three personal card effects through the existing
 action and viewer-state contracts. Bank loans and repayments use the same action/state contracts, with private
 loan history and public debt/net balances. Net balance is cash minus outstanding
-debt and is used for winner comparisons. Other effects, shops, and mid-match
-admission remain separate milestones.
+debt and is used for winner comparisons. Private shops, purchases, and Shop Reroll use the same contracts. Other effects
+and mid-match admission remain separate milestones.
 Viewer-specific snapshots carry only the viewer's hand and reward offers; this
 uses the existing SDK contract. No game package is published for local testing.
 

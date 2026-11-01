@@ -114,3 +114,52 @@ from available cash only, pause/lock restrictions, reconnect, and private loan
 history. Verify that borrowing alone cannot win, and qualifying settlement
 pays debt before winner comparison. Check bank scrolling at phone and short
 landscape sizes. The bank shell is separate for future shark-mouth artwork.
+
+
+Shop stage: round 1 stays basic roulette; rewards from round 2 lead into a
+30-second shop. Check the striped booth fits without scrolling, with an extra
+deal above the seven regular offers, personal before shared and permanent
+cards on the right. Buy and inspect cards, verify exact price/stock/copy caps,
+and use the bank without dismissing or locking the shop. Test Lock in/Unlock,
+all-ready and timer advancement, pause/reconnect, spectator privacy, and a Shop
+Reroll that affects only its owner. Prices use documented starting-cash/goal/average-net
+weights; unsupported effects remain labeled Preview.
+
+Shop verification completed: 101 game tests, 232 hub tests, SDK tests, and
+fresh-consumer package/patch checks pass. Five-size Edge checks verify all eight
+offers fit without scrolling, purchases and bank return work, and a bought
+Profit up card can be played and pays the expected bonus. A real two-player hub
+session passed purchases, in-shop borrowing, pause/resume, readiness, and native
+Escape returning from Bank to Shop. No browser errors or document overflow
+were observed in those checks.
+
+
+Check cards is now present in Shop and Rewards. Verify a held Reward Reroll can
+replace choices before selection without changing the timer or another player's
+offers; Back to rewards/Escape must restore the picker. A newly selected copy
+must wait for a later draft. Check the clicked card appears on the side sign, shop cards stay still,
+and compact-screen taps open readable inspection. Only hand cards lift.
+
+Reward Reroll verification: 108 game tests and fresh-package verification pass.
+Edge checked a real owned card reroll, unchanged time and other-player choices,
+return from the hand to the required picker, Shop Check cards, and an enlarged
+popover above the booth at laptop, short landscape, and phone sizes. Five-size
+shop checks still show all eight offers and controls without scrolling. The
+hover preview uses full-size typography, not the shop's compact card styles.
+
+
+Shop pricing now uses 2*startingCash + 2*max(0, averageNet) + goal/2 as its scale.
+The average is frozen at Shop entry for all owners and rerolls. Type/rarity rates
+are unchanged. Normal and deal prices round to whole units below 20 or nearest
+five otherwise, minimum 1. Unit checks cover 2/12-player parity, outstanding
+debt, stage refreshes, frozen rerolls, and positive safe integer outputs.
+
+
+Current shop interaction checks: temporary/permanent dividers leave equal space
+around the permanent offer. The discount tag sits on the detail board; only its
+bottom area has a Buy card button. Shelf cards have prices beneath them and
+support double-click/double-tap purchases (Shift+Enter for keyboard). Reroll is
+first in the footer and hidden without an owned copy. Reroll in a compact view,
+then widen it: the sign must show current stock. A delayed single click must not
+open an obsolete offer. Final review: 124 game tests, 234 hub tests, 9 SDK tests,
+eight-size Edge checks, and a real two-player hub session passed.

@@ -5,7 +5,7 @@ param(
 
 function Wait-ForUser {
     Write-Host
-    Read-Host "Press Enter to return to the menu"
+    $null = Read-Host "Press Enter to return to the menu"
 }
 
 function Test-Docker {
@@ -269,27 +269,22 @@ Set-Location $PSScriptRoot
 switch ($Action) {
     "Local" {
         Start-LocalGameHub
-        exit
     }
 
     "Public" {
         Start-PublicGameHub
-        exit
     }
 
     "Status" {
         Show-GameHubStatus
-        exit
     }
 
     "Logs" {
         Show-GameHubLogs
-        exit
     }
 
     "Stop" {
         Stop-GameHub
-        exit
     }
 }
 
@@ -308,38 +303,40 @@ do {
     Write-Host "Q. Exit controls"
     Write-Host
 
-    $choice = Read-Host "Choose an option"
+    $choice = [string](Read-Host "Choose an option")
 
-    switch ($choice.ToUpper()) {
-        "1" {
-            Start-LocalGameHub
-        }
+    if (-not [string]::IsNullOrWhiteSpace($choice)) {
+        switch ($choice.ToUpper()) {
+            "1" {
+                Start-LocalGameHub
+            }
 
-        "2" {
-            Start-PublicGameHub
-        }
+            "2" {
+                Start-PublicGameHub
+            }
 
-        "3" {
-            Show-GameHubStatus
-        }
+            "3" {
+                Show-GameHubStatus
+            }
 
-        "4" {
-            Show-GameHubLogs
-        }
+            "4" {
+                Show-GameHubLogs
+            }
 
-        "5" {
-            Stop-GameHub
-        }
+            "5" {
+                Stop-GameHub
+            }
 
-        "Q" {
-            Write-Host
-            Write-Host "Closing GameHub controls."
-        }
+            "Q" {
+                Write-Host
+                Write-Host "Closing GameHub controls."
+            }
 
-        default {
-            Write-Host
-            Write-Host "That is not a valid option." -ForegroundColor Yellow
-            Start-Sleep -Seconds 1
+            default {
+                Write-Host
+                Write-Host "That is not a valid option." -ForegroundColor Yellow
+                Start-Sleep -Seconds 1
+            }
         }
     }
 }

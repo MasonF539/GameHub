@@ -310,7 +310,9 @@ custom whole stakes, proportional stacks, timed rounds, and a shared animated
 wheel. Private card inventory and reward drafts start in round 2. A 30-second
 Final Preparations phase supports Profit up, More draws, and Double or nothing.
 Call Bank provides once-per-round loans and repayments with net-balance winner
-checks (net balance is cash minus outstanding debt). Other card effects, shops, and late entry are not implemented yet.
+checks (net balance is cash minus outstanding debt). A 30-second Shop stage offers seven regular cards plus a discounted deal from
+round 2, with in-shop bank access. Other card effects and late entry remain in
+development.
 
 Rebuild/start GameHub normally, then select Loaded Roulette in the lobby. After
 editing the sibling Loaded-Roulette source, run `npm run update:roulette` from
