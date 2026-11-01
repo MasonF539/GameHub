@@ -100,7 +100,7 @@ first-card highlight while preserving mouse and keyboard choice.
 
 
 Loaded Roulette now has a 30-second Final Preparations phase after betting.
-Check lock/unlock separately in both phases, play cards through Check cards,
+Check ready/cancel ready separately in both phases, play cards through Check cards,
 and confirm Profit up, More draws, and Double or nothing consume one copy per
 accepted play. Free wagers must not reserve or lose cash; results must show
 card-adjusted returns and the separate profit gamble. Other cards remain
@@ -120,7 +120,7 @@ Shop stage: round 1 stays basic roulette; rewards from round 2 lead into a
 30-second shop. Check the striped booth fits without scrolling, with an extra
 deal above the seven regular offers, personal before shared and permanent
 cards on the right. Buy and inspect cards, verify exact price/stock/copy caps,
-and use the bank without dismissing or locking the shop. Test Lock in/Unlock,
+and use the bank without dismissing or locking the shop. Test Ready up/Cancel ready,
 all-ready and timer advancement, pause/reconnect, spectator privacy, and a Shop
 Reroll that affects only its owner. Prices use documented starting-cash/goal/average-net
 weights; unsupported effects remain labeled Preview.
@@ -163,3 +163,79 @@ first in the footer and hidden without an owned copy. Reroll in a compact view,
 then widen it: the sign must show current stock. A delayed single click must not
 open an obsolete offer. Final review: 124 game tests, 234 hub tests, 9 SDK tests,
 eight-size Edge checks, and a real two-player hub session passed.
+
+
+Public Effects stage: from round 2, Shop must advance to a fresh 30-second public
+planning stage, then Betting. Check Ready up/Cancel ready, all-ready and timeout paths,
+pause/disconnect/reconnect, hand inspection, spectator read-only state, and fresh
+Betting readiness. Chips, purchases, personal/public preview effects, and new
+loans must stay unavailable there; unlocked debt repayment is allowed. Round 1
+continues to skip card-related stages. Profit Bonus and Profit Cut are implemented in Public Effects; targeted public
+effects remain previews.
+
+
+Card implementation checks: play Profit Bonus/Cut during Public Effects, verify
+all players' payouts, cancellation, two-public-card limit, and the 80% reduction
+cap. Check expiry next round and persistence after an owner leaves. Play Goal
+Grant, Cash Bonus, Loan Relief, and Debt Reduction during Final Preparations;
+verify cash versus available cash, original/latest debt capping, oldest-first
+reduction, integer rounding, and no cash charge for relief. Useless relief/cash
+cards must be retained. Retry each action without duplicate consumption. Winner
+checks remain at settlement; modified bets must retain safe payout validation.
+
+Card-effects verification: 141 game tests, type checks, and fresh-package
+verification pass. Desktop/phone Edge checks played all six new cards through
+the actual reward and hand UI, verified consumed inventory, retry safety, cash
+versus debt, and modified public payouts without browser errors.
+
+
+Card-play presentation: verify a confirmed card pops over the felt in a separate
+noninteractive layer, using the same initial animation for every card. Local
+public/personal plays close the hand to reveal the board; remote plays do not.
+Target records add a second slide/shrink placement animation to the actual spot;
+targeted card mechanics remain previews. Test repeated snapshots, duplicate
+copies, reconnect baseline, new-round/unmount cleanup, resizing, and reduced
+motion. Reroll presentations must not dismiss required Shop/Rewards stages.
+
+Animation verification: 146 game tests and fresh-package verification pass.
+Desktop/phone Edge checks verify all six effects pop over real board coordinates
+above modal layers without intercepting controls. A simulated future target
+record exercises the separate placement animation; this does not enable the
+targeted card effect. Local hands close on confirmed plays and board layout
+remains unchanged. No browser errors were observed.
+
+
+Card drag verification: 151 game tests and fresh-package verification pass.
+Edge mouse and emulated touch checks dragged all six new effects from the fan
+and collection, including outside-drop restoration. Each valid drop submitted
+once, consumed the card on the server, and triggered the confirmed board pop.
+Preview/paused/ready/wrong-stage cards, rejected drops, pointer cancellation,
+phase changes, synthetic clicks, and unmount cleanup have regression coverage.
+
+
+Current public presentation behavior supersedes earlier all-card animation notes:
+only public cards animate or issue play alerts. A shared server animation record
+is sent to all players/spectators, including reconnects during the presentation.
+The Public Effects clock is preserved and additional plays/readiness are blocked
+for 1.4 seconds. Verify the hold does not clear manual/disconnect pauses, reset
+the countdown, or survive disposal/game end. Personal cards/rerolls apply silently.
+Purchased shelf/detail/inspection cards show diagonal gold SOLD OUT stamps,
+while price text stays unchanged and accessible stock labels remain available.
+
+Verification: 155 game tests and fresh-package verification passed. A three-view
+Edge check (two players plus a phone spectator) verified shared animations,
+sequential public plays, a frozen/resuming server/client clock, silent personal
+application, and the gold -18-degree sold-out overlay without browser errors.
+
+
+Animation audience correction: public cards still animate for all viewers and
+hold the shared clock; personal/reroll cards now animate only for their owner,
+with personal success alerts still disabled. Public animations are no longer
+discarded in hidden tabs, and a missing initial board layout retains the play
+until resize/visibility/ResizeObserver can present it. Delayed presentation uses
+elapsed server-record time instead of restarting old animations.
+
+Verification: 158 game tests and fresh-package checks pass. A real GameHub
+Socket.IO browser run used two players and a phone spectator: both public plays
+appeared on all three screens with the countdown held, while a personal Goal
+Grant animated only for its owner and emitted no play alert. No browser errors.
