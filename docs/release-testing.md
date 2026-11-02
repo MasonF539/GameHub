@@ -239,3 +239,13 @@ Verification: 158 game tests and fresh-package checks pass. A real GameHub
 Socket.IO browser run used two players and a phone spectator: both public plays
 appeared on all three screens with the countdown held, while a personal Goal
 Grant animated only for its owner and emitted no play alert. No browser errors.
+
+
+Stage ribbons: Public Effects, Betting, and Final Preparations show a full-width
+brief introduction on entry. Verify each accent/title, automatic dismissal,
+repeat snapshots without replay, and no blocking of controls or game clocks.
+Reduced motion shows stationary feedback. Other phases and unmount clear it.
+Verification: 160 game tests and fresh-package checks passed; four-size Edge
+checks covered desktop, short landscape, and 390/360px phones. All three ribbons
+fit without scrolling and allowed pointer events through, with reduced motion
+and cleanup passing and no browser errors.
