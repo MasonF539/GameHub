@@ -249,3 +249,83 @@ Verification: 160 game tests and fresh-package checks passed; four-size Edge
 checks covered desktop, short landscape, and 390/360px phones. All three ribbons
 fit without scrolling and allowed pointer events through, with reduced motion
 and cleanup passing and no browser errors.
+
+
+Complete roulette catalogue pass: all 73 defined catalogue entries except Type
+Reversal are active in the local package. Check passive bonuses/penalties,
+public number targeting and effect removal/movement, private theft/trade
+choices, generators, free betting rounds, and capped tax receipts. Type Reversal
+must remain clearly labelled Preview only. Paid Sticky Fingers/Trade up choices
+cannot be dismissed; unspent target selections can be cancelled. Test utility
+cards during the spin, not just planning, and reconnect during a pending choice.
+
+Verification: 226 game tests, type checks, and fresh-consumer package checks
+passed. Real GameHub sockets with two players and a phone spectator confirmed
+private target choice prompts, shared targeted public animations/held timer,
+owner-only personal animation, and no personal-play alerts. Edge checks at
+1366x768, 844x390, 390x844, and 360x740 verified choice dialogs, required drafts,
+and no page overflow. Phone screenshots caught and corrected small/clipped
+choice-card text. No browser errors were observed. Real-device performance and
+full catalogue balance still need human playtesting.
+
+
+Short Changed timing correction: winning bets earn 20% less profit during the
+next round only, even when other losses make that round unprofitable. It does
+not affect its acquisition round and expires after the affected round with
+no wins, no bets, or suppression. Cold Streak still waits for its first winning
+round. The reversed Short Changed rule is +20% with the same fixed duration;
+Type Reversal itself remains a preview. Verified 229 game tests, type checks,
+and fresh-consumer package checks; the local archive includes the correction.
+
+
+Type Reversal is now active. Verify odd/even copy parity, +20% for the first
+copy (maximum +100%), Negative to Positive exemption/current-polarity
+suppression, retained growth/assignments, and unchanged committed effects.
+Former positive temporary cards become automatic penalties at their applicable
+stage; former negative personal cards become held playable positives.
+Cross out's reversed Free Entry grants each participant one free straight-up
+bet at 5% of their cash when Betting opens. Reversed Forced Sale offers one
+temporary card from three choices. Reversed theft/interception must explain
+who gave the recipient a card without leaking their hand or message publicly.
+
+Verification: 264 game tests, type checks, and fresh-consumer package checks.
+A real GameHub two-player/one-spectator Edge run verified random-recipient blind
+gift choice, owner-only cause messages, a shared reversed placement animation,
+Free Entry grants for both players, and phone/landscape viewport fit without
+page overflow or browser errors. Regression coverage includes automatic public
+queues resuming after host pause and committed effects retaining their sign.
+
+
+Reversal follow-up review: stale paid theft selections now refresh only their
+original still-held options, or immediately close if no options remain. The
+private update is sent even when the chosen action fails; removed option IDs
+are rejected. The reveal cost stays paid and no replacement hidden cards are
+exposed. Two real-action regressions cover empty and partially valid choices.
+Game verification now totals 266 tests, plus type/fresh-package checks.
+
+Live verification of the stale-choice correction used actual GameHub sockets with two players and a spectator. The source spent the offered card while a phone recipient's reversed Go Fish prompt was open. Selecting the stale option immediately closed the phone dialog and restored Ready; the spectator received no private messages and no browser errors occurred.
+
+
+Cross out follow-up: 270 game tests cover sequential host/guest plays,
+shared-animation blocking, player-specific readiness, private disabled reasons,
+and passive labels for negative permanents. Disabled manual-card controls now
+show their actual blocker instead of always naming the required phase.
+The previously reported persistent player-two block was not reproduced; if it
+recurs, record the displayed reason. The local roulette archive includes these
+changes.
+
+Final refreshed-package browser check: host and phone guest both played normal Cross out; the guest's Ready blocker updated in the open card window, Cancel ready restored play, and the shared animation released correctly. A spectator also received the shared state; all three browsers reported no errors. Fresh-consumer package verification passed.
+
+
+Direct targeting checks: eligible player cards and board spaces glow and accept
+click/keyboard selection; cancellation clears all highlights. Blind theft shows
+matching shuffled order to both participants, card faces only to the owner, and
+backs only to the chooser. The owner cannot choose/cancel, and spectators must
+receive neither identities nor options. Verify completion and reconnect cleanup.
+276 game tests cover these paths alongside prior regressions.
+
+Live verification passed with two players and a spectator: direct player targeting, a multi-card shared shuffled fan, owner-only faces, chooser-only selection, and cleanup on both clients. Phone layout had no page overflow or browser errors. Actual visible card-back proportions and owner-card opacity were checked. Direct Cross out targeting also passed for both players. Type checks, 276 game tests, and fresh package checks passed; GameHub's local archive is refreshed.
+
+Card backs now automatically follow the hand owner's public player color. Optional card-back style metadata, controls, and generated style previews were removed. The shared approved design retains white borders; no rule/preset changes or saved preference are required. 277 game tests cover owner-color selection and live updates without rebuilding the chooser. Live multiplayer verification checks the victim's color is used on the thief's screen, alongside existing privacy and phone-layout checks.
+
+Approved card fronts are now installed: temporary silver checkers with nested diamonds, public purple slashes with a framed diamond, and permanent gold cross-hatching with a center diamond plus eight smaller matching symbols. The legacy base selector was corrected so temporary cards use the approved texture inside the game. Both temporary HTML preview files were removed. 277 game tests, type checks, and fresh-package verification pass. Live two-player/one-spectator checks covered rewards, long permanent descriptions, shop texture/typography, hand inspection, owner-colored backs, theft privacy, and phone fit with no browser errors.
