@@ -231,10 +231,15 @@
                 data-bs-target="#app-settings-graphics-panel">
                 Graphics
               </button>
+              <button id="app-settings-music-tab" class="app-settings-navigation-button nav-link" type="button"
+                role="tab" aria-selected="false" aria-controls="app-settings-music-panel" data-bs-toggle="pill"
+                data-bs-target="#app-settings-music-panel">
+                Music
+              </button>
               <button id="app-settings-audio-tab" class="app-settings-navigation-button nav-link" type="button"
                 role="tab" aria-selected="false" aria-controls="app-settings-audio-panel" data-bs-toggle="pill"
                 data-bs-target="#app-settings-audio-panel">
-                Audio
+                Sound Effects
               </button>
               <button id="app-settings-keybinds-tab" class="app-settings-navigation-button nav-link" type="button"
                 role="tab" aria-selected="false" aria-controls="app-settings-keybinds-panel" data-bs-toggle="pill"
@@ -395,18 +400,12 @@
                 </div>
               </section>
 
-              <section id="app-settings-audio-panel" class="app-settings-section tab-pane fade" role="tabpanel"
-                aria-labelledby="app-settings-audio-tab" tabindex="0">
-              <div class="app-settings-section-heading">
-                <div>
-                  <h3 id="audio-settings-title" class="h5 mb-1">Audio</h3>
-                  <p class="mb-0 text-body-secondary">
-                    Choose which sounds play and adjust each category independently.
-                  </p>
+              <section id="app-settings-music-panel" class="app-settings-section tab-pane fade" role="tabpanel"
+                aria-labelledby="app-settings-music-tab" tabindex="0">
+                <div class="app-settings-section-heading">
+                  <div><h3 class="h5 mb-1">Music</h3><p class="mb-0 text-body-secondary">Adjust background music for menus, lobbies, and games.</p></div>
                 </div>
-              </div>
-
-              <div class="audio-settings-list">
+                <div class="audio-settings-list">
                 <div class="audio-setting" data-audio-category="music">
                   <div class="audio-setting-header">
                     <div>
@@ -420,7 +419,21 @@
                     <output id="audio-music-volume-value" for="audio-music-volume">100%</output>
                   </div>
                 </div>
+                </div>
+              </section>
 
+              <section id="app-settings-audio-panel" class="app-settings-section tab-pane fade" role="tabpanel"
+                aria-labelledby="app-settings-audio-tab" tabindex="0">
+              <div class="app-settings-section-heading">
+                <div>
+                  <h3 id="audio-settings-title" class="h5 mb-1">Sound Effects</h3>
+                  <p class="mb-0 text-body-secondary">
+                    Choose which sounds play and adjust each category independently.
+                  </p>
+                </div>
+              </div>
+
+              <div class="audio-settings-list">
                 <div class="audio-setting" data-audio-category="join">
                   <div class="audio-setting-header">
                     <div>
