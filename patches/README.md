@@ -1,7 +1,8 @@
 # Game package patches
 
 The `@masonf539+egyptian-war+1.0.1.patch` adds soft felt cross-hatching beneath
-table content, respecting Simple table detail. GameHub installs
+table content, respecting Simple table detail, and renames its music asset to
+`background-music.mp3` with the matching registration path. GameHub installs
 `@masonf539/egyptian-war@1.0.1` directly from npm, including the continuous timer,
 personal graphics options, generated TypeScript declarations, and game docs.
 The temporary beta.7 patch was removed when adopting the stable release.

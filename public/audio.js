@@ -25,6 +25,8 @@
   const musicBaseVolume = 0.42;
   const music = new Audio();
   const effectTemplates = new Map();
+  /** Live effect handles allow phase cleanup and volume changes to affect ongoing clips. */
+  const activeEffects = new Map();
   const controls = new Map();
   let currentScene = null;
   let isUnlocked = false;
@@ -116,12 +118,13 @@
   }
 
   /** Starts audio playback and handles browser playback rejection. */
-  function safelyPlay(audio) {
+  function safelyPlay(audio, onRejected = () => {}) {
     const playResult = audio.play();
 
     if (playResult && typeof playResult.catch === "function") {
       playResult.catch(() => {
         // Browsers can block playback until the first user interaction.
+        onRejected();
       });
     }
   }
@@ -192,6 +195,7 @@
       : 0;
     saveSettings([category]);
     syncControls(category);
+    applyEffectSettings();
 
     if (category === "music") {
       applyMusicSettings();
@@ -207,6 +211,7 @@
     settings[category] = clampVolume(volume, settings[category]);
     saveSettings([category]);
     syncControls(category);
+    applyEffectSettings();
 
     if (category === "music") {
       applyMusicSettings();
@@ -223,6 +228,7 @@
     }
 
     saveSettings();
+    applyEffectSettings();
     applyMusicSettings();
   }
 
@@ -288,24 +294,30 @@
     effectTemplates.set(name, template);
   }
 
-  /** Plays a registered sound effect when its audio category permits playback. */
+  /** Applies volume changes immediately, stopping active effects when muted or hidden. */
+  function applyEffectSettings() {
+    for (const [effect, playback] of activeEffects) {
+      if (document.hidden || !categoryCanPlay(playback.category)) playback.stop();
+      else effect.volume = playback.volume * settings[playback.category];
+    }
+  }
+
+  /** Plays a registered effect and returns an idempotent stop handle for game-owned cleanup. */
   function playEffect(name) {
     const category = effectCategories[name];
-
-    if (!category || !categoryCanPlay(category)) {
-      return;
-    }
-
     const template = effectTemplates.get(name);
-
-    if (!template) {
-      return;
-    }
-
+    if (!category || !categoryCanPlay(category) || !template || document.hidden) return;
     unlock();
     const effect = template.cloneNode();
+    /** Releases a completed or rejected clip without retaining its media element. */
+    function release() { activeEffects.delete(effect); effect.onended = null; effect.onerror = null; }
+    /** Stops this playback only; repeated cleanup never restarts it or affects other clips. */
+    function stop() { if (!activeEffects.has(effect)) return; effect.pause(); effect.currentTime = 0; release(); }
+    activeEffects.set(effect, { category, volume: effectVolumes[name], stop });
+    effect.onended = release; effect.onerror = release;
     effect.volume = effectVolumes[name] * settings[category];
-    safelyPlay(effect);
+    safelyPlay(effect, release);
+    return { stop };
   }
 
   for (const category of categories) {
@@ -321,6 +333,7 @@
   document.addEventListener("keydown", unlock, { once: true });
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) {
+      applyEffectSettings();
       music.pause();
     } else {
       playCurrentMusic();

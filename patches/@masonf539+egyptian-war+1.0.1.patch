@@ -42,3 +42,19 @@ diff --git a/node_modules/@masonf539/egyptian-war/public/template.html b/node_mo
              <div class="egyptian-war-table-info">
                <p class="egyptian-war-pile-label mb-2">
                  Central pile: <span id="egyptian-war-pile-count">0 cards</span>
+diff --git a/node_modules/@masonf539/egyptian-war/public/register.js b/node_modules/@masonf539/egyptian-war/public/register.js
+--- a/node_modules/@masonf539/egyptian-war/public/register.js
++++ b/node_modules/@masonf539/egyptian-war/public/register.js
+@@ -7,7 +7,7 @@
+   const assetRoot = "/games/egyptian-war/assets/audio";
+   audio.registerMusicScene(
+     "egyptian-war",
+-    `${assetRoot}/music/egyptian-war.mp3`
++    `${assetRoot}/music/background-music.mp3`
+   );
+   audio.registerEffect("card-play", {
+     source: `${assetRoot}/effects/card-play.mp3`,
+diff --git a/node_modules/@masonf539/egyptian-war/public/assets/audio/music/egyptian-war.mp3 b/node_modules/@masonf539/egyptian-war/public/assets/audio/music/background-music.mp3
+similarity index 100%
+rename from node_modules/@masonf539/egyptian-war/public/assets/audio/music/egyptian-war.mp3
+rename to node_modules/@masonf539/egyptian-war/public/assets/audio/music/background-music.mp3

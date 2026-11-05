@@ -97,7 +97,8 @@ export interface GameServerPlugin {
 }
 
 export type GameAudioApi = {
-  playEffect(name: string): void;
+  /** Hosts may return an idempotent stop handle for long game-owned effects; older hosts return void. */
+  playEffect(name: string): { stop(): void } | void;
   registerEffect(
     name: string,
     options: { source: string; category?: "music" | "join" | "game"; volume?: number }

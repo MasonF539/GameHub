@@ -434,3 +434,24 @@ all three clients reported no console errors. Quick Sale supports negative cards
 Reseller excludes currently negative cards. Approved utility reversal behavior is
 documented and tested. Type Reversal's "including the first copy" phrase is removed.
 No package release, commit, or push was performed during this implementation.
+
+## Imported MP3 audio and playback verification (2026-11-04)
+
+- Betting uses three bet-chips variations; card plays use two card-play clips.
+  Random choices avoid immediate repeats. Picking and hovering use their own
+  card-pick and card-hover clips; purchase/stage/winner cues use buy-card,
+  stage-change and game-win MP3s. Both games use background-music.mp3.
+- Original remaining WAV placeholders were converted to actual MP3, with browser
+  decoding checks. The generator requires Python lameenc and leaves imported
+  effect recordings untouched. User-trimmed wheel/ball clips are included.
+- Card animations emit one sound, including repeated snapshots. Spin clips start
+  once and stop at pause, landing, phase exit, hiding and unmount; resume starts
+  a fresh playback. Hovering replaces the preceding longer hover clip.
+- Optional platform stop handles are idempotent. Active effects follow live
+  category volume, stop when muted/hidden, and release tracking on completion,
+  load error or rejected playback. Older plugins may ignore the return value.
+- Three-client browser checks verified spin playback, pause/resume and landing
+  cleanup; nine imported MP3s decoded successfully. Tone and loudness remain
+  subjective listening checks. Targeted audio regressions and package checks pass.
+- The stable Egyptian War patch renames its existing music file and registration
+  together; it applies on fresh package-consumer installation.

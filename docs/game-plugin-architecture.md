@@ -501,3 +501,13 @@ A game may prepare a closed `dialog[data-game-completion-dialog]` for a separate
 lobby review. The hub clones that marked dialog on `game-ended`; it need not be
 the dialog currently shown over the board. Only mark a review after its final
 content is ready, and clear that marker when mounting a new match.
+
+### Effect playback cleanup
+
+`GameAudioApi.playEffect(name)` may return `{ stop() }`. Its stop operation is
+idempotent and affects only that playback. Existing callers may ignore the
+return value, and older host services may return void. Long game-owned effects
+should keep these handles and stop them on pause, phase exit, and unmount.
+The host also applies category-volume changes to live effects and stops them
+on mute or tab hiding. Natural completion, load errors, and rejected playback
+release the host's active-effect references.

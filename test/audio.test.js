@@ -196,3 +196,41 @@ for (const blockedReads of [false, true]) {
     } finally { dom.window.close(); }
   });
 }
+
+
+/** Loads the real audio service with observable media elements, avoiding actual speaker playback. */
+function playbackHarness(t) {
+  const dom = new JSDOM('<input id="audio-game-volume" type="range">', { url: "http://localhost", runScripts: "outside-only" });
+  t.after(() => dom.window.close()); const instances = [];
+  class PlaybackAudio {
+    constructor(source = "") { this.src = source; this.volume = 1; this.currentTime = 0; this.pauses = 0; instances.push(this); }
+    play() { return Promise.resolve(); }
+    pause() { this.pauses++; }
+    load() {}
+    removeAttribute() {}
+    cloneNode() { return new PlaybackAudio(this.src); }
+  }
+  dom.window.Audio = PlaybackAudio;
+  Object.defineProperty(dom.window.document, "hidden", { configurable: true, value: false });
+  dom.window.eval(fs.readFileSync(path.join(__dirname, "../public/audio.js"), "utf8"));
+  const audio = dom.window.GameHubAudio;
+  audio.registerEffect("long-spin", { source: "/spin.mp3", category: "game", volume: 0.8 });
+  return { dom, audio, instances };
+}
+
+test("effects return idempotent stop handles and release naturally finished clips", t => {
+  const h = playbackHarness(t), playback = h.audio.playEffect("long-spin"), effect = h.instances.at(-1);
+  playback.stop(); playback.stop(); assert.equal(effect.pauses, 1); assert.equal(effect.currentTime, 0);
+  const finished = h.audio.playEffect("long-spin"), next = h.instances.at(-1);
+  next.onended(); finished.stop(); assert.equal(next.pauses, 0); assert.equal(next.onended, null);
+});
+
+test("ongoing effects follow live category volume and stop when muted or hidden", t => {
+  const h = playbackHarness(t); h.audio.playEffect("long-spin"); const effect = h.instances.at(-1);
+  h.audio.setCategoryVolume("game", 0.5); assert.equal(effect.volume, 0.4);
+  h.audio.setCategoryEnabled("game", false); assert.equal(effect.pauses, 1);
+  h.audio.setCategoryEnabled("game", true); h.audio.playEffect("long-spin"); const hidden = h.instances.at(-1);
+  Object.defineProperty(h.dom.window.document, "hidden", { configurable: true, value: true });
+  h.dom.window.document.dispatchEvent(new h.dom.window.Event("visibilitychange")); assert.equal(hidden.pauses, 1);
+  const count = h.instances.length; assert.equal(h.audio.playEffect("long-spin"), undefined); assert.equal(h.instances.length, count);
+});
