@@ -49,6 +49,11 @@ export type GameCompletion = {
 export type GameSessionContext = {
   roomCode: string;
   members: () => readonly GameMember[];
+  /** Promotes a connected room spectator into this session; the game chooses a safe round boundary.
+   * Returns false for stale sessions, disconnected members, existing players, or a full game.
+   * Optional for older hosts; no other game changes its membership unless it calls this hook.
+   */
+  admitSpectator?: (memberId: string) => boolean;
   broadcastState: () => void;
   emitEvent: (event: GameEvent) => void;
   finish: (completion: GameCompletion) => void;

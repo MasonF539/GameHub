@@ -435,6 +435,26 @@ Reseller excludes currently negative cards. Approved utility reversal behavior i
 documented and tested. Type Reversal's "including the first copy" phrase is removed.
 No package release, commit, or push was performed during this implementation.
 
+## Late joining, catch-up and reward-choice verification (2026-11-04)
+
+- Spectators enter only at a normal round boundary when enabled by the host,
+  with configured or inherited entry cash and a distinct active seat color.
+  Capacity stays twelve; tiebreakers admit no new contenders.
+- Returning participants keep money, debt, cards and stable ownership. Half of
+  missed normal temporary/permanent rewards, rounded up separately, become
+  private two-choice drafts at the next connected reward stage. More Cards
+  bonuses are excluded; unchosen assistance survives another disconnect.
+- Timeout rechecks ownership caps, preventing a traded-for capped card from
+  silently consuming an ordinary or catch-up reward. Required paid card choices
+  block early Shop entry but still resolve at the existing deadline.
+- Real socket tests cover promotion permissions, room lists and reconnecting as
+  a player. Three-client Edge checks with production timers verified next-round
+  admission, phone catch-up selection and inventory access without remounting,
+  horizontal overflow or JavaScript errors.
+- All 365 roulette tests and 244 GameHub tests pass. Packed-consumer verification
+  passes, including the reviewed local game tarball and stable Egyptian War patch.
+
+
 ## Imported MP3 audio and playback verification (2026-11-04)
 
 - Betting uses three bet-chips variations; card plays use two card-play clips.

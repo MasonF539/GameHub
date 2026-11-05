@@ -50,6 +50,11 @@ class FixtureSession {
     if (member?.role !== "player") {
       return { success: false, message: "You are not a player in that room." };
     }
+    if (action.type === "admit-spectator") {
+      const target = this.context.members().find(candidate => candidate.role === "spectator");
+      const success = Boolean(target && this.context.admitSpectator?.(target.id));
+      this.context.broadcastState(); return { success };
+    }
     if (action.type === "throw") {
       throw new Error("Fixture action failure");
     }

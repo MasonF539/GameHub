@@ -2091,6 +2091,16 @@ io.on("connection", (socket) => {
             role: "spectator" as const
           }))
         ],
+        admitSpectator: (memberId) => {
+          if (rooms.get(roomCode) !== room || createdSession === null || room.gameSession !== createdSession || room.activeGameId !== game.id || room.activeGamePlayerIds.size >= game.maxPlayers) return false;
+          const member = room.spectators.get(memberId);
+          if (!member?.isConnected || !io.sockets.sockets.has(memberId)) return false;
+          room.spectators.delete(memberId); room.players.set(memberId, member); room.activeGamePlayerIds.add(memberId);
+          ensureScore(room, game.id, memberId);
+          io.sockets.sockets.get(memberId)?.emit("game-role-changed", { gameId: game.id, role: "player" });
+          sendRoomMemberLists(roomCode, room); sendScoreboard(roomCode, room, game.id);
+          return true;
+        },
         broadcastState: () => sendActiveGameState(roomCode, room),
         emitEvent: (event) => {
           emitToActiveGameViewers(room, "game-event", {

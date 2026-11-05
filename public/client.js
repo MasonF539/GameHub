@@ -48,7 +48,8 @@ const gameClientHost = new window.GameHubGameClientHost({
   root: gameRoot,
   createContext: (gameId) => ({
     memberId: socket.id ?? "",
-    role: isCurrentUserSpectator ? "spectator" : "player",
+    /** Reflects next-round promotion without restarting the mounted game. */
+    get role() { return isCurrentUserSpectator ? "spectator" : "player"; },
     /** Returns whether the local member currently owns the room. */
     get isHost() { return isCurrentUserHost; },
     resetScoreboard: () => resetRoomScoreboard(gameId),
@@ -2425,6 +2426,12 @@ function mountGameClient(game) {
 
 socket.on("game-started", (game) => {
   mountGameClient(game);
+});
+
+socket.on("game-role-changed", ({ gameId, role }) => {
+  if (gameId !== currentActiveGameId || role !== "player") return;
+  isCurrentUserSpectator = false;
+  invalidateLifecycleRequests(); updateGameSettingsControls(); updateHostTransferOptions();
 });
 
 socket.on("game-state", (envelope) => {

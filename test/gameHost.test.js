@@ -240,3 +240,12 @@ test("a host discovers and mounts modules registered after its construction", ()
   assert.equal(mounted, true);
   host.unmount();
 });
+
+
+test("mounted games observe spectator promotion without remounting", () => {
+  let role = "spectator", context, mounts = 0;
+  const host = new GameClientHost({ root: {}, createContext: () => ({ get role() { return role; } }) });
+  host.register("admission", { mount(value) { mounts++; context = value; return { receiveState() {}, receiveEvent() {}, destroy() {} }; } });
+  host.mount("admission"); assert.equal(context.role, "spectator"); role = "player";
+  assert.equal(context.role, "player"); assert.equal(mounts, 1); host.unmount();
+});

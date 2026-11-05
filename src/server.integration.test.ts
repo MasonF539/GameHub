@@ -1398,3 +1398,40 @@ test("connected clients receive public invite updates without reconnecting", { t
     rmSync(directory, { recursive: true, force: true });
   }
 });
+
+
+test("opt-in games promote connected spectators without remounting and reconnect them as participants", { timeout: 25_000 }, async () => {
+  const { server, url } = await startServer();
+  const { host, guests, roomCode } = await startFixtureGame(url);
+  const spectator = await connect(url); let returned: Socket | null = null;
+  try {
+    const joined = await emitAck(spectator, "join-room", { roomCode, playerName: "Late", avatar: catAvatar });
+    assert.equal(joined.role, "spectator");
+    assert.equal((await emitGameAction(spectator, roomCode, "admit-spectator")).success, false);
+    const promoted = waitForEvent<{ gameId: string; role: string }>(spectator, "game-role-changed");
+    const state = waitForFixtureState(spectator, state => state.viewerRole === "player");
+    assert.equal((await emitGameAction(host, roomCode, "admit-spectator")).success, true);
+    assert.deepEqual(await promoted, { gameId: fixtureGameId, role: "player" });
+    assert.equal((await state).members.find(member => member.id === spectator.id)!.role, "player");
+    assert.equal((await emitGameAction(spectator, roomCode, "advance")).success, true);
+    assert.equal((await emitGameAction(host, roomCode, "admit-spectator")).success, false);
+    const dropped = waitForFixtureState(host, state => state.isPaused); spectator.disconnect(); await dropped;
+    returned = await connect(url);
+    const resumedState = waitForFixtureState(returned, state => state.viewerRole === "player");
+    const resumed = await emitAck(returned, "resume-room", { resumeToken: joined.resumeToken });
+    assert.equal(resumed.role, "player"); await resumedState;
+    assert.equal((await emitGameAction(returned, roomCode, "advance")).success, true);
+  } finally { host.close(); guests.forEach(guest => guest.close()); spectator.close(); returned?.close(); await stopServer(server); }
+});
+
+test("games cannot promote a disconnected spectator", { timeout: 25_000 }, async () => {
+  const { server, url } = await startServer();
+  const { host, guests, roomCode } = await startFixtureGame(url);
+  const spectator = await connect(url);
+  try {
+    await emitAck(spectator, "join-room", { roomCode, playerName: "Absent", avatar: catAvatar });
+    const disconnected = waitForEvent<Array<{ name: string; isConnected: boolean }>>(host, "spectator-list", list => list.some(member => member.name === "Absent" && !member.isConnected));
+    spectator.disconnect(); await disconnected;
+    assert.equal((await emitGameAction(host, roomCode, "admit-spectator")).success, false);
+  } finally { host.close(); guests.forEach(guest => guest.close()); spectator.close(); await stopServer(server); }
+});

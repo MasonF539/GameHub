@@ -100,6 +100,8 @@
         ...baseContext,
         /** Returns whether the local member currently owns the room. */
         get isHost() { return baseContext.isHost; },
+        /** Keeps spectator promotion visible without discarding the mounted game. */
+        get role() { return baseContext.role; },
         ...(input ? { input } : {}),
         ...(display ? { display } : {}),
         root: gameRoot,

@@ -502,6 +502,20 @@ lobby review. The hub clones that marked dialog on `game-ended`; it need not be
 the dialog currently shown over the board. Only mark a review after its final
 content is ready, and clear that marker when mounting a new match.
 
+
+### Optional next-round admission
+
+A session may call `GameSessionContext.admitSpectator(memberId)` at a game-defined
+safe boundary. GameHub returns false unless this is still the active session,
+the member is a connected room spectator, and the game has a free participant
+seat. Success moves room membership and active-game authorization together,
+initializes scoreboard membership, and updates viewer lists and the member's
+browser role. It does not create game-specific cash, cards, or catch-up rewards;
+the plugin owns those. The service is optional for older hosts and unused games
+keep their existing admission behavior. Loaded Roulette opts in at normal round
+boundaries; Egyptian War does not opt in.
+
+
 ### Effect playback cleanup
 
 `GameAudioApi.playEffect(name)` may return `{ stop() }`. Its stop operation is
