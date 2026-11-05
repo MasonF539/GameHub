@@ -481,3 +481,23 @@ control when returning to a menu. `data-game-connection-status` and
 `data-game-network-ping` elements receive the existing socket connection and
 latency displays, alongside Egyptian War's legacy element IDs. These optional
 markup hooks need no SDK version change or extra client polling.
+
+
+### Optional game dialog presentation
+
+A native game-owned dialog can declare data-game-keybinds="action-id ..." to
+allow those configured panel actions while it is open. Gameplay bindings stay
+blocked by default. Text entry, application modals, and dialogs outside the
+mounted game always retain the normal keyboard protection.
+
+A final dialog marked data-game-completion-dialog, with a Close button marked
+data-game-completion-close, can remain visible after GameHub returns the room
+to the lobby. GameHub clones its already-rendered content before unmount,
+remaps accessible IDs, and releases its game styles on dismissal, a new game,
+or leaving the room. This is optional DOM markup and does not require an SDK
+version change.
+
+A game may prepare a closed `dialog[data-game-completion-dialog]` for a separate
+lobby review. The hub clones that marked dialog on `game-ended`; it need not be
+the dialog currently shown over the board. Only mark a review after its final
+content is ready, and clear that marker when mounting a new match.

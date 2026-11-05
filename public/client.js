@@ -37,6 +37,7 @@ const entryView = document.querySelector("#entry-view");
 const lobbyView = document.querySelector("#lobby-view");
 const gameplayView = document.querySelector("#gameplay-view");
 const gameRoot = document.querySelector("#game-root");
+let gameCompletionDialog = null;
 const gameHubAudio = window.GameHubAudio ?? {
   /** Provides a no-op fallback when the host audio service is unavailable. */
   playEffect() {},
@@ -721,7 +722,7 @@ document.addEventListener("keydown", (event) => {
     currentActiveGameId === null ||
     !socket.connected ||
     isCurrentUserSpectator ||
-    document.querySelector("dialog[open], .modal.show, .modal[aria-modal='true']")
+    document.querySelector(".modal.show, .modal[aria-modal='true']")
   ) {
     return;
   }
@@ -732,6 +733,12 @@ document.addEventListener("keydown", (event) => {
     (candidate) => getAssignedKey(game.id, candidate) === event.code
   );
   if (!keybind) return;
+
+  // A game dialog may opt into its own safe panel shortcuts; all other modal actions remain blocked.
+  const openDialogs = [...document.querySelectorAll("dialog[open]")];
+  if (openDialogs.some(dialog => !gameRoot.contains(dialog))) return;
+  const activeDialog = document.activeElement?.closest?.("dialog[open]") ?? openDialogs.at(-1);
+  if (activeDialog && !(activeDialog.dataset.gameKeybinds ?? "").split(/\s+/).includes(keybind.id)) return;
 
   const conflicts = findKeybindConflicts(getKeybindDefinitions());
   if (conflicts.has(keybindConflictId(game.id, keybind.id))) {
@@ -1072,6 +1079,15 @@ nextAvatarButton.addEventListener("click", () => {
 
 updateAvatarPreview();
 
+/** Places notifications inside the active modal's focus scope and above its top-layer content. */
+function placeToastAboveOverlays() {
+  const container = gameHubToastElement.parentElement;
+  const dialogs = [...document.querySelectorAll("dialog[open]")];
+  const host = document.activeElement?.closest?.("dialog[open]") ?? dialogs.at(-1) ?? document.body;
+  if (container.hidePopover && container.matches(":popover-open")) container.hidePopover();
+  if (container.parentElement !== host) host.append(container);
+  container.showPopover?.();
+}
 /** Shows a user-facing notification message. */
 function showToast(message) {
   gameHubToastMessage.textContent = message;
@@ -1080,8 +1096,20 @@ function showToast(message) {
     gameHubToastElement
   );
 
+  placeToastAboveOverlays();
   toast.show();
 }
+gameHubToastElement.addEventListener("hidden.bs.toast", () => {
+  const container = gameHubToastElement.parentElement;
+  if (container.hidePopover && container.matches(":popover-open")) container.hidePopover();
+});
+/** Keeps an existing alert visible when a native game dialog opens or closes. */
+function refreshToastOverlay(event) {
+  if (event.target.matches?.("dialog") && gameHubToastElement.classList.contains("show")) placeToastAboveOverlays();
+}
+document.addEventListener("close", refreshToastOverlay, true);
+document.addEventListener("toggle", refreshToastOverlay, true);
+
 
 /** Returns the element currently in fullscreen, including the browser fallback API. */
 function getFullscreenElement() {
@@ -1455,6 +1483,7 @@ function showLobby(roomCode, isHost) {
 
 /** Switches the interface back to the main menu. */
 function showEntry() {
+  dismissGameCompletion();
   document.querySelector("#room-join-controls").hidden = true;
   document.querySelector("#host-transfer-controls").hidden = true;
   document.querySelector("#join-request-count").textContent = "0";
@@ -2358,6 +2387,7 @@ socket.on(
 
 /** Mounts the selected game's browser module with the current room services. */
 function mountGameClient(game) {
+  dismissGameCompletion();
   invalidateLifecycleRequests();
   cancelScoreReset?.();
   if (!gameClientHost.has(game.gameId)) {
@@ -2430,7 +2460,36 @@ socket.on("game-chat-message", (chatMessage) => {
   });
 });
 
+/** Removes a persisted game summary when dismissed or another game begins. */
+function dismissGameCompletion() {
+  const dialog = gameCompletionDialog;
+  if (!dialog) return;
+  gameCompletionDialog = null;
+  if (dialog.open) dialog.close();
+  dialog.remove(); gameClientHost.setActiveStyles(currentActiveGameId);
+}
+/** Preserves an opted-in final summary while the completed game's client releases its resources. */
+function showGameCompletion(dialog, gameId) {
+  if (!dialog) return;
+  dismissGameCompletion();
+  dialog.removeAttribute("open"); dialog.classList.add("game-completion-dialog");
+  const ids = new Map();
+  for (const node of dialog.querySelectorAll("[id]")) { const old = node.id; node.id = `game-completion-${gameId}-${old}`; ids.set(old, node.id); }
+  for (const node of [dialog, ...dialog.querySelectorAll("[aria-labelledby],[aria-describedby],[for]")]) {
+    for (const attribute of ["aria-labelledby", "aria-describedby", "for"]) if (node.hasAttribute(attribute)) node.setAttribute(attribute, node.getAttribute(attribute).split(/\s+/).map(id => ids.get(id) ?? id).join(" "));
+  }
+  gameCompletionDialog = dialog; document.body.append(dialog); gameClientHost.setActiveStyles(gameId);
+  dialog.querySelector("[data-game-completion-close]")?.addEventListener("click", () => dialog.close());
+  dialog.addEventListener("close", () => {
+    dialog.remove();
+    if (gameCompletionDialog === dialog) { gameCompletionDialog = null; gameClientHost.setActiveStyles(currentActiveGameId); }
+  }, { once: true });
+  dialog.showModal(); dialog.querySelector("h3")?.focus();
+}
+
 socket.on("game-ended", ({ message, returningMemberIds = [] }) => {
+  const completedGameId = currentActiveGameId;
+  const completionSnapshot = gameRoot.querySelector("dialog[data-game-completion-dialog]")?.cloneNode(true) ?? null;
   invalidateLifecycleRequests();
   cancelScoreReset?.();
   const wasWaitingInLobby = currentActiveGameId === null;
@@ -2460,6 +2519,7 @@ socket.on("game-ended", ({ message, returningMemberIds = [] }) => {
   if (selectedGame) displayGameInformation(selectedGame, currentGameSettings);
   updateHostTransferOptions();
   gameStatus.textContent = message;
+  showGameCompletion(completionSnapshot, completedGameId);
 });
 
 socket.on("kicked-from-room", ({ message }) => {

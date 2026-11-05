@@ -1108,7 +1108,16 @@ body:not(.background-blur-enabled) :is(.game-card, .app-settings-button) {
 
 .gamehub-toast-container {
   top: 16%;
+  inset-inline-end: auto;
+  bottom: auto;
+  margin: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  overflow: visible;
+  pointer-events: none;
 }
+.gamehub-toast-container #gamehub-toast { pointer-events: auto; }
 
 #player-list:empty::after {
   display: block;
@@ -1388,3 +1397,5 @@ body.reduce-interface-motion .settings-switch .form-check-input {
 #settings-modal .settings-switch input:enabled + .settings-switch-state {
   color: #343a40;
 }
+
+.game-completion-dialog button { color: #edf3f9; background: #29394a; border: 1px solid #64788a; border-radius: 6px; padding: 6px 12px; cursor: pointer; }

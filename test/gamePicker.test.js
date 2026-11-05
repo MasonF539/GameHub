@@ -2507,7 +2507,11 @@ test("graphics preferences default off, persist, and follow cross-tab updates wi
   let view = createClient();
   try {
     const tabs = [...document.querySelectorAll(".app-settings-navigation [role=tab]")].map(tab => tab.textContent.trim());
-    assert.deepEqual(tabs, ["Game", "Graphics", "Audio", "Keybinds"]);
+    assert.deepEqual(tabs, ["Game", "Graphics", "Music", "Sound Effects", "Keybinds"]);
+    assert.ok(document.querySelector("#app-settings-music-panel #audio-music-volume"));
+    assert.equal(document.querySelector("#app-settings-audio-panel #audio-music-volume"), null);
+    assert.ok(document.querySelector("#app-settings-audio-panel #audio-join-volume"));
+    assert.ok(document.querySelector("#app-settings-audio-panel #audio-game-volume"));
     assert.ok(document.querySelector("#app-settings-graphics-panel #game-display-sections"));
     const toggle = document.querySelector("#background-blur");
     assert.equal(toggle.checked, false);
