@@ -52,7 +52,6 @@ const gameClientHost = new window.GameHubGameClientHost({
     get role() { return isCurrentUserSpectator ? "spectator" : "player"; },
     /** Returns whether the local member currently owns the room. */
     get isHost() { return isCurrentUserHost; },
-    resetScoreboard: () => resetRoomScoreboard(gameId),
     audio: gameHubAudio,
     input: createGameInput(gameId),
     display: createGameDisplay(gameId),
@@ -236,7 +235,8 @@ const generalKeybindDefinition = {
       label: "Settings",
       description: "Open or close GameHub settings.",
       defaultKey: "Escape"
-    }
+    },
+    { id: "scoreboard", label: "Scoreboard", description: "Toggle the scoreboard (Tab by default). Inside it, Shift+Tab moves focus and Escape closes it. Other dialogs and menus keep normal Tab navigation.", defaultKey: "Tab" }
   ]
 };
 const keybindSubscriptions = new Map();
@@ -267,7 +267,8 @@ const assignableSpecialKeyCodes = new Set([
 ]);
 
 /** Checks whether a keyboard code is available for configurable shortcuts. */
-function isAllowedKeybindCode(code) {
+function isAllowedKeybindCode(code, groupId, actionId) {
+  if (code === "Tab") return groupId === "general" && actionId === "scoreboard";
   if (typeof code !== "string") return false;
   if (/^(Key[A-Z]|Digit[0-9]|Numpad[0-9])$/.test(code)) return true;
   return assignableSpecialKeyCodes.has(code);
@@ -289,7 +290,7 @@ function loadKeybindOverrides(fallback = Object.create(null)) {
           continue;
         }
         for (const [actionId, code] of Object.entries(bindings)) {
-          if (code !== null && !isAllowedKeybindCode(code)) continue;
+          if (code !== null && !isAllowedKeybindCode(code, groupId, actionId)) continue;
           sanitized[groupId] ??= Object.create(null);
           sanitized[groupId][actionId] = code;
         }
@@ -393,7 +394,7 @@ function formatKeyCode(code) {
 /** Updates an action's binding, saves it, and refreshes affected controls. */
 function setKeybind(groupId, actionId, code) {
   const definition = getKeybindDefinition(groupId, actionId);
-  if (!definition || (code !== null && !isAllowedKeybindCode(code))) return false;
+  if (!definition || (code !== null && !isAllowedKeybindCode(code, groupId, actionId))) return false;
 
   if (code === definition.defaultKey) {
     delete keybindOverrides[groupId]?.[actionId];
@@ -687,7 +688,7 @@ document.addEventListener("keydown", (event) => {
       renderKeybindSettings();
       return;
     }
-    if (!isAllowedKeybindCode(event.code)) {
+    if (!isAllowedKeybindCode(event.code, pendingKeybindCapture.groupId, pendingKeybindCapture.actionId)) {
       const reason = isStandaloneModifierCode(event.code)
         ? "Modifier keys cannot be assigned by themselves."
         : "That key is reserved. Choose a letter, number, arrow, Space, Enter, Escape, or punctuation key.";
@@ -705,6 +706,15 @@ document.addEventListener("keydown", (event) => {
   if (event.repeat || isTextEntryTarget(event.target)) return;
   if (event.ctrlKey || event.metaKey || event.altKey) return;
   if (["Space", "Enter", "NumpadEnter"].includes(event.code) && event.target?.closest?.("button")) return;
+
+  const scoreboardBinding = generalKeybindDefinition.keybinds.find(binding => binding.id === "scoreboard");
+  if (scoreboardBinding && !event.shiftKey && event.code === getAssignedKey("general", scoreboardBinding)) {
+    if (currentActiveGameId !== null && socket.connected && !document.querySelector("dialog[open]:not([data-game-scoreboard]), .modal.show, .modal[aria-modal='true']") && !event.target?.closest?.('[role="tablist"],[role="tab"]')) {
+      const conflicts = findKeybindConflicts(getKeybindDefinitions());
+      if (!conflicts.has(keybindConflictId("general", "scoreboard")) && gameClientHost.showScoreboard()) { event.preventDefault(); event.stopImmediatePropagation(); }
+    }
+    return;
+  }
 
   const generalSettings = generalKeybindDefinition.keybinds[0];
   if (event.code === getAssignedKey("general", generalSettings)) {
@@ -1508,7 +1518,6 @@ function showEntry() {
 
 /** Returns a departing player or spectator to the appropriate lobby state. */
 function showLobbyAfterLeavingGame(hasActiveGame = true, wasSpectator = false) {
-  cancelScoreReset?.();
   placeAppUtilityControls(false);
   currentActiveGameId = null;
   activeGameIsPaused = false;
@@ -1533,7 +1542,6 @@ function showLobbyAfterLeavingGame(hasActiveGame = true, wasSpectator = false) {
 function resetRoomState() {
   invalidateLifecycleRequests();
   pendingEntryRequest = null;
-  cancelScoreReset?.();
   gameClientHost.unmount();
   currentRoomCode = null;
   roomCodeHidden = true;
@@ -1962,6 +1970,7 @@ function updateStartGameAvailability() {
     playerCount > selectedGame.maxPlayers;
 
   startGameButton.disabled =
+    roomHasActiveGame ||
     !isCurrentUserHost ||
     hasDisconnectedPlayers ||
     hasTooFewPlayers ||
@@ -2127,7 +2136,6 @@ socket.on("disconnect", () => {
   if (activeResumeSession) beginReconnecting();
   resumeRequestPending = false;
   resumeRequestGeneration++;
-  cancelScoreReset?.();
   if (currentRoomCode === null) setRoomRequestPending(false);
   isGameSelectionPending = false;
   gamePickerGrid.classList.remove("is-pending");
@@ -2386,13 +2394,28 @@ socket.on(
   }
 );
 
+/** Releases a server-side seat or match when this browser cannot load its client. */
+function recoverFailedGameClient(gameId, message) {
+  roomHasActiveGame = true;
+  currentActiveGameId = gameId;
+  updateStartGameAvailability();
+  updateGameSettingsControls();
+  showToast(message);
+  const generation = lifecycleGeneration;
+  const wasHost = isCurrentUserHost;
+  emitRequest(wasHost ? "close-game-to-lobby" : "leave-game", { roomCode: currentRoomCode }, response => {
+    if (generation !== lifecycleGeneration) return;
+    if (!response.success) { showToast(response.message); return; }
+    if (!wasHost) showLobbyAfterLeavingGame(response.hasActiveGame !== false, isCurrentUserSpectator);
+  });
+}
+
 /** Mounts the selected game's browser module with the current room services. */
 function mountGameClient(game) {
   dismissGameCompletion();
   invalidateLifecycleRequests();
-  cancelScoreReset?.();
   if (!gameClientHost.has(game.gameId)) {
-    showToast("This game's browser client is not installed.");
+    recoverFailedGameClient(game.gameId, "This game's browser client could not load. Refresh the page before trying again.");
     return;
   }
 
@@ -2405,7 +2428,16 @@ function mountGameClient(game) {
   activeGameIsPaused = game.isPaused === true;
   activeGameIsBusy = false;
   updateGameSettingsControls();
-  gameClientHost.mount(game.gameId, game);
+  try {
+    gameClientHost.mount(game.gameId, game);
+  } catch (error) {
+    console.error(`Unable to mount ${game.gameId}:`, error);
+    gameplayView.classList.add("d-none");
+    lobbyView.classList.remove("d-none");
+    placeAppUtilityControls(false);
+    recoverFailedGameClient(game.gameId, "Unable to load the game client. Refresh the page before trying again.");
+    return;
+  }
   gameClientHost.receivePlatformEvent({ type: "host-status", payload: {
     recoveryDeadline: hostRecovery, serverNow: Date.now() + roomClockOffset
   } });
@@ -2498,7 +2530,6 @@ socket.on("game-ended", ({ message, returningMemberIds = [] }) => {
   const completedGameId = currentActiveGameId;
   const completionSnapshot = gameRoot.querySelector("dialog[data-game-completion-dialog]")?.cloneNode(true) ?? null;
   invalidateLifecycleRequests();
-  cancelScoreReset?.();
   const wasWaitingInLobby = currentActiveGameId === null;
   returningGameMemberIds = new Set(
     Array.isArray(returningMemberIds) ? returningMemberIds : []
@@ -2768,6 +2799,12 @@ createRoomButton.addEventListener("click", () => {
 startGameButton.addEventListener("click", () => {
   if (currentRoomCode === null) {
     showToast("Create a room first.");
+    return;
+  }
+
+  if (roomHasActiveGame) return;
+  if (!gameClientHost.has(selectedGameId)) {
+    showToast("This game's browser client could not load. Refresh the page before starting.");
     return;
   }
 
@@ -3264,7 +3301,6 @@ socket.on("room-host", ({ hostId, recoveryDeadline, serverNow }) => {
   if (Number.isFinite(serverNow)) roomClockOffset = serverNow - Date.now();
   const changed = isCurrentUserHost !== (hostId === socket.id);
   isCurrentUserHost = hostId === socket.id;
-  if (!isCurrentUserHost) cancelScoreReset?.();
   if (changed && currentRoomCode !== null) {
     closeLobbyButton.classList.toggle("d-none", !isCurrentUserHost);
     leaveLobbyButton.classList.toggle("d-none", isCurrentUserHost);
@@ -3282,65 +3318,6 @@ socket.on("room-host", ({ hostId, recoveryDeadline, serverNow }) => {
   renderRoomStatus();
   gameClientHost.receivePlatformEvent({ type: "host-status", payload: { recoveryDeadline, serverNow } });
 });
-let pendingScoreReset = null;
-let cancelScoreReset = null;
-/** Requests scoreboard reset only after the host confirms the modal dialog. */
-function resetRoomScoreboard(gameId) {
-  if (!isCurrentUserHost || currentRoomCode === null || currentActiveGameId !== gameId) {
-    return Promise.resolve({ success: false, message: "Only the host can reset totals for the active game." });
-  }
-  if (pendingScoreReset) return pendingScoreReset;
-  const roomCode = currentRoomCode;
-  const element = document.querySelector("#reset-scoreboard-modal");
-  const button = document.querySelector("#confirm-reset-scoreboard");
-  const modal = bootstrap.Modal.getOrCreateInstance(element);
-  /** Closes the current confirmation dialog. */
-  const hide = () => {
-    // Bootstrap ignores hide() during the opening transition.
-    /** Hides the dialog once its opening transition has completed. */
-    const hideAfterShow = () => modal.hide();
-    element.addEventListener("shown.bs.modal", hideAfterShow, { once: true });
-    element.addEventListener("hidden.bs.modal", () => {
-      element.removeEventListener("shown.bs.modal", hideAfterShow);
-    }, { once: true });
-    modal.hide();
-  };
-  pendingScoreReset = new Promise(resolve => {
-    let finished = false;
-    /** Completes this operation and releases its pending resources. */
-    const finish = result => {
-      if (finished) return;
-      finished = true;
-      button.removeEventListener("click", confirm);
-      element.removeEventListener("hidden.bs.modal", cancel);
-      button.disabled = false;
-      pendingScoreReset = null;
-      cancelScoreReset = null;
-      resolve(result);
-    };
-    /** Cancels the scoreboard-reset confirmation and resolves its pending request. */
-    const cancel = () => finish({ success: true });
-    cancelScoreReset = () => { cancel(); hide(); };
-    /** Confirms the pending operation and sends its request. */
-    const confirm = () => {
-      if (button.disabled) return;
-      if (currentRoomCode !== roomCode || currentActiveGameId !== gameId || !isCurrentUserHost) {
-        cancelScoreReset?.();
-        return;
-      }
-      button.disabled = true;
-      emitRequest("reset-room-scoreboard", { gameId }, result => {
-        if (finished) return;
-        finish(result);
-        hide();
-      });
-    };
-    button.addEventListener("click", confirm);
-    element.addEventListener("hidden.bs.modal", cancel);
-    modal.show();
-  });
-  return pendingScoreReset;
-}
 socket.on("room-scoreboard", (scores) => {
   roomScoreboards.set(scores.gameId, scores);
   if (scores.gameId === currentActiveGameId) gameClientHost.receivePlatformEvent({ type: "scoreboard", payload: scores });

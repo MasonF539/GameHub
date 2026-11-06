@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { fork, type ChildProcess } from "node:child_process";
 import path from "node:path";
-import { mkdtempSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
+import { cpSync, mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import test from "node:test";
 import { io as createClient, type Socket } from "socket.io-client";
@@ -955,7 +955,7 @@ test("host sees approval failures and cancelled requests release their socket in
 });
 
 type Scoreboard = { rows: Array<{ id: string; name: string; avatar: string; values: Record<string, number> }> };
-test("room scores survive reconnects and restarts; handoff updates permissions and reset stays host-only", async () => {
+test("match scores survive reconnects, update live and reset on a new game", async () => {
   const { server, url } = await startServer();
   const host = await connect(url), guest = await connect(url);
   let restored: Socket | undefined;
@@ -980,13 +980,12 @@ test("room scores survive reconnects and restarts; handoff updates permissions a
     const won = waitForEvent<Scoreboard>(host, "room-scoreboard", (board) => board.rows.some((row) => row.values.wins === 1));
     await emitGameAction(restored, roomCode, "finish");
     assert.equal((await won).rows.find((row) => row.id === scoreId)!.values.wins, 1);
-    const restarted = waitForEvent<Scoreboard>(host, "room-scoreboard", (board) => board.rows.some((row) => row.values.wins === 1));
+    const restarted = waitForEvent<Scoreboard>(host, "room-scoreboard", board => board.rows.length === 2 && board.rows.every(row => row.values.wins === 0 && row.values.actions === 0));
     assert.equal((await emitAck(restored, "start-game", { roomCode })).success, true);
     await restarted;
-    assert.equal((await emitAck(host, "reset-room-scoreboard", { gameId: fixtureGameId })).success, false);
-    const cleared = waitForEvent<Scoreboard>(host, "room-scoreboard", (board) => board.rows.every((row) => row.values.wins === 0 && row.values.actions === 0));
-    assert.equal((await emitAck(restored, "reset-room-scoreboard", { gameId: fixtureGameId })).success, true);
-    await cleared;
+    const updated = waitForEvent<Scoreboard>(host, "room-scoreboard", board => board.rows.some(row => row.values.actions === 1));
+    await emitGameAction(restored, roomCode, "advance");
+    await updated;
   } finally { host.disconnect(); guest.disconnect(); restored?.disconnect(); await stopServer(server); }
 });
 
@@ -1069,8 +1068,8 @@ test("room scores reuse the same name after leaving and rejoining", async () => 
     assert.equal(rows.length, 2);
     const row = rows.find(row => row.name === "gUeSt")!;
     assert.ok(row);
-    assert.equal(row.values.actions, 1);
-    assert.equal(row.values.wins, 1);
+    assert.equal(row.values.actions, 0);
+    assert.equal(row.values.wins, 0);
     assert.equal(row.avatar, catAvatar);
   } finally { host.disconnect(); guest.disconnect(); await stopServer(server); }
 });
@@ -1434,4 +1433,41 @@ test("games cannot promote a disconnected spectator", { timeout: 25_000 }, async
     spectator.disconnect(); await disconnected;
     assert.equal((await emitGameAction(host, roomCode, "admit-spectator")).success, false);
   } finally { host.close(); guests.forEach(guest => guest.close()); spectator.close(); await stopServer(server); }
+});
+
+
+test("scoreboards add numeric amounts, retain maxima and report live ping/offline status", { timeout: 25_000 }, async () => {
+  const { server, url } = await startServer(); const { host, guests, roomCode } = await startFixtureGame(url); const guest = guests[0]!;
+  type Board = { rows: Array<{ name: string; values: Record<string, number>; pingMs: number | null; isConnected: boolean }> };
+  try {
+    for (const socket of [host, guest]) socket.on("latency-probe", (ack: () => void) => ack());
+    const ping = waitForEvent<Board>(host, "room-scoreboard", board => board.rows.length === 2 && board.rows.every(row => row.pingMs !== null), 12_000);
+    for (const amount of [200, 100]) assert.equal((await emitAck(host, "game-action", { roomCode, gameId: fixtureGameId, action: { type: "record-amount", payload: { amount } } })).success, true);
+    const measured = await ping; assert.equal(measured.rows.find(row => row.name === "Host")!.values.actions, 300); assert.equal(measured.rows.find(row => row.name === "Host")!.values.best, 200);
+    for (const amount of [-100, 1.5, "100"]) await emitAck(host, "game-action", { roomCode, gameId: fixtureGameId, action: { type: "record-amount", payload: { amount } } });
+    const checked = waitForEvent<Board>(host, "room-scoreboard", board => board.rows.some(row => row.name === "Host" && row.values.actions === 301));
+    await emitGameAction(host, roomCode, "advance"); const valid = await checked; assert.equal(valid.rows.find(row => row.name === "Host")!.values.best, 200);
+    const offline = waitForEvent<Board>(host, "room-scoreboard", board => board.rows.some(row => row.name === "Guest" && !row.isConnected && row.pingMs === null)); guest.disconnect(); await offline;
+  } finally { host.close(); guests.forEach(guest => guest.close()); await stopServer(server); }
+});
+
+
+test("page reloads use current game markup after a local package rebuild", async () => {
+  const directory = mkdtempSync(path.join(tmpdir(), "gamehub-fresh-markup-"));
+  cpSync(path.join(process.cwd(), "test/fixtures/minimal-game-plugin"), directory, { recursive: true });
+  let running: ChildProcess | undefined;
+  try {
+    const { server, url } = await startServer({ GAMEHUB_GAME_PACKAGES: path.join(directory, "index.js") });
+    running = server;
+    const first = await fetch(url);
+    assert.equal(first.headers.get("cache-control"), "no-store");
+    assert.doesNotMatch(await first.text(), /fresh-markup-regression/);
+    const template = path.join(directory, "public/template.html");
+    writeFileSync(template, readFileSync(template, "utf8") + '<div id="fresh-markup-regression"></div>');
+    const second = await fetch(url);
+    assert.match(await second.text(), /fresh-markup-regression/);
+  } finally {
+    if (running) await stopServer(running);
+    rmSync(directory, { recursive: true, force: true });
+  }
 });

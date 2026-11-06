@@ -15,3 +15,13 @@ Remove an obsolete patch when adopting a release that includes its changes.
 
 The package under `node_modules/@masonf539/egyptian-war` is what GameHub runs.
 Editing the separate source checkout alone does not update the normal build.
+
+The stable Egyptian War patch also opens the scoreboard as a native modal from
+the panel button or general shortcut, keeping Chat and Spectators as the only
+panel pages. Ping/status remains the rightmost column. Manual reset controls are removed;
+GameHub starts fresh scoreboard totals automatically for each new match.
+
+Keep surrounding context in generated diffs. Context-free insertion hunks can be
+applied at incorrect scopes by patch-package despite reporting success. The
+package-consumer verifier executes installed classic clients against their own
+markup and checks registration, catching these runtime failures.

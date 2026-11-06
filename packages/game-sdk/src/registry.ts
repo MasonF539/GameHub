@@ -176,7 +176,8 @@ export function validateGamePluginManifest(manifest: GamePluginManifest): void {
     if (game.scoreboard.length > 8) throw new GamePluginValidationError("At most eight scoreboard columns are supported.");
     for (const column of game.scoreboard) {
       if (!identifierPattern.test(column.key) || keys.has(column.key) ||
-          (column.sort !== undefined && column.sort !== "asc" && column.sort !== "desc")) {
+          (column.sort !== undefined && column.sort !== "asc" && column.sort !== "desc") ||
+          (column.aggregate !== undefined && column.aggregate !== "sum" && column.aggregate !== "max")) {
         throw new GamePluginValidationError("Scoreboard keys must be valid and unique.");
       }
       requireNonEmpty(column.label, "Scoreboard label");

@@ -1,7 +1,19 @@
 diff --git a/node_modules/@masonf539/egyptian-war/public/style.css b/node_modules/@masonf539/egyptian-war/public/style.css
 --- a/node_modules/@masonf539/egyptian-war/public/style.css
 +++ b/node_modules/@masonf539/egyptian-war/public/style.css
-@@ -369,6 +369,19 @@
+@@ -216,11 +216,6 @@
+   gap: 0.4rem;
+ }
+ 
+-.network-ping {
+-  font-size: 0.72rem;
+-  font-variant-numeric: tabular-nums;
+-  font-weight: 700;
+-}
+ 
+ .egyptian-war-host-controls {
+   display: flex;
+@@ -369,6 +364,19 @@
    pointer-events: none;
  }
  
@@ -21,7 +33,41 @@ diff --git a/node_modules/@masonf539/egyptian-war/public/style.css b/node_module
  /* The measured seats bound a stable label, card, and message grid. */
  .egyptian-war-table-info {
    position: absolute;
-@@ -1910,6 +1923,7 @@
+@@ -1724,21 +1732,18 @@
+   text-align: right;
+   color: #ffe08a;
+ }
+-.egyptian-war-scoreboard { min-height: 0; flex: 1 1 auto; padding: 0.35rem; overflow: auto; }
+-.egyptian-war-scoreboard-heading {
+-  display: flex;
+-  align-items: center;
+-  justify-content: space-between;
+-  gap: 0.35rem;
+-  min-height: 1.75rem;
+-  margin-bottom: 0.25rem;
+-}
+-.egyptian-war-scoreboard-heading > p { font-size: 0.75rem; font-weight: 600; line-height: 1.2; margin: 0; }
+-.egyptian-war-scoreboard-heading > button { flex-shrink: 0; padding: 0.2rem 0.35rem; font-size: 0.625rem; line-height: 1.2; white-space: nowrap; }
+-.egyptian-war-scoreboard table { font-size: 0.7rem; margin-bottom: 0.35rem; }
+-.egyptian-war-scoreboard th { font-size: 0.65rem; }
+-.egyptian-war-scoreboard td:first-child { max-width: 5rem; overflow-wrap: anywhere; }
+-.egyptian-war-scoreboard[hidden] { display: none; }
++.egyptian-war-panel-pages { grid-column: span 2; display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: inherit; }
++.egyptian-war-scoreboard { padding: 0; width: min(94vw,960px); max-width: none; max-height: 84dvh; color: #edf3f9; background: #15232e; border: 1px solid #7f9aad; border-radius: 12px; }
++.egyptian-war-scoreboard[open] { display: flex; }
++.egyptian-war-scoreboard::backdrop { background: #000a; }
++.egyptian-war-scoreboard-content { display: flex; flex-direction: column; min-height: 0; width: 100%; max-height: calc(84dvh - 2px); padding: clamp(12px,2vmin,20px); gap: 12px; }
++.egyptian-war-scoreboard-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
++.egyptian-war-scoreboard-heading h3 { margin: 0; font-size: clamp(18px,2.5vmin,24px); }
++.egyptian-war-scoreboard-actions { display: flex; gap: .5rem; flex-shrink: 0; }
++#egyptian-war-score-table { min-height: 0; overflow: auto; }
++.egyptian-war-scoreboard table { margin-bottom: 0; font-size: clamp(12px,1.5vmin,16px); }
++.egyptian-war-scoreboard :is(th,td) { padding: .5rem; white-space: nowrap; }
++
+ .egyptian-war-side-tabs .btn { font-size: clamp(0.6rem, 1.1vw, 0.8rem); padding-inline: 0.3rem; }
+ #egyptian-war-score-table { overflow-x: auto; }
+ 
+@@ -1910,6 +1915,9 @@
    background: #702e43;
  }
  
@@ -30,10 +76,61 @@ diff --git a/node_modules/@masonf539/egyptian-war/public/style.css b/node_module
 +[data-table-detail="simple"] .egyptian-war-felt-hatching {
    display: none;
  }
++
++.egyptian-war-scoreboard :is(th,td):last-child { text-align: right; white-space: nowrap; }
 diff --git a/node_modules/@masonf539/egyptian-war/public/template.html b/node_modules/@masonf539/egyptian-war/public/template.html
 --- a/node_modules/@masonf539/egyptian-war/public/template.html
 +++ b/node_modules/@masonf539/egyptian-war/public/template.html
-@@ -103,7 +103,7 @@
+@@ -5,14 +5,6 @@
+         <div class="egyptian-war-host-controls d-none" id="egyptian-war-host-controls">
+           <button id="egyptian-war-pause" class="btn btn-outline-light btn-sm"
+             type="button" aria-pressed="false">Pause</button>
+-        </div>
+-        <div class="egyptian-war-connection-latency">
+-          <p id="gameplay-connection-status"
+-            class="server-connection-status text-bg-warning egyptian-war-connection-status">
+-            Connecting to server…
+-          </p>
+-          <span id="network-ping" class="network-ping" aria-label="Current network ping"
+-            aria-live="polite">-- ms</span>
+         </div>
+       </div>
+     </div>
+@@ -37,13 +29,15 @@
+ 
+       <aside id="egyptian-war-side-panel" class="egyptian-war-side-panel" aria-label="Game communication">
+         <div class="egyptian-war-side-panel-heading">
+-          <div class="egyptian-war-side-tabs" role="tablist" aria-label="Chat, spectators or scoreboard">
++          <div class="egyptian-war-side-tabs" role="group" aria-label="Game panel controls">
++            <div class="egyptian-war-panel-pages" role="tablist" aria-label="Chat or spectators">
+             <button id="show-game-chat" class="btn btn-sm btn-light" type="button" role="tab"
+               aria-selected="true" aria-controls="egyptian-war-chat">Chat</button>
+             <button id="show-game-spectators" class="btn btn-sm btn-outline-light" type="button" role="tab"
+               aria-selected="false" aria-controls="egyptian-war-spectators">Spectators</button>
+-            <button id="show-game-scoreboard" class="btn btn-sm btn-outline-light" type="button" role="tab"
+-              aria-selected="false" aria-controls="egyptian-war-scoreboard">Scoreboard</button>
++            </div>
++            <button id="show-game-scoreboard" class="btn btn-sm btn-outline-light" type="button" aria-haspopup="dialog"
++              aria-controls="egyptian-war-scoreboard">Scoreboard</button>
+           </div>
+           <div class="egyptian-war-panel-tools">
+           <button id="toggle-game-side-panel" class="btn btn-sm btn-outline-light egyptian-war-side-expand"
+@@ -82,14 +76,6 @@
+           </form>
+         </section>
+ 
+-        <section id="egyptian-war-scoreboard" class="egyptian-war-scoreboard" role="tabpanel"
+-          aria-labelledby="show-game-scoreboard" hidden>
+-          <div class="egyptian-war-scoreboard-heading">
+-            <p title="Totals clear when the room closes.">Room Totals</p>
+-            <button id="egyptian-war-reset-scores" class="btn btn-outline-danger btn-sm" type="button" hidden>Reset totals</button>
+-          </div>
+-          <div id="egyptian-war-score-table" tabindex="0" role="region" aria-label="Room scores"></div>
+-        </section>
+ 
+         <section id="egyptian-war-spectators" class="egyptian-war-spectators" role="tabpanel"
+           aria-labelledby="show-game-spectators" hidden>
+@@ -103,7 +89,7 @@
          <div id="egyptian-war-arena" class="egyptian-war-arena">
            <div id="egyptian-war-animation-layer" class="egyptian-war-animation-layer"
              aria-hidden="true"></div>
@@ -42,6 +139,20 @@ diff --git a/node_modules/@masonf539/egyptian-war/public/template.html b/node_mo
              <div class="egyptian-war-table-info">
                <p class="egyptian-war-pile-label mb-2">
                  Central pile: <span id="egyptian-war-pile-count">0 cards</span>
+@@ -166,4 +152,13 @@
+         </div>
+       </div>
+     </div>
++    <dialog data-game-scoreboard id="egyptian-war-scoreboard" class="egyptian-war-scoreboard" aria-labelledby="egyptian-war-scoreboard-title">
++      <div class="egyptian-war-scoreboard-content">
++        <header class="egyptian-war-scoreboard-heading">
++          <h3 id="egyptian-war-scoreboard-title" tabindex="-1">Scoreboard</h3>
++          <button id="close-game-scoreboard" class="btn btn-sm btn-light" type="button">Close</button>
++        </header>
++        <div id="egyptian-war-score-table" tabindex="0" role="region" aria-label="Room scores"></div>
++      </div>
++    </dialog>
+ </div>
 diff --git a/node_modules/@masonf539/egyptian-war/public/register.js b/node_modules/@masonf539/egyptian-war/public/register.js
 --- a/node_modules/@masonf539/egyptian-war/public/register.js
 +++ b/node_modules/@masonf539/egyptian-war/public/register.js
@@ -54,6 +165,121 @@ diff --git a/node_modules/@masonf539/egyptian-war/public/register.js b/node_modu
    );
    audio.registerEffect("card-play", {
      source: `${assetRoot}/effects/card-play.mp3`,
+diff --git a/node_modules/@masonf539/egyptian-war/public/client.js b/node_modules/@masonf539/egyptian-war/public/client.js
+--- a/node_modules/@masonf539/egyptian-war/public/client.js
++++ b/node_modules/@masonf539/egyptian-war/public/client.js
+@@ -357,6 +357,7 @@
+ }
+ 
+ function destroyEgyptianWarGame() {
++  closeEgyptianWarScoreboard();
+   tableLayoutObserver?.disconnect();
+   tableLayoutObserver = null;
+   egyptianWarArena.removeEventListener("transitionend", fitEgyptianWarTableContent);
+@@ -380,8 +381,7 @@
+   if (panel === "chat" && showGameChatButton.disabled) panel = "spectators";
+   for (const [name, button, content] of [
+     ["chat", showGameChatButton, egyptianWarChat],
+-    ["spectators", showGameSpectatorsButton, egyptianWarSpectators],
+-    ["scoreboard", findEgyptianWarElement("#show-game-scoreboard"), findEgyptianWarElement("#egyptian-war-scoreboard")]
++    ["spectators", showGameSpectatorsButton, egyptianWarSpectators]
+   ]) {
+     const active = panel === name;
+     content.hidden = !active;
+@@ -1370,25 +1370,49 @@
+   const label = findEgyptianWarElement("#egyptian-war-offline-status");
+   if (label.textContent !== text) { label.textContent = text; label.title = text; }
+ }
++/** Returns focus to the score button or original control after modal dismissal. */
++let scoreboardReturnFocus = null;
++/** Opens the scoreboard without resizing, expanding or switching the communication panel. */
++function openEgyptianWarScoreboard() {
++  if (!currentContext) return false;
++  const dialog = findEgyptianWarElement("#egyptian-war-scoreboard");
++  if (!dialog.open) {
++    scoreboardReturnFocus = document.activeElement;
++    if (dialog.showModal) dialog.showModal(); else dialog.setAttribute("open", "");
++    findEgyptianWarElement("#egyptian-war-scoreboard-title").focus();
++  }
++  return true;
++}
++/** Closes only the scoreboard; the game clock and communication panel continue unchanged. */
++function closeEgyptianWarScoreboard() {
++  const dialog = findEgyptianWarElement("#egyptian-war-scoreboard");
++  if (dialog.open) { if (dialog.close) dialog.close(); else dialog.removeAttribute("open"); }
++  restoreScoreboardFocus();
++}
++/** Restores focus for both the Close button and native Escape dismissal. */
++function restoreScoreboardFocus() { if (findEgyptianWarElement("#egyptian-war-scoreboard").open) return; if (scoreboardReturnFocus?.isConnected) scoreboardReturnFocus.focus(); scoreboardReturnFocus = null; }
+ function renderScoreboard(scores) {
+   const container = findEgyptianWarElement("#egyptian-war-score-table");
+   container.replaceChildren();
+   const table = document.createElement("table"); table.className = "table table-dark table-sm";
+   const header = table.createTHead().insertRow();
+-  for (const label of ["Player", ...scores.columns.map((column) => column.key === "slaps" ? "Slaps" : column.label)]) {
++  for (const label of ["Player", ...scores.columns.map((column) => column.key === "slaps" ? "Slaps" : column.label), "Ping"]) {
+     const cell = document.createElement("th"); cell.scope = "col"; cell.textContent = label; header.appendChild(cell);
+   }
+   const body = table.createTBody();
+   for (const row of scores.rows) {
+     const tr = body.insertRow(); tr.insertCell().textContent = `${row.avatar} ${row.name}`;
+     for (const column of scores.columns) tr.insertCell().textContent = String(row.values[column.key] ?? 0);
++    const pingCell = tr.insertCell();
++    if (row.isPresent !== false && row.isConnected === false) pingCell.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" role="img" aria-label="Disconnected"><title>Disconnected</title><rect x="4" y="8" width="4" height="8" rx="1"/><rect x="16" y="8" width="4" height="8" rx="1"/><path d="M1 12h3m4-2h2m-2 4h2m4-4h2m-2 4h2m4-2h3"/></svg>';
++    else pingCell.textContent = row.isPresent === false ? "Left" : Number.isFinite(row.pingMs) ? `${Math.round(row.pingMs)} ms` : "--";
+   }
+   container.appendChild(table);
+   if (!scores.rows.length) container.appendChild(document.createTextNode("No scores yet."));
+ }
+ findEgyptianWarElement(".egyptian-war-side-tabs").addEventListener("keydown", (event) => {
+   if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+-  const buttons = [...findEgyptianWarElement(".egyptian-war-side-tabs").querySelectorAll("button:not(:disabled)")];
++  const buttons = [...findEgyptianWarElement(".egyptian-war-side-tabs").querySelectorAll('button[role="tab"]:not(:disabled)')];
+   const index = buttons.indexOf(event.target);
+   if (index < 0) return;
+   event.preventDefault(); event.stopPropagation();
+@@ -1396,13 +1420,9 @@
+     : (index + (event.key === "ArrowRight" ? 1 : -1) + buttons.length) % buttons.length;
+   buttons[next].click(); buttons[next].focus();
+ });
+-findEgyptianWarElement("#show-game-scoreboard").addEventListener("click", () => showEgyptianWarSidePanel("scoreboard"));
+-findEgyptianWarElement("#egyptian-war-reset-scores").addEventListener("click", async () => {
+-  const context = currentContext;
+-  if (!context?.isHost) return;
+-  const result = await context.resetScoreboard?.();
+-  if (currentContext === context && result && !result.success) context.notify(result.message);
+-});
++findEgyptianWarElement("#show-game-scoreboard").addEventListener("click", openEgyptianWarScoreboard);
++findEgyptianWarElement("#close-game-scoreboard").addEventListener("click", closeEgyptianWarScoreboard);
++findEgyptianWarElement("#egyptian-war-scoreboard").addEventListener("close", restoreScoreboardFocus);
+ 
+ const egyptianWarClientModule = {
+   mount(context) {
+@@ -1422,11 +1442,15 @@
+     updateEgyptianWarKeyHints();
+     applyEgyptianWarDisplay();
+     offlinePlayers = []; hostRecoveryDeadline = null;
+-    findEgyptianWarElement("#egyptian-war-reset-scores").hidden = !context.isHost || !context.resetScoreboard;
+     showEgyptianWarGame(context.launchData);
+     timerInterval = setInterval(renderEgyptianWarTurnTimer, 100);
+     return {
+       receiveState: renderEgyptianWarState,
++      /** Toggles the game-owned scoreboard through the general shortcut. */
++      showScoreboard() {
++        if (findEgyptianWarElement("#egyptian-war-scoreboard").open) { closeEgyptianWarScoreboard(); return true; }
++        return openEgyptianWarScoreboard();
++      },
+       receiveEvent(event) {
+         if (event.type === "notification") context.notify(event.payload?.message ?? "");
+         if (event.type === "animation") activeEgyptianWarAnimation = event.payload;
+@@ -1439,7 +1463,6 @@
+       receivePlatformEvent(event) {
+         if (event.type === "host-changed") {
+           egyptianWarHostControls.classList.toggle("d-none", !currentContext.isHost);
+-          findEgyptianWarElement("#egyptian-war-reset-scores").hidden = !currentContext.isHost || !currentContext.resetScoreboard;
+           for (const seat of egyptianWarPlayers.children) {
+             const actions = seat.querySelector(".egyptian-war-disconnected-actions");
+             if (actions) { tableLayoutObserver?.unobserve(actions); actions.remove(); }
 diff --git a/node_modules/@masonf539/egyptian-war/public/assets/audio/music/egyptian-war.mp3 b/node_modules/@masonf539/egyptian-war/public/assets/audio/music/background-music.mp3
 similarity index 100%
 rename from node_modules/@masonf539/egyptian-war/public/assets/audio/music/egyptian-war.mp3

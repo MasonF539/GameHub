@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { JSDOM } from "jsdom";
 import {
   existsSync,
   cpSync,
@@ -220,6 +221,22 @@ try {
     }
     if (manifest.client.delivery === "module") {
       assertPublicFile(gamePackage, manifest.client.entryPath, "module client entry");
+    }
+    if (manifest.client.delivery !== "module") {
+      const markup = manifest.client.markupPath
+        ? readFileSync(path.join(gamePackage.publicDirectory, manifest.client.markupPath), "utf8") : "";
+      const dom = new JSDOM(`<div data-game-plugin-root="${gameId}">${markup}</div>`, {
+        url: "http://localhost", runScripts: "outside-only"
+      });
+      const registered = new Map();
+      dom.window.GameHubAudio = { registerEffect() {}, registerMusicScene() {} };
+      dom.window.GameHubRegisterGameClientModule = (id, client) => registered.set(id, client);
+      try {
+        for (const entryPath of manifest.client.entryPaths ?? []) {
+          dom.window.eval(readFileSync(path.join(gamePackage.publicDirectory, entryPath), "utf8"));
+        }
+        assert.equal(typeof registered.get(gameId)?.mount, "function", `${packageName} must register its browser client after a fresh install.`);
+      } finally { dom.window.close(); }
     }
     for (const option of manifest.definition.displayOptions ?? []) {
       for (const choice of option.choices) {

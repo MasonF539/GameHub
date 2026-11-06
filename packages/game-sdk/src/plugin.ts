@@ -58,7 +58,7 @@ export type GameSessionContext = {
   emitEvent: (event: GameEvent) => void;
   finish: (completion: GameCompletion) => void;
   /** Optional room-only statistics. Keys must be declared in the game definition. */
-  recordStat?: (memberId: string, key: string) => void;
+  recordStat?: (memberId: string, key: string, amount?: number) => void;
   now: () => number;
   randomInteger(maxExclusive: number): number;
 };
@@ -141,7 +141,6 @@ export type GameClientContext = {
   removeMember(memberId: string): Promise<GameActionResult>;
   /** Opens the confirmation flow for leaving the active game but staying in its room. */
   requestLeave(): void;
-  resetScoreboard?(): Promise<GameActionResult>;
   notify(message: string): void;
   requestExit(): void;
 };
@@ -155,6 +154,8 @@ export interface GameClientInstance {
   receiveState(state: unknown): void;
   receiveEvent(event: GameEvent): void;
   receivePlatformEvent?(event: GamePlatformEvent): void;
+  /** Toggles the game-owned scoreboard without restarting the client; false leaves normal keyboard behavior intact. */
+  showScoreboard?(): boolean | void;
   setPaused?(isPaused: boolean): void;
   destroy(): void;
 }

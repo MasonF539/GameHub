@@ -1060,3 +1060,34 @@ purchases, touch double-taps, disabled purchases, bank, pause, and readiness.
 A real two-player hub session passed purchases, private stock, bank actions,
 pause/resume, lock-in, native Escape, and return to lobby without browser errors.
 Public tunnels, audio, and physical-device performance were not retested.
+
+
+## Game client load failure and trapped lobby (2026-11-05)
+
+The missing-module branch returned before recording the active game locally,
+while the server had already started it. This allowed repeated Start requests
+and prevented normal lobby departure. Start now checks the local module first.
+If a server-started client is missing or throws during mount, the host closes the
+failed match or the guest releases its seat using existing server actions.
+
+Page markup previously stayed fixed from server startup while static game scripts
+could change after a local install. The server now renders current shell/plugin
+markup per page request and sends no-store for HTML. Existing tabs still need a
+reload after client changes; a running old server needs restarting for this fix.
+
+Verified 148 browser-controller tests, targeted HTTP/lifecycle integration tests,
+and real-browser missing-host, missing-guest and throwing-host recovery. Normal
+starts and scoreboards passed for both installed games on desktop and phone.
+
+
+## Egyptian War fresh-install registration failure (2026-11-05)
+
+Confirmed in the running Docker browser: `closeEgyptianWarScoreboard is not
+defined`. Context-free patch hunks placed scoreboard helpers inside another
+function and the cleanup call outside its function. Local edited files worked,
+but a fresh patch applied without reporting failure and produced different code.
+Regenerated the consolidated patch with three lines of surrounding context.
+The fresh-consumer verifier now executes installed classic browser entry scripts
+against their own markup and asserts registration; it reproduces the old failure
+and passes with the corrected patch. Startup-recovery handling remains useful,
+but the earlier stale-markup hypothesis did not explain this Docker failure.

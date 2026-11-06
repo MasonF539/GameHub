@@ -249,3 +249,11 @@ test("mounted games observe spectator promotion without remounting", () => {
   host.mount("admission"); assert.equal(context.role, "spectator"); role = "player";
   assert.equal(context.role, "player"); assert.equal(mounts, 1); host.unmount();
 });
+
+
+test("the general scoreboard hook opens only the mounted supported game", () => {
+  const host = new GameClientHost({ root: {}, createContext: () => ({}) }); let opens = 0;
+  assert.equal(host.showScoreboard(), false);
+  host.register("scores", { mount() { return { receiveState() {}, receiveEvent() {}, showScoreboard() { opens++; }, destroy() {} }; } });
+  host.mount("scores"); assert.equal(host.showScoreboard(), true); assert.equal(opens, 1); host.unmount(); assert.equal(host.showScoreboard(), false);
+});

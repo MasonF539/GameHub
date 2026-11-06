@@ -57,19 +57,13 @@ rules. Keyboard hints use `context.input.getBinding`, `hasKeyboard`, and
 capabilities and observed keyboard input because browsers do not expose a
 reliable list of connected keyboards.
 
-## Chat, score resets, and shared controls
+## Chat, scoreboards, and shared controls
 
 Chat is optional per game through its definition. GameHub validates membership,
 message length (1-300 characters), and send rate, and retains the last 50 messages
 for viewers of the active match on join or reconnect. Lobby waiters do not receive
 this history. History clears when a match starts or ends. The current room chat is
 shared by players and spectators; separate channels are not implemented.
-
-The platform's scoreboard reset service checks host permission and opens an
-in-app confirmation for the active game. Cancelling preserves totals. Room or
-game closure, disconnection, and loss of host ownership cancel an open reset;
-late replies must not dismiss a newer confirmation or access an unmounted game.
-The modal also closes safely if cancellation occurs during its opening animation.
 
 GameHub owns confirmed room closure, game exit, and player/spectator leave flows.
 It hides room codes by default and provides reveal, copy-code, and copy-link
@@ -128,19 +122,20 @@ specific to the browser and site origin.
 
 Games may optionally declare scoreboard columns and report authoritative counters
 through `context.recordStat(memberId, key)`. The platform awards declared `wins`
-on game completion. Totals live only in room memory, survive game restarts and
-socket-ID changes, and disappear when the room closes or the process stops.
+on game completion. Totals live only in room memory, survive reconnects and
+socket-ID changes, reset at each new match start, and disappear when the room closes or the process stops.
 Score rows are keyed by case-insensitive player name within each room and game,
 so leaving and rejoining with the same name preserves totals. A returning name
 updates its displayed spelling and avatar; names are not authenticated identities.
-A host-only reset clears totals. Scoreboards retain at most 200 participant rows
+There is no manual reset service. Scoreboards retain at most 200 participant rows
 per game per room. Pending joiners receive no scores.
 
 The browser receives optional `scoreboard`, `host-changed`, and `host-status`
 platform events. `context.isHost` reflects current ownership; games should update
 their visible host controls on ownership changes. Optional lifecycle disconnection
 metadata includes server deadlines so clients render countdowns locally. Egyptian
-War exposes its game-specific scoreboard only beside Chat and Spectators.
+War opens its scoreboard in a separate modal from a button beside Chat and
+Spectators or the general scoreboard shortcut.
 Slap rule explanations appear only after resolution; no live slap-validity hints
 or client-reported scores are accepted. Host procedures are described under
 [Host ownership and recovery](#host-ownership-and-recovery).
@@ -525,3 +520,27 @@ should keep these handles and stop them on pause, phase exit, and unmount.
 The host also applies category-volume changes to live effects and stops them
 on mute or tab hiding. Natural completion, load errors, and rejected playback
 release the host's active-effect references.
+
+
+### Scoreboard shortcut, amounts and ping
+
+The configurable general Scoreboard binding defaults to Tab. A module can expose
+optional `showScoreboard()` on its client instance; unsupported games keep normal
+Tab behavior. The shortcut is available to spectators and does not intercept
+Shift+Tab, typing or open-dialog navigation. Tab remains reserved from per-game
+shortcut assignments, including conflicts with the general binding.
+
+`recordStat(memberId, key, amount = 1)` accepts positive safe-integer deltas.
+Scoreboard columns may declare `aggregate: "max"` for records; other columns sum.
+Room score rows add server-measured `pingMs` (or null), `isConnected`, and
+`isPresent`; those transient values never become persisted score values or affect
+sorting. Latency changes and membership updates refresh the active scoreboard. Egyptian
+War and Roulette omit in-game connection dots; their Ping column uses a labeled
+unplugged-cables icon for disconnected participants.
+
+
+A native scoreboard dialog opts into the general toggle shortcut with the
+`data-game-scoreboard` attribute. The optional `showScoreboard` hook toggles that
+modal. General Tab can reach that hook while the scoreboard is open; unrelated
+dialogs still block it. Plain Tab closes the scoreboard, Shift+Tab preserves
+backward focus traversal, and Escape remains the native close action.

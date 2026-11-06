@@ -67,7 +67,7 @@ export type GameDefinition = {
   /** Personal browser preferences; never authoritative match rules. */
   displayOptions?: GameDisplayOption[];
   /** Room-only totals. The host awards wins; games report other declared keys. */
-  scoreboard?: Array<{ key: string; label: string; sort?: "asc" | "desc" }>;
+  scoreboard?: Array<{ key: string; label: string; sort?: "asc" | "desc"; aggregate?: "sum" | "max" }>;
   preview?: GamePreview;
 };
 

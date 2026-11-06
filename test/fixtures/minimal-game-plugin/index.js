@@ -13,7 +13,7 @@ const manifest = {
     minPlayers: 2,
     maxPlayers: 12,
     settings: [],
-    scoreboard: [{ key: "wins", label: "Wins" }, { key: "actions", label: "Actions" }]
+    scoreboard: [{ key: "wins", label: "Wins" }, { key: "actions", label: "Actions" }, { key: "best", label: "Best", aggregate: "max" }]
   },
   client: {
     delivery: "module",
@@ -49,6 +49,11 @@ class FixtureSession {
     );
     if (member?.role !== "player") {
       return { success: false, message: "You are not a player in that room." };
+    }
+    if (action.type === "record-amount") {
+      this.context.recordStat?.(memberId, "actions", action.payload?.amount);
+      this.context.recordStat?.(memberId, "best", action.payload?.amount);
+      this.context.broadcastState(); return { success: true };
     }
     if (action.type === "admit-spectator") {
       const target = this.context.members().find(candidate => candidate.role === "spectator");

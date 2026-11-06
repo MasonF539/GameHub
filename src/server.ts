@@ -146,10 +146,6 @@ function getGameDefinition(gameId: string | null) {
 
 const app = express();
 const server = http.createServer(app);
-const indexShell = readFileSync(
-  path.join(process.cwd(), "public", "index.html"),
-  "utf8"
-);
 const gameMarkupMarker = "<!-- game-plugin-markup -->";
 const gameStyleMarker = "<!-- game-plugin-styles -->";
 const gameScriptMarker = "<!-- game-plugin-scripts -->";
@@ -173,17 +169,20 @@ function gamePublicUrl(gameId: string, resourcePath: string): string {
   return `/games/${gameId}/${resourcePath}`;
 }
 
-const gameMarkup = installedGamePackages.flatMap((gamePackage) => {
-  const gameId = gamePackage.manifest.definition.id;
-  const markupPath = gamePackage.manifest.client.markupPath;
-  return markupPath
-    ? [
-      `<div data-game-plugin-root="${gameId}" hidden>`,
-      readFileSync(path.join(gamePackage.publicDirectory, markupPath), "utf8"),
-      "</div>"
-    ].join("\n")
-    : [];
-}).join("\n");
+/** Reads current plugin markup to avoid mixing rebuilt scripts with startup-cached HTML. */
+function renderGameMarkup(): string {
+  return installedGamePackages.flatMap((gamePackage) => {
+    const gameId = gamePackage.manifest.definition.id;
+    const markupPath = gamePackage.manifest.client.markupPath;
+    return markupPath
+      ? [
+        `<div data-game-plugin-root="${gameId}" hidden>`,
+        readFileSync(path.join(gamePackage.publicDirectory, markupPath), "utf8"),
+        "</div>"
+      ].join("\n")
+      : [];
+  }).join("\n");
+}
 const gameStyles = installedGamePackages.flatMap((gamePackage) => {
   const gameId = gamePackage.manifest.definition.id;
   return (gamePackage.manifest.client.stylePaths ?? []).map(
@@ -212,18 +211,28 @@ const gameScripts = installedGamePackages.flatMap((gamePackage) => {
   ];
 }).join("\n  ");
 
-let renderedIndex = replaceRequiredMarker(
-  indexShell,
-  gameMarkupMarker,
-  gameMarkup
-);
-renderedIndex = replaceRequiredMarker(renderedIndex, gameStyleMarker, gameStyles);
-renderedIndex = replaceRequiredMarker(renderedIndex, gameScriptMarker, gameScripts);
-renderedIndex = replaceRequiredMarker(
-  renderedIndex,
-  gameHubConfigMarker,
-  JSON.stringify({ avatars: availableAvatars }).replace(/</g, "\\u003c")
-);
+/** Renders the current page shell and plugin markup together for each page load. */
+function renderGameIndex(): string {
+  const indexShell = readFileSync(
+    path.join(process.cwd(), "public", "index.html"),
+    "utf8"
+  );
+  let renderedIndex = replaceRequiredMarker(
+    indexShell,
+    gameMarkupMarker,
+    renderGameMarkup()
+  );
+  renderedIndex = replaceRequiredMarker(renderedIndex, gameStyleMarker, gameStyles);
+  renderedIndex = replaceRequiredMarker(renderedIndex, gameScriptMarker, gameScripts);
+  renderedIndex = replaceRequiredMarker(
+    renderedIndex,
+    gameHubConfigMarker,
+    JSON.stringify({ avatars: availableAvatars }).replace(/</g, "\\u003c")
+  );
+  return renderedIndex;
+}
+// Validate required markup markers before accepting connections.
+renderGameIndex();
 // Tests may shorten the recovery period; production always uses two minutes.
 const testReconnectGracePeriodMs = Number(
   process.env.GAMEHUB_TEST_RECONNECT_GRACE_MS
@@ -328,7 +337,8 @@ app.use(
 );
 
 app.get(["/", "/index.html"], (_request, response) => {
-  response.type("html").send(renderedIndex);
+  response.setHeader("Cache-Control", "no-store");
+  response.type("html").send(renderGameIndex());
 });
 
 for (const gamePackage of installedGamePackages) {
@@ -368,6 +378,7 @@ function sendRoomMemberLists(roomCode: string, room: Room): void {
 
   io.to(roomCode).emit("player-list", players);
   io.to(roomCode).emit("spectator-list", spectators);
+  if (room.activeGameId !== null) sendScoreboard(roomCode, room, room.activeGameId);
 }
 
 /** Finds a room member by the current member ID. */
@@ -419,7 +430,10 @@ function monitorSocketLatency(socket: Socket): void {
 
         const rttMs = performance.now() - startedAt;
         if (Number.isFinite(rttMs) && rttMs >= 0) {
+          socket.data.rttMs = Math.round(rttMs); socket.data.pingAt = Date.now();
           socket.emit("latency-update", { rttMs });
+          const roomCode = socketRoomCodes.get(socket.id), room = roomCode ? rooms.get(roomCode) : undefined;
+          if (roomCode && room?.activeGameId) sendScoreboard(roomCode, room, room.activeGameId);
         }
       }
     );
@@ -663,17 +677,23 @@ function sendScoreboard(roomCode: string, room: Room, gameId: string, target?: S
     }
     return a.name.localeCompare(b.name);
   });
-  const payload = { gameId, columns, rows };
+  const payload = { gameId, columns, rows: rows.map(row => {
+    const member = [...room.players.values(), ...room.spectators.values()].find(member => member.name.toLocaleLowerCase() === row.id);
+    const socket = member?.isConnected ? io.sockets.sockets.get(member.id) : undefined;
+    const pingMs = socket && Number.isFinite(socket.data.rttMs) && Date.now() - socket.data.pingAt < 10_000 ? socket.data.rttMs : null;
+    return { ...row, isPresent: Boolean(member), isConnected: member?.isConnected === true, pingMs };
+  }) };
   if (target) target.emit("room-scoreboard", payload);
   else io.to(roomCode).emit("room-scoreboard", payload);
 }
 
 /** Records a game statistic in the room's scoreboard. */
-function recordRoomStat(roomCode: string, room: Room, gameId: string, memberId: string, key: string): void {
-  if (!getGameDefinition(gameId)?.scoreboard?.some((column) => column.key === key)) return;
+function recordRoomStat(roomCode: string, room: Room, gameId: string, memberId: string, key: string, amount = 1): void {
+  const column = getGameDefinition(gameId)?.scoreboard?.find(column => column.key === key);
+  if (!column || !Number.isSafeInteger(amount) || amount <= 0) return;
   const row = ensureScore(room, gameId, memberId);
   if (!row) return;
-  row.values[key] = Math.min(Number.MAX_SAFE_INTEGER, (row.values[key] ?? 0) + 1);
+  row.values[key] = column.aggregate === "max" ? Math.max(row.values[key] ?? 0, amount) : Math.min(Number.MAX_SAFE_INTEGER, (row.values[key] ?? 0) + amount);
   sendScoreboard(roomCode, room, gameId);
 }
 
@@ -1504,19 +1524,6 @@ io.on("connection", (socket) => {
     respond({ success: true });
   });
 
-  onSocketRequest(socket, "reset-room-scoreboard", (data, respond) => {
-    const roomCode = socketRoomCodes.get(socket.id);
-    const room = roomCode ? rooms.get(roomCode) : undefined;
-    const gameId = String(data?.gameId ?? "");
-    if (!room || room.hostId !== socket.id || !getGameDefinition(gameId)?.scoreboard?.length) {
-      respond({ success: false, message: "Only the host can reset the room scoreboard." }); return;
-    }
-    room.scores.delete(gameId);
-    if (room.activeGameId === gameId) for (const id of room.activeGamePlayerIds) ensureScore(room, gameId, id);
-    sendScoreboard(roomCode!, room, gameId);
-    respond({ success: true });
-  });
-
   onSocketRequest(socket, "set-room-approval", (data, respond) => {
     const roomCode = socketRoomCodes.get(socket.id);
     const room = roomCode ? rooms.get(roomCode) : undefined;
@@ -2113,9 +2120,9 @@ io.on("connection", (socket) => {
             finishActiveGame(roomCode, room, winnerId, reason);
           }
         },
-        recordStat: (memberId, key) => {
+        recordStat: (memberId, key, amount) => {
           if (createdSession !== null && room.gameSession === createdSession && room.activeGamePlayerIds.has(memberId) && key !== "wins") {
-            recordRoomStat(roomCode, room, game.id, memberId, key);
+            recordRoomStat(roomCode, room, game.id, memberId, key, amount);
           }
         },
         now: Date.now,
@@ -2135,9 +2142,16 @@ io.on("connection", (socket) => {
     room.activeGameId = game.id;
     room.gameSession = createdSession;
 
+    const previousScores = room.scores.get(game.id);
+    room.scores.set(game.id, new Map());
+    for (const memberId of room.activeGamePlayerIds) ensureScore(room, game.id, memberId);
+
     try {
       room.gameSession.start?.();
     } catch (error) {
+      if (previousScores) room.scores.set(game.id, previousScores);
+      else room.scores.delete(game.id);
+      sendScoreboard(roomCode, room, game.id);
       console.error(`Unable to start ${game.name} in room ${roomCode}:`, error);
       disposeGameSession(room);
       room.activeGameId = null;

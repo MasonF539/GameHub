@@ -475,3 +475,99 @@ No package release, commit, or push was performed during this implementation.
   subjective listening checks. Targeted audio regressions and package checks pass.
 - The stable Egyptian War patch renames its existing music file and registration
   together; it applies on fresh package-consumer installation.
+
+
+## Shared scoreboard shortcut and roulette totals
+
+- General Scoreboard defaults to Tab. It opens game-owned scoreboards for players
+  and spectators while dialogs, typing, menus and Shift+Tab keep normal focus.
+- Both games use a Scoreboard heading and place server-measured ping in the
+  rightmost column, with Offline/Left states and no stale ping sorting.
+- Roulette has a bottom-right access button and room-persistent wins, cash gained,
+  cash spent, bets won, committed cards played and biggest single-bet profit.
+  Spent cash includes stakes, purchases, repayments, fees and deductions; canceled
+  reservations are excluded. Borrowing/starting cash do not inflate income, and
+  debt incurred is not counted again before cash repayment.
+- Biggest bet profit uses max aggregation across matches; normal counters accept
+  positive integer amounts. Invalid numeric values are ignored by the host.
+- All 369 roulette tests and 247 GameHub tests passed. Targeted Egyptian War tests
+  passed, as did fresh package-consumer installation and patch verification.
+- Live desktop and 390px phone checks verified Tab and button access, actual RTT
+  values, bottom-right placement, settled cash-spending updates, safe text, and
+  no horizontal page overflow or JavaScript errors. Roulette's secondary
+  explanatory text was removed; detailed field meanings remain in game docs.
+
+
+## Egyptian War scoreboard modal
+
+- The panel keeps only Chat and Spectators as pages; its Scoreboard button and
+  the general Tab shortcut open a separate native modal without expanding chat.
+- Close/Escape restore focus, and leaving the game closes the modal. Host reset
+  confirmation stays accessible above the game; canceling returns to the scores.
+  The same reset-confirmation fix applies to the roulette scoreboard.
+- All 23 Egyptian War layout tests and both targeted roulette scoreboard tests
+  pass. Fresh package-consumer verification passes with the refreshed patch.
+- Real-browser checks at 1366x768 and 390x844 verified both openers, ping columns,
+  reset/cancel, no horizontal page overflow and no JavaScript errors.
+
+
+## Match scoreboard lifecycle and card-hover audio
+
+- Both games have no Reset totals button or manual-reset action. Scoreboards
+  update live, retain the current match through reconnects, and clear on the next
+  game start. Failed starts restore the previous scoreboard.
+- Roulette restarts card-hover audio on each newly entered hand/theft card,
+  including rapid movement; nested elements in the same card do not retrigger it.
+- This supersedes the earlier cross-match totals and reset-confirmation behavior.
+- Verification passed: 370 roulette tests, 22 Egyptian War layout checks, 144 hub
+  UI checks, the full server integration suite and fresh package-consumer checks.
+  Live desktop/phone checks confirm both scoreboard modals have no reset action.
+
+
+## Browser-client startup recovery
+
+- Start checks browser-module registration before asking the server to start.
+  Missing modules show a refresh instruction without creating an active match.
+- A missing or throwing client after a server start returns the host's match to
+  the lobby, or releases a guest's seat. Start stays disabled while the room is
+  active. Other clients' healthy matches are not closed by a guest load failure.
+- HTML is rebuilt from the current shell and installed game templates on each
+  page request, with no-store caching, avoiding startup-cached markup paired with
+  newly installed scripts. Restart the running server to adopt this host fix,
+  then reload existing browser tabs.
+- Verification: 148 browser-controller tests and targeted HTTP/lifecycle tests
+  pass. Real-browser failed-script/mount recovery and normal starts for both
+  installed games pass, including desktop/phone scoreboard access.
+
+
+## Fresh-install client registration and final scoreboard UI
+
+- Regenerated the Egyptian War patch with surrounding context. Zero-context
+  insertions had incorrectly scoped scoreboard helpers in fresh Docker installs.
+  The verifier now executes freshly installed classic scripts against their own
+  markup and checks browser-module registration, reproducing the old failure.
+- Roulette columns are Bets won, Money gained, Money spent, Cards played,
+  Biggest bet win, then Ping. Match wins are omitted. Both games remove their
+  old in-game status dots; disconnected rows show an accessible unplugged-cables
+  icon in the Ping column, while former participants still show Left.
+- Docker build passed 245 hub tests, 9 SDK tests and fresh-consumer verification.
+  Live tests against the rebuilt container passed both game starts, scoreboards,
+  exact Roulette headings, removed dots, a real disconnected row, and no browser
+  errors on desktop and phone.
+
+
+## Public-card picker responsiveness and scoreboard toggle
+
+- Public target dimming batches geometry reads and SVG writes. Pending card plays
+  disable existing inventory controls instead of rebuilding the whole inventory;
+  the prompt closes that inventory before refreshing the hand.
+- A 40-card, all-spot browser scenario at 4x CPU throttling fell from roughly
+  117 ms to 31 ms for prompt processing; mask layout fell from 80 ms to 5 ms.
+  These are local simulated-device measurements, not physical-phone timings.
+- All 371 Roulette tests pass, including delayed acknowledgement/Cancel behavior.
+  Combined hub UI and Egyptian War layout checks pass (170 tests).
+- Tab toggles both scoreboards; Shift+Tab navigates their controls, Escape closes
+  them, and other dialogs keep normal Tab behavior. Settings explains this.
+- The rebuilt Docker image passed its hub/SDK tests and fresh-install client
+  verification. Live desktop/phone checks against the running container passed
+  Tab open/close/reopen and preserved Shift+Tab behavior for both scoreboards.

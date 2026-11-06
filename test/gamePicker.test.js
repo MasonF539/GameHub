@@ -97,10 +97,12 @@ function createClient({ prefersReducedMotion = false, mobile = false, fullscreen
   };
   global.io = () => clientSocket;
 
+  let scoreboardOpens = 0;
   global.GameHubRegisterGameClientModule("example-game", {
     mount(context) {
       gameClientContexts.push(context);
       return {
+        showScoreboard() { scoreboardOpens++; },
         receiveState(state) {
           gameClientStates.push(state);
         },
@@ -146,6 +148,7 @@ function createClient({ prefersReducedMotion = false, mobile = false, fullscreen
     gameClientEvents,
     gameClientPlatformEvents,
     gameClientContexts,
+    getScoreboardOpens: () => scoreboardOpens,
     getModalHideCount: () => modalHideCount,
     getModalShowCount: () => modalShowCount,
     getToastShowCount: () => toastShowCount
@@ -1192,27 +1195,6 @@ test("lobby Host buttons sit before Kick and only target eligible connected play
 });
 
 
-test("score reset uses a repeatable in-app confirmation and cancellation sends nothing", async () => {
-  const view = createClient();
-  try {
-    view.handlers.get("available-games")([game()]);
-    view.handlers.get("room-resumed")({ roomCode: "ABC123", isHost: true, selectedGameId: "example-game", gameSettings: {},
-      activeGameId: "example-game", role: "player", isLocked: false, isPaused: false, chatEnabled: true });
-    const context = view.gameClientContexts[0];
-    const first = context.resetScoreboard();
-    assert.equal(view.emitted.some(({event}) => event === "reset-room-scoreboard"), false);
-    document.querySelector("#reset-scoreboard-modal").dispatchEvent(new window.Event("hidden.bs.modal"));
-    assert.equal((await first).success, true);
-    const second = context.resetScoreboard();
-    document.querySelector("#confirm-reset-scoreboard").click();
-    const request = view.emitted.find(({event}) => event === "reset-room-scoreboard");
-    assert.deepEqual(request.data, { gameId: "example-game" });
-    request.respond({ success: true });
-    assert.equal((await second).success, true);
-    assert.equal(document.querySelector("#confirm-reset-scoreboard").disabled, false);
-  } finally { view.close(); }
-});
-
 
 test("an in-game host handoff restores preset controls when the match ends", () => {
   const view = createClient();
@@ -1250,66 +1232,6 @@ test("off-step saved slider values fall back to defaults on selection and preset
     assert.equal(document.querySelector("#setting-seconds").value, "60");
   } finally { view.close(); }
 });
-
-for (const reason of ["room-closed", "game-ended", "disconnect", "room-host"]) {
-  test(`a score reset is cancelled on ${reason} and cannot submit afterward`, async () => {
-    const view = createClient();
-    try {
-      view.handlers.get("available-games")([game()]);
-      view.handlers.get("room-resumed")({ roomCode: "ABC123", isHost: true, selectedGameId: "example-game", gameSettings: {},
-        activeGameId: "example-game", role: "player", isLocked: false });
-      const pending = view.gameClientContexts[0].resetScoreboard();
-      view.handlers.get(reason)(reason === "room-host" ? { hostId: "other", recoveryDeadline: null } : { message: "Ended" });
-      assert.equal((await pending).success, true);
-      document.querySelector("#confirm-reset-scoreboard").click();
-      assert.equal(view.emitted.some(({event}) => event === "reset-room-scoreboard"), false);
-    } finally { view.close(); }
-  });
-}
-
-test("a late reset reply cannot dismiss a new confirmation", async () => {
-  const view = createClient();
-  try {
-    const room = { roomCode: "ABC123", isHost: true, selectedGameId: "example-game", gameSettings: {},
-      activeGameId: "example-game", role: "player", isLocked: false };
-    view.handlers.get("available-games")([game()]);
-    view.handlers.get("room-resumed")(room);
-    const first = view.gameClientContexts[0].resetScoreboard();
-    document.querySelector("#confirm-reset-scoreboard").click();
-    const oldRequest = view.emitted.find(({event}) => event === "reset-room-scoreboard");
-    view.handlers.get("game-ended")({ message: "Ended" });
-    await first;
-    view.handlers.get("room-resumed")(room);
-    const second = view.gameClientContexts[1].resetScoreboard();
-    const hidden = view.getModalHideCount();
-    oldRequest.respond({ success: false, message: "Old request" });
-    assert.equal(view.getModalHideCount(), hidden);
-    document.querySelector("#reset-scoreboard-modal").dispatchEvent(new window.Event("hidden.bs.modal"));
-    await second;
-  } finally { view.close(); }
-});
-
-
-test("reset cancellation retries closing after an opening transition and cleans that retry", async () => {
-  const view = createClient();
-  try {
-    view.handlers.get("available-games")([game()]);
-    view.handlers.get("room-resumed")({ roomCode: "ABC123", isHost: true, selectedGameId: "example-game", gameSettings: {},
-      activeGameId: "example-game", role: "player", isLocked: false });
-    const pending = view.gameClientContexts[0].resetScoreboard();
-    view.handlers.get("game-ended")({ message: "Ended while opening" });
-    await pending;
-    const modal = document.querySelector("#reset-scoreboard-modal");
-    const hides = view.getModalHideCount();
-    modal.dispatchEvent(new window.Event("shown.bs.modal"));
-    assert.equal(view.getModalHideCount(), hides + 1);
-    modal.dispatchEvent(new window.Event("hidden.bs.modal"));
-    modal.dispatchEvent(new window.Event("shown.bs.modal"));
-    assert.equal(view.getModalHideCount(), hides + 1);
-  } finally { view.close(); }
-});
-
-
 
 const settleRejoin = async () => { await Promise.resolve(); await Promise.resolve(); };
 const savedPlayer = (name, token, lastSeen = Date.now()) => ({
@@ -2507,9 +2429,9 @@ test("graphics preferences default off, persist, and follow cross-tab updates wi
   let view = createClient();
   try {
     const tabs = [...document.querySelectorAll(".app-settings-navigation [role=tab]")].map(tab => tab.textContent.trim());
-    assert.deepEqual(tabs, ["Game", "Graphics", "Music", "Sound Effects", "Keybinds"]);
-    assert.ok(document.querySelector("#app-settings-music-panel #audio-music-volume"));
-    assert.equal(document.querySelector("#app-settings-audio-panel #audio-music-volume"), null);
+    assert.deepEqual(tabs, ["Game", "Graphics", "Audio", "Keybinds"]);
+    assert.equal(document.querySelector("#app-settings-music-panel"), null);
+    assert.ok(document.querySelector("#app-settings-audio-panel #audio-music-volume"));
     assert.ok(document.querySelector("#app-settings-audio-panel #audio-join-volume"));
     assert.ok(document.querySelector("#app-settings-audio-panel #audio-game-volume"));
     assert.ok(document.querySelector("#app-settings-graphics-panel #game-display-sections"));
@@ -2585,4 +2507,72 @@ test("disabling previews stops and unloads videos and keeps poster-only previews
     document.querySelector("#disable-game-previews").click();
     assert.equal(document.querySelector(".game-picker-preview-video").autoplay, true);
   } finally { view.close(); }
+});
+
+
+test("general Tab opens the active scoreboard while dialog, typing, Shift+Tab and lobby keep focus navigation", () => {
+  const view = createClient();
+  try {
+    view.handlers.get("available-games")([game()]);
+    const press = (target = document.body, extra = {}) => { const event = new window.KeyboardEvent("keydown", { code: "Tab", bubbles: true, cancelable: true, ...extra }); target.dispatchEvent(event); return event; };
+    assert.equal(press().defaultPrevented, false);
+    view.handlers.get("game-started")({ gameId: "example-game", settings: {} });
+    assert.equal(press().defaultPrevented, true); assert.equal(view.getScoreboardOpens(), 1);
+    assert.equal(press(document.body, { shiftKey: true }).defaultPrevented, false);
+    const dialog = document.createElement("dialog"); dialog.setAttribute("open", ""); document.body.append(dialog);
+    assert.equal(press(dialog).defaultPrevented, false); dialog.remove();
+    const input = document.createElement("input"); document.body.append(input); assert.equal(press(input).defaultPrevented, false); input.remove();
+    const scoreboard = document.createElement("dialog"); scoreboard.setAttribute("open", ""); scoreboard.setAttribute("data-game-scoreboard", ""); document.body.append(scoreboard);
+    assert.equal(press(scoreboard).defaultPrevented, true);
+    assert.equal(press(scoreboard, { shiftKey: true }).defaultPrevented, false);
+    assert.equal(view.getScoreboardOpens(), 2); scoreboard.remove();
+  } finally { view.close(); }
+});
+
+
+test("an unavailable browser client cannot start a server-side game", () => {
+  const view = createClient();
+  try {
+    const definition = game({ id: "missing-client" });
+    view.handlers.get("available-games")([definition]);
+    view.handlers.get("room-resumed")({ roomCode: "ABC123", isHost: true, selectedGameId: definition.id, gameSettings: {}, activeGameId: null, role: "player", isLocked: false });
+    document.querySelector("#start-game").disabled = false;
+    document.querySelector("#start-game").click();
+    assert.equal(view.emitted.some(({ event }) => event === "start-game"), false);
+    assert.match(document.querySelector("#gamehub-toast-message").textContent, /Refresh the page/);
+  } finally { view.close(); }
+});
+
+for (const host of [true, false]) {
+  test(`missing browser client recovers the ${host ? "host match" : "guest seat"} instead of trapping the lobby`, () => {
+    const view = createClient();
+    try {
+      view.handlers.get("available-games")([game()]);
+      view.handlers.get("room-resumed")({ roomCode: "ABC123", isHost: host, selectedGameId: "example-game", gameSettings: {}, activeGameId: null, role: "player", isLocked: false });
+      view.handlers.get("game-started")({ gameId: "missing-client", settings: {} });
+      const request = view.emitted.find(({ event }) => event === (host ? "close-game-to-lobby" : "leave-game"));
+      assert.ok(request);
+      assert.equal(document.querySelector("#start-game").disabled, true);
+      if (host) view.handlers.get("game-ended")({ message: "Game closed" });
+      request.respond({ success: true, hasActiveGame: true });
+      assert.equal(document.querySelector("#lobby-view").classList.contains("d-none"), false);
+      assert.equal(document.querySelector("#gameplay-view").classList.contains("d-none"), true);
+    } finally { view.close(); }
+  });
+}
+
+test("a browser mount error returns the host to the lobby and closes the failed match", () => {
+  const view = createClient();
+  const originalError = console.error;
+  try {
+    view.handlers.get("available-games")([game({ id: "broken-client" })]);
+    view.handlers.get("room-resumed")({ roomCode: "ABC123", isHost: true, selectedGameId: "broken-client", gameSettings: {}, activeGameId: null, role: "player", isLocked: false });
+    global.GameHubRegisterGameClientModule("broken-client", { mount() { throw new Error("Missing markup"); } });
+    console.error = () => {};
+    assert.doesNotThrow(() => view.handlers.get("game-started")({ gameId: "broken-client", settings: {} }));
+    assert.ok(view.emitted.find(({ event }) => event === "close-game-to-lobby"));
+    assert.equal(document.querySelector("#gameplay-view").classList.contains("d-none"), true);
+    view.handlers.get("game-ended")({ message: "Game closed" });
+    assert.equal(document.querySelector("#lobby-view").classList.contains("d-none"), false);
+  } finally { console.error = originalError; view.close(); }
 });

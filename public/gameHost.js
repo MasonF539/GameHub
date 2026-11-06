@@ -141,6 +141,12 @@
       }
     }
 
+    /** Invokes the mounted game's scoreboard toggle when the plugin supplies the optional hook. */
+    showScoreboard() {
+      if (typeof this.activeInstance?.showScoreboard !== "function") return false;
+      return this.activeInstance.showScoreboard() !== false;
+    }
+
     /** Delivers a game-specific event to the mounted client. */
     receiveEvent({ gameId, event }) {
       if (gameId === this.activeGameId && event) {
