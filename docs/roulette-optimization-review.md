@@ -73,3 +73,17 @@ ten unchanged target-choice snapshots fell from roughly 331ms to 38ms at phone
 size and 1,099ms to 838ms at desktop size. Initial opening remains expensive;
 these measurements establish an update-path improvement, not physical-phone
 frame rates or a guarantee that target selection has no remaining cost.
+
+
+The target follow-up passed all 384 game tests and the fresh-consumer/live shop
+checks before being pushed. A further two long deterministic matches accumulated
+44-46 distinct owned stacks (81-104 copies); 5,927 actions and 5,052 viewer
+snapshots still matched the baseline after opaque ID normalization. At those
+endpoints, 1,000 server snapshots took roughly 84-117ms. This does not establish
+a need for cross-request permission/state caches; server processing remains small
+compared with the measured client rendering costs.
+
+A possible follow-up is scheduling spotlight geometry reads after the complete
+render instead of synchronously. Leave that for review: it could briefly display
+old cutouts or delay targeting after a phase/layout change. Do not silently
+change target visibility or input timing to improve benchmark numbers.
