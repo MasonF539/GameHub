@@ -2504,7 +2504,7 @@ function dismissGameCompletion() {
   const dialog = gameCompletionDialog;
   if (!dialog) return;
   gameCompletionDialog = null;
-  if (dialog.open) dialog.close();
+  if (dialog.open) dialog.close?.();
   dialog.remove(); gameClientHost.setActiveStyles(currentActiveGameId);
 }
 /** Preserves an opted-in final summary while the completed game's client releases its resources. */
@@ -2518,17 +2518,20 @@ function showGameCompletion(dialog, gameId) {
     for (const attribute of ["aria-labelledby", "aria-describedby", "for"]) if (node.hasAttribute(attribute)) node.setAttribute(attribute, node.getAttribute(attribute).split(/\s+/).map(id => ids.get(id) ?? id).join(" "));
   }
   gameCompletionDialog = dialog; document.body.append(dialog); gameClientHost.setActiveStyles(gameId);
-  dialog.querySelector("[data-game-completion-close]")?.addEventListener("click", () => dialog.close());
+  dialog.querySelector("[data-game-completion-close]")?.addEventListener("click", () => { if (dialog.close) dialog.close(); else dismissGameCompletion(); });
   dialog.addEventListener("close", () => {
     dialog.remove();
     if (gameCompletionDialog === dialog) { gameCompletionDialog = null; gameClientHost.setActiveStyles(currentActiveGameId); }
   }, { once: true });
-  dialog.showModal(); dialog.querySelector("h3")?.focus();
+  if (dialog.showModal) dialog.showModal(); else dialog.setAttribute("open", "");
+  dialog.querySelector("h3")?.focus();
 }
 
 socket.on("game-ended", ({ message, returningMemberIds = [] }) => {
   const completedGameId = currentActiveGameId;
-  const completionSnapshot = gameRoot.querySelector("dialog[data-game-completion-dialog]")?.cloneNode(true) ?? null;
+  const completedRoot = completedGameId === null ? null : [...gameRoot.querySelectorAll("[data-game-plugin-root]")]
+    .find(root => root.dataset.gamePluginRoot === completedGameId);
+  const completionSnapshot = completedRoot?.querySelector("dialog[data-game-completion-dialog]")?.cloneNode(true) ?? null;
   invalidateLifecycleRequests();
   const wasWaitingInLobby = currentActiveGameId === null;
   returningGameMemberIds = new Set(

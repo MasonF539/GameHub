@@ -1091,3 +1091,34 @@ The fresh-consumer verifier now executes installed classic browser entry scripts
 against their own markup and asserts registration; it reproduces the old failure
 and passes with the corrected patch. Startup-recovery handling remains useful,
 but the earlier stale-markup hypothesis did not explain this Docker failure.
+
+
+## Cross-game card reviews and Roulette shop/panel review (2026-11-10)
+
+Fixed the completion lookup selecting any review in the shared game root. It
+now reads only the active game's plugin root; Roulette clears its old opt-in
+marker across mounts. Review dismissal also supports the existing dialog
+fallback path.
+
+Roulette no longer rebuilds shop stock for local pending-state changes or refits
+it on unchanged snapshots. It batches card-effect sizing reads/writes and skips
+rebuilding the obscured hand. In one 4x-CPU-throttled, 24-card scenario, three
+unchanged shop updates fell from about 359ms to 14ms on desktop and 243ms to
+12ms at phone size; shop entry fell from about 389ms to 286ms and 286ms to 196ms.
+These are local browser measurements, not benchmarks of the reported iPhone.
+
+Added a collapsed phone details tray with a centered expand tab and full-screen
+native dialog using the same live controls. Bank/scoreboard/choices remain
+accessible, Escape collapses, and desktop retains its sidebar.
+
+The reported white shop on an unspecified iPhone browser was not reproduced.
+Added vh sizing fallback and reduced redundant rendering; do not treat that
+report as conclusively resolved without checking the affected device.
+
+Verification: 377 Roulette tests and 149 hub UI tests pass. Browser checks cover
+1366x768, 390x844, 360x740, and 844x390 touch layouts, including shop fitting,
+card inspection, panel expansion, Escape, scoreboard access and rotation.
+
+Live installed-build verification also passed a two-player round through rewards,
+shop, bank access and Public Effects, then a Roulette review followed by Egyptian
+War completion. The old review did not reappear; no browser errors occurred.

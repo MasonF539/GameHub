@@ -2576,3 +2576,21 @@ test("a browser mount error returns the host to the lobby and closes the failed 
     assert.equal(document.querySelector("#lobby-view").classList.contains("d-none"), false);
   } finally { console.error = originalError; view.close(); }
 });
+
+
+test("ending another game never opens a stale review from an inactive game", () => {
+  const view = createClient();
+  try {
+    const root = document.querySelector("#game-root");
+    root.innerHTML = '<div data-game-plugin-root="old-game" hidden><dialog data-game-completion-dialog><h3>Old roulette review</h3></dialog></div><div data-game-plugin-root="example-game"></div>';
+    view.handlers.get("game-started")({ gameId: "example-game", settings: {} });
+    view.handlers.get("game-ended")({ message: "Game over" });
+    assert.equal(document.querySelector(".game-completion-dialog"), null);
+    const own = document.createElement("dialog"); own.setAttribute("data-game-completion-dialog", ""); own.innerHTML = '<h3>Current review</h3><button data-game-completion-close>Close</button>';
+    root.querySelector('[data-game-plugin-root="example-game"]').append(own);
+    view.handlers.get("game-started")({ gameId: "example-game", settings: {} });
+    view.handlers.get("game-ended")({ message: "Game over" });
+    assert.match(document.querySelector(".game-completion-dialog").textContent, /Current review/);
+    assert.doesNotMatch(document.querySelector(".game-completion-dialog").textContent, /Old roulette/);
+  } finally { view.close(); }
+});

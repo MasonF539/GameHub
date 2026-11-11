@@ -571,3 +571,39 @@ No package release, commit, or push was performed during this implementation.
 - The rebuilt Docker image passed its hub/SDK tests and fresh-install client
   verification. Live desktop/phone checks against the running container passed
   Tab open/close/reopen and preserved Shift+Tab behavior for both scoreboards.
+
+
+## Cross-game review isolation, shop performance and phone details (2026-11-10)
+
+- A completed game can clone only its own lobby review. Old Roulette review
+  markers clear on mount/unmount; Egyptian War must not open that review.
+- Shop snapshots/pending requests preserve existing stock and selected-card DOM.
+  Changed stock/prices and viewport changes still update. Text fitting batches
+  layout work, and hidden hand refresh is deferred while the shop covers it.
+- Narrow phones and short touch landscape get a collapsed wallet tray; its
+  centered tab expands details full-screen. Collapse/Escape restore it, and
+  Bank/Scoreboard/choices remain accessible without duplicate controls.
+- 377 Roulette tests and 149 hub UI tests pass. Desktop, small-phone and landscape
+  browser checks pass, including shop inspection and rotation. The reported
+  white panel was not reproduced; check the affected iPhone/browser again.
+
+Live installed-build verification also passed a two-player round through rewards,
+shop, bank access and Public Effects, then a Roulette review followed by Egyptian
+War completion. The old review did not reappear; no browser errors occurred.
+
+
+## Ongoing Roulette optimization audit (2026-11-10)
+
+The browser retains unchanged player seats, chip stacks, full bet lists,
+card-activity rows and loan-history rows. Public-effect labels no longer
+accumulate across snapshots, and closed scoreboards defer table construction.
+Server reservations are summed once per snapshot without changing action checks
+or defensive copies. Timing, broadcast frequency, visual simplification and
+protocol changes remain proposals in roulette-optimization-review.md.
+
+- Follow-up updates retain unaffected individual seats and chip locations during
+  changing wagers, cache immutable card-definition lookups, and preserve target
+  keyboard focus. All 383 game tests passed. Differential testing across eight
+  twelve-player matches compared 11,247 actions and 19,296 viewer snapshots with
+  identical results after opaque ID normalization. No phase timing, RNG order,
+  money rules, broadcast frequency, or payload contract was changed.
