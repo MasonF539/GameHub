@@ -58,3 +58,18 @@ server after normalizing opaque IDs. All 383 game tests pass at this checkpoint.
 
 A twenty-cycle mobile mount/shop/panel/unmount browser check found no retained
 listeners, intervals, observers or input subscriptions and no growing DOM count.
+
+
+## Public-card target reconciliation follow-up (2026-11-11)
+
+Repeated snapshots retain still-authorized highlights and unchanged spotlight
+cutouts. Permissions still refresh for pending requests, pause/animation state,
+and changed options, including changes within the same prompt ID. Every call
+remeasures geometry; resize callbacks also reposition cutouts. This avoids a
+position cache that could drift after the layout changes.
+
+In the same four-times-CPU-throttled browser with every betting spot eligible,
+ten unchanged target-choice snapshots fell from roughly 331ms to 38ms at phone
+size and 1,099ms to 838ms at desktop size. Initial opening remains expensive;
+these measurements establish an update-path improvement, not physical-phone
+frame rates or a guarantee that target selection has no remaining cost.
