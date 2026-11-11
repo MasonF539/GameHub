@@ -607,3 +607,29 @@ protocol changes remain proposals in roulette-optimization-review.md.
   twelve-player matches compared 11,247 actions and 19,296 viewer snapshots with
   identical results after opaque ID normalization. No phase timing, RNG order,
   money rules, broadcast frequency, or payload contract was changed.
+
+
+## Roulette payout rebalance and document consolidation (2026-11-11)
+
+Winning paid-bet percentage modifiers now apply to the full base return,
+including the stake. Positive payout bonus values, growth and caps are halved;
+negative card magnitudes stay unchanged. Fractional percentage rates remain
+exact until whole-money settlement. Non-payout grants, debt relief, refunds,
+taxes, prices, free-stake coverage and round-wide profit gambles keep their rules.
+Type Reversal flips each revised value without resetting accumulated progress.
+
+The 80% reduction cap now applies to base payout; matching wagers can therefore
+have negative net profit. Taxes, Debt Collector and biggest-win reporting guard
+against treating those negative profits as a payment or relief in reverse.
+
+Verification: 391 game tests and type checks passed. Equal 360-stake coverage
+with red/black, three dozens or all 36 nonzero straight-ups returns 396 under a
+uniform +10% payout bonus; zero loses all three. The same nonzero comparison
+passed against GameHub's actual installed package. Fresh-consumer verification
+and the live shop/review browser smoke check passed. The local vendor package
+is refreshed; no registry publication is needed for this development change.
+
+The game design replaces resolved bracket prompts with current behavior and
+collects deferred choices. The implementation reference now describes actual
+modules and current lifecycle rules rather than retaining duplicate dated plans.
+Card values, reversal descriptions and README terminology match the new formula.
