@@ -94,3 +94,22 @@ A possible follow-up is scheduling spotlight geometry reads after the complete
 render instead of synchronously. Leave that for review: it could briefly display
 old cutouts or delay targeting after a phase/layout change. Do not silently
 change target visibility or input timing to improve benchmark numbers.
+
+
+## Review checkpoint (2026-11-13)
+
+An isolated real-Edge renderer check with the installed game and Hub stylesheet
+passed 1366x768, 768x1024, 390x844 and 360x740 viewport checks. All 157 betting
+targets were present, the document did not scroll, and Bank/Shop opened without
+JavaScript errors or internal Shop scrolling. Platform services were stubbed;
+these are renderer checks, separate from the production-container socket smoke.
+
+A deliberately full inventory of 87 distinct owned stacks opened in about 79ms
+on this desktop. Thirty unchanged-state updates with that inventory open had
+roughly 0.4ms median and 0.8ms p95 synchronous receiveState cost. These are single
+run desktop timings, not mobile frame rates or complete paint times.
+
+Possible follow-up, left for review: lazy mounting or content visibility for
+offscreen inventory cards could reduce full-inventory opening work. It may
+change description fitting, scroll height, keyboard navigation or accessibility;
+do not add it solely from this extreme-inventory measurement.

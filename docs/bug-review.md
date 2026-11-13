@@ -1280,3 +1280,91 @@ normal Roulette update workflow passed type checks, packaging, installation and
 fresh-consumer verification. The Hub lockfile changes only the local game
 archive's integrity; incidental npm peer-marker changes were discarded. Other
 repositories and temporary verification artifacts are excluded from commits.
+
+
+## Continued bug review (2026-11-13)
+
+Fixed purchased shop quotes being recalculated after personal price modifiers
+changed, bank debt previews differing from exact server rounding at very large
+balances, and controls advertising actions while required card choices blocked
+them. Optional card targeting also disables readiness until completed or
+cancelled. Bank percentage presets now floor exactly rather than occasionally
+rounding a 75% repayment up by one dollar near the safe-integer limit.
+
+Validation: 448 Roulette tests and type checks pass. The normal package refresh
+and fresh-consumer verification pass. An expanded 60-match installed-game simulation
+passed 129,086 actions and 294,704 snapshots, covering all 87 card types with
+the final preset correction included. A clean production Docker build and live
+two-player create/join, loan limit/privacy, round cap, and Shop -> Card Theft ->
+Public Effects -> Betting checks passed before that preset-only correction.
+Physical phone performance and public tunnel behavior remain untested here.
+
+Egyptian War also passed its type checks and all 99 regression tests without
+source changes during this review.
+
+A second 60-match low-cash simulation passed 95,446 actions and 251,870 state
+checks, again covering all 87 card types. Real-Edge renderer checks passed at
+1366x768, 768x1024, 390x844 and 360x740 with all 157 targets present, no page
+scrolling, and working Bank/Shop dialogs without JavaScript errors. Renderer
+checks use stubbed platform services; see the optimization review for scope
+and the full-inventory measurement left for review.
+
+
+## Card-choice cancellation follow-up (2026-11-13)
+
+Reproduced and fixed a stale cancellation dismissing a newer optional prompt
+in the same phase. A supplied selection ID must now match the current prompt;
+legacy callers that omit it retain their existing behavior.
+
+Also reproduced enabled Cancel buttons during pause. Board and dialog Cancel
+controls now share the pause, public-animation and pending-request guards used
+by their choices. Escape obeys those restrictions too. Required prompts remain
+non-cancellable. New regressions failed before each fix and pass afterward.
+
+All 451 Roulette tests, type checks, the normal local package update, and
+fresh-consumer verification pass. No gameplay values or card ordering changed.
+
+
+## Interrupted chip-drag follow-up (2026-11-13)
+
+Reproduced a chip ghost and active gesture surviving browser focus loss. The
+existing blur handler now cancels chip dragging as well as card dragging. A
+second failing check showed that the cancelled drag's trailing click could
+still place a wager; moving chip cancellation now suppresses that click using
+the existing 350ms drop guard. Ordinary chip selection and valid drops retain
+their behavior.
+
+All 452 Roulette tests, type checks, normal local-package integration and
+fresh-consumer verification pass. A real-Edge mouse-input check confirmed the
+ghost disappears on blur and releasing over the board submits no wager. The
+four viewport and Bank/Shop checks also pass with the installed package.
+
+
+## Automatic-results dialog follow-up (2026-11-13)
+
+Reproduced the delayed results popup opening over a scoreboard or Bank panel
+that the player had just opened. The automatic opener now respects all open
+native dialogs as well as platform modals, instead of checking only the card
+inventory. Results remain available manually; normal automatic opening works
+when no dialog is open. Both interrupted-panel regressions failed before the
+guard and pass afterward.
+
+All 454 Roulette tests, type checks, normal local-package integration and
+fresh-consumer verification pass.
+
+
+## Departure-choice fixes and commit checkpoint (2026-11-13)
+
+A permanently departed player no longer resolves an unfinished paid theft at a
+later phase deadline. Removing a player also closes selections already bound
+to that player as victim or reversed-gift source, with a private explanation.
+This prevents impossible required pickers from blocking readiness. Paid costs
+remain paid; unpaid cards stay owned. Temporary disconnects preserve prompts.
+
+Regressions cover normal Go Fish and Sticky Fingers, both reversed recipient
+choices, the departure-time theft, and disconnect/reconnect preservation. All
+459 Roulette tests, type checks, normal package refresh and fresh-consumer
+verification pass.
+
+The final installed-game stress run passed 18 games, 38,852 actions and 88,141
+state checks across all 87 card types. Roulette source checkpoint: d5923f9.
