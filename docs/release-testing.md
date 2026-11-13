@@ -633,3 +633,43 @@ The game design replaces resolved bracket prompts with current behavior and
 collects deferred choices. The implementation reference now describes actual
 modules and current lifecycle rules rather than retaining duplicate dated plans.
 Card values, reversal descriptions and README terminology match the new formula.
+
+
+## Card Theft stage and shop availability (2026-11-11)
+
+From round 2 the order is Rewards -> Shop -> Card Theft -> Public Effects ->
+Betting -> Final Preparations. Card Theft has 30 seconds, reversible readiness,
+its own banner, and no chip dock. All seven theft/swap cards, including Sleight
+of Hand and reversed thefts, use it. Other card plays wait. Discard, Trade up,
+and Roll down work in the other planning phases, but not Rolling or Results.
+Already-maxed offers use diagonal ribbons without moving their card/price rows.
+
+Type checks and 427 Roulette tests passed. Fresh package verification and
+installed payout regressions passed. Browser checks cover two connected clients,
+phone/desktop stage transitions and four shop layouts. A fresh installed-package
+24-match lifecycle simulation checked 55,798 actions and 126,845 snapshots
+without ledger or privacy failures. Physical Safari/phone performance and a
+public tunnel remain outside these local checks.
+
+For a manual playtest, try a blind steal and Sleight of Hand during Card Theft,
+confirm the victim cannot discard/trade to dodge it, let a paid choice time out,
+and check that normal utilities become available again in Public Effects.
+
+
+## Bank cap and flat-chip markings (2026-11-12)
+
+The loan cap uses starting cash and average participant net rather than goal:
+50% of starting cash + 25% of nonnegative average net, rounded down and frozen
+per round. Default 100,000 starting/average cash gives a 75,000 cap. Tests cover
+round changes, overspending, debt, offline/departed players and negative-net
+flooring. Flat chip faces retain eight identical edge inserts across tray,
+board and drag visuals, with readable centered amounts.
+
+Validation: all 439 game tests and type checks, normal local-package update and
+fresh consumer verification, desktop/phone browser checks and an installed-bank
+boundary/surcharge smoke test passed. Real-device performance remains unmeasured.
+
+
+Final pre-commit checks on 2026-11-12 passed 440 Roulette, 246 Hub and 9 SDK
+tests plus type checks and fresh package verification. The added shop regression
+preserves a purchased deal's price and discount when a later modifier is played.

@@ -1122,3 +1122,161 @@ card inspection, panel expansion, Escape, scoreboard access and rotation.
 Live installed-build verification also passed a two-player round through rewards,
 shop, bank access and Public Effects, then a Roulette review followed by Egyptian
 War completion. The old review did not reappear; no browser errors occurred.
+
+
+## Roulette planning-only utility guard (2026-11-11)
+
+Reproduced Reassignment and Quick Sale remaining playable during Rolling and
+Results. Reassignment could move a Specialist bonus after the pocket was
+revealed; Quick Sale contradicted its planning-only description. Both now reject
+plays outside Rewards/Shop/Public Effects/Betting/Final Preparations and expose
+a planning-only disabled reason. Discard/trades were subsequently limited to
+planning outside Card Theft, as approved below. Regression checks cover
+post-reveal requests and permitted planning utility behavior.
+
+A deterministic review across 24 matches (2/8/12 players, up to 20 played rounds)
+exercised 51,906 actions and checked 114,058 snapshots. It encountered all 87
+catalogue types, including the four new negative cards, without invalid money,
+reservation mismatches or spectator private-choice exposure. This is simulated
+server coverage, not a physical-device or public-tunnel test.
+
+Resolved with user approval: Discard, Trade up, and Roll down remain usable
+during Rewards, Shop, Public Effects, Betting and Final Preparations, but not
+Card Theft, Rolling or Results. This prevents spending cards to dodge a steal
+and changing passive ownership after the wheel reveals its result.
+
+
+Follow-up lifecycle stress across another 24 matches exercised spectator
+admission, socket-ID rebinding, disconnect/manual pauses and departures. Another
+51,806 actions and 112,988 snapshots passed the same ledger/privacy checks.
+These runs preserve the new cards' counters and retained resources through the
+membership transitions; they do not replace real-device testing.
+
+Bet-space lookup now uses a private index over the fixed 157-space catalogue.
+All legal IDs retain their original object/payout and unknown IDs return nothing.
+In one isolated mixed-bet benchmark, 1,000 validated edits with twelve players
+and 300 wagers took about 440ms with scans and 350ms with the index. This is a
+server microbenchmark, not a phone frame-rate or network-latency claim.
+
+
+Reproduced chip drags placing wagers behind an active card-target choice, and
+touch holds opening betting previews on choice targets. A shared client-side
+betting guard now suspends those controls/editors and cancels in-flight chip
+drags when a choice arrives. Eligible card targets remain interactive; normal
+betting is restored afterward. Three regressions cover these paths.
+
+Already-maxed shop stock now uses the same diagonal ribbon approach as sold-out
+stock, across shelf/sign/inspection views. Price lines retain only pricing;
+availability and accessible labels still prevent purchases. Four browser layouts
+(1366x768, 390x844, 360x740, 844x390) kept identical offer bounds after switching
+to maxed status, and compact inspection/rotation remained usable.
+
+
+Card Theft now follows Shop and precedes Public Effects, with a separate
+30-second deadline and reversible readiness. Go Fish, Pickpocket, Sticky Fingers,
+Double Choice, Interception, Reclaim and Sleight of Hand (including reversed
+variants) use this stage. Other manual plays are blocked during theft. Required
+paid choices still resolve at timeout; competing thefts revalidate original
+choices instead of revealing new cards. The chip controls remain hidden.
+
+Type checking and all 427 Roulette tests pass, including new stage order,
+readiness, disconnect/manual-pause recovery, theft-only eligibility and
+planning-only Discard/trade regressions. Earlier stress results above predate
+the theft stage; they are not evidence for the new phase.
+
+
+The updated installed package passed a fresh 24-match lifecycle simulation
+(2/8/12 players, up to 20 settled rounds): 55,798 actions and 126,845 snapshots,
+with all 87 card types encountered. It exercised theft-stage plays, spectator
+admission, socket replacement, disconnect/manual pauses and departures. Money,
+reservations, debt-ledger and spectator privacy invariants held. These are
+simulated sessions, not physical phone or public-tunnel tests.
+
+Installed-build two-client browser checks passed Shop -> Card Theft -> Public
+Effects, the theft banner/readiness, hidden chip controls, phone bank/scoreboard,
+and cross-game completion cleanup. Maxed ribbons retained identical offer bounds
+at 1366x768, 390x844, 360x740 and 844x390; compact inspection/rotation passed.
+
+
+Safety Net now starts with gold board targeting for the owner's paid betting
+spots, excluding free-only and other-player-only spots. Multiple paid wagers on
+the same spot retain an exact-wager follow-up choice. Server/client targeting
+regressions pass as part of the 429-test game suite.
+
+Reproduced notification close icons becoming gray blocks inside Roulette and
+completion dialogs: broad button background shorthands cleared Bootstrap's SVG.
+Both rules now exclude `.btn-close`. A real-browser check confirms the original
+SVG and button dimensions survive in both popup contexts.
+
+
+Audited every card-choice request after the Safety Net targeting fix.
+Reassignment's source Specialist assignment was the remaining list-based spot
+selector. It now uses the same faded viewport and gold selectable board targets
+as its destination. Stacked assignments highlight their shared spot once and
+move one copy per play. Other player/spot selectors already use the board;
+card/effect pickers remain unchanged. Type checks and all 431 game tests pass,
+including both Reassignment targeting steps and stacked-copy preservation.
+
+
+Roulette now registers its own five personal graphics dropdowns in GameHub's
+existing Graphics section. Defaults retain full detail. Options apply live,
+preserve wager values and public-effect annotations, retain gold card targets,
+and unsubscribe on game teardown. Wheel changes use the current local deadline,
+so switching effects during a spin does not restart its visual timer.
+
+Browser checks verified all five actual Hub controls, saved choices after page
+reload, and the installed full/simple views at 1366x768 and 390x844. Red/black
+outcome colors and close-icon SVGs remain correct. The close-icon exclusion uses
+`:where()` to retain its original selector strength; a plain `:not()` had
+incorrectly overridden game button colors. Existing Hub display/graphics tests
+also pass (five selected tests).
+
+Temporary `.work` screenshots, scripts, logs, profiling fixtures and portable
+verification tools were removed after validation; no launcher depends on them.
+
+
+## Bank economy and consistent chip faces (2026-11-12)
+
+The shared per-loan cap is now floor(50% of starting cash + 25% of average
+contender net), with the average-net contribution clamped at zero. Capture it
+at each round start after admission; include offline contenders and exclude
+spectators/departed players/tiebreaker outsiders. Both public bank values and
+request checks use the same frozen cap. The normal 25% debt surcharge and
+once-per-round allowance remain unchanged.
+
+Flat chips now reuse the same eight evenly spaced edge inserts as 3D chips:
+12 degrees of ivory/contrast insert followed by 33 degrees of player color.
+Remove uneven dashed outlines, stack height and shine; retain owner colors and
+centered amounts with transparent labels that do not obscure the small face.
+Tray, table and drag chips use matching markings.
+
+All 439 game tests, type checks and fresh-consumer verification pass. Browser
+checks at 1366x768 and 390x844 confirm matching tray/board/drag faces and the
+75,000 example bank cap/help. The installed package rejects 75,001, accepts
+75,000, adds 93,750 debt, and keeps the other player's cap unchanged. Installed
+browser files match source exactly. Temporary tools remained outside the repos;
+no .work folder was recreated. Nothing was published, committed or pushed.
+
+
+Chip edge inserts are now centered at 0/45/90/135/180/225/270/315 degrees,
+not offset six degrees clockwise. The 12-degree wedges start at -6 degrees in
+all tray, stack, flat and drag styles. Browser checks verified the actual
+computed gradients; all 32 sampled pixels across four flat-chip colors land on
+the expected insert color at the requested bearings. Fresh package verification
+passed and the installed stylesheet exactly matches source. This is a CSS-only
+alignment change; prior game-rule tests remain the 439-test checkpoint above.
+
+
+## Final pre-commit review (2026-11-12)
+
+Reproduced one additional display bug: playing a deal-discount modifier after
+buying the deal could rewrite the sold-out card's displayed price/discount.
+Purchased offers now retain their paid quote; later available/rerolled stock
+still receives the modifier. A real-session regression failed before the guard
+and passes afterward, without changing cash or reopening sold-out stock.
+
+Final validation: 440 Roulette tests, 246 Hub tests and 9 SDK tests pass. The
+normal Roulette update workflow passed type checks, packaging, installation and
+fresh-consumer verification. The Hub lockfile changes only the local game
+archive's integrity; incidental npm peer-marker changes were discarded. Other
+repositories and temporary verification artifacts are excluded from commits.

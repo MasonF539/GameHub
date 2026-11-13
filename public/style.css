@@ -1398,4 +1398,4 @@ body.reduce-interface-motion .settings-switch .form-check-input {
   color: #343a40;
 }
 
-.game-completion-dialog button { color: #edf3f9; background: #29394a; border: 1px solid #64788a; border-radius: 6px; padding: 6px 12px; cursor: pointer; }
+.game-completion-dialog button:where(:not(.btn-close)) { color: #edf3f9; background: #29394a; border: 1px solid #64788a; border-radius: 6px; padding: 6px 12px; cursor: pointer; }

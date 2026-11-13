@@ -23,6 +23,13 @@ hand, ten unchanged snapshots dropped from about 161ms to 23ms at desktop size,
 and 113ms to 23ms at phone size. These figures do not represent physical-device
 frame rates or public-tunnel latency.
 
+Roulette now also exposes five optional per-browser graphics controls: Table
+detail, Card detail, Chip detail, Wheel effects and Target spotlight. Defaults
+preserve the detailed appearance. Flat chips reduce rendered stack discs; the
+highlights-only setting skips spotlight-mask geometry. Reduced wheel effects
+omit the launch hand and result zoom while retaining spin/reveal timing. These
+options have functional browser coverage; no physical-device FPS claim is made.
+
 ## Proposals left for discussion
 
 | Proposal | Potential benefit | Why it is not applied automatically |
