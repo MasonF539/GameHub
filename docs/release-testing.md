@@ -20,7 +20,7 @@ Emulation and audio decoding do not replace physical-device and audible checks.
 3. **Sound:** hear music and effects, change volume, mute/unmute, and return to the lobby. Check the appropriate music returns without duplicate playback.
 4. **Recovery and saved preferences:** refresh, briefly lose connectivity, open a second tab, and close/reopen a player tab. Verify the intended player reconnects, active tabs are not taken over, and presets, themes, and panel preferences remain saved.
 5. **Host controls:** test join approval and locked rooms. Disconnect a player for 60 seconds to check autoplay, and check an existing manual pause stays paused. Disconnect the host to check the 60-second transfer and the new host's pause/resume controls.
-6. **Complete match:** finish a two-to-eight-player game. Check challenges, valid/invalid slaps, penalties, scoreboard totals and its reset confirmation. Restart and confirm the new game's chat starts empty.
+6. **Complete match:** finish a two-to-eight-player Egyptian War game. Check challenges, valid/invalid slaps, penalties, and scoreboard totals. Start a new match and confirm its scoreboard resets automatically and its chat starts empty.
 
 Loaded Roulette now has a playable private prototype. Its current checks are
 listed below; the historical scaffold results above predate roulette gameplay.
@@ -761,3 +761,33 @@ verification pass.
 
 The final installed-game stress run passed 18 games, 38,852 actions and 88,141
 state checks across all 87 card types. Roulette source checkpoint: d5923f9.
+
+
+## Cross-project review (2026-11-14)
+
+The game template now recovers from rejected action promises instead of leaving
+the action button locked. Late failures from a destroyed instance do not notify
+or change its replacement. Immediate pause events disable scoring while waiting
+for the next snapshot, and resume does not override server permissions. Three
+new regressions failed before these fixes; all 12 template tests and type checks
+now pass. The template is not a configured runtime game, so no game archive or
+registry version changed for these template fixes.
+
+Hub game-context initialization failures now use existing unmount cleanup,
+hiding package markup and disabling game CSS before retry. The regression
+failed before the cleanup guard; all 247 Hub and 9 SDK tests and type checks
+pass. Egyptian War also passed its 99 tests and type checks without source
+changes in this pass.
+
+Roulette also passed all 459 tests and type checks in this cross-project pass.
+The current manual checklist now checks automatic scoreboard reset; the removed
+Reset Totals confirmation is no longer a testing step.
+
+
+Sensitive-file follow-up: Git and Docker exclusions now cover `.env`, `.env.*`,
+`*.pem` and `secrets/` in all four repositories, with nested Docker rules. No
+matching tracked filenames were found. Synthetic fixtures verified all eight
+root/nested paths per repository in Git and real Docker exports. Agent guidance
+records no reads of those paths and no automatic fetching/embedding of external
+images. No actual secret contents, permission profiles or application rendering
+settings were read or changed. See `docs/security-boundaries.md` for limits.

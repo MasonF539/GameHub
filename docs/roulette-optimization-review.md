@@ -113,3 +113,18 @@ Possible follow-up, left for review: lazy mounting or content visibility for
 offscreen inventory cards could reduce full-inventory opening work. It may
 change description fitting, scroll height, keyboard navigation or accessibility;
 do not add it solely from this extreme-inventory measurement.
+
+
+## Scoreboard traffic measurement (2026-11-14)
+
+An isolated twelve-player first round placed 1,000 on Black, Red and zero for
+each player, ensuring a winning bet in every portfolio. Across the spin and
+settlement, one viewer received 48 statistic-changing scoreboard updates plus
+12 ping-only refreshes: 164,424 bytes of serialized scoreboard JSON. All twelve
+clients received 720 scoreboard messages totaling 1,973,088 JSON bytes. These
+counts exclude game-state traffic, transport framing and compression.
+
+Coalescing scoreboard updates is left for review. It could reduce this burst,
+but must preserve final-score delivery before game-ended events, new-match
+reset ordering, and live ping behavior. No network-delivery changes were made
+from this measurement.

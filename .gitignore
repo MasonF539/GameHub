@@ -16,3 +16,7 @@ dist-test/
 # Operating-system files
 Thumbs.db
 .DS_Store
+
+# Sensitive local files
+*.pem
+secrets/

@@ -13,3 +13,12 @@ dist-test
 # Local logs and environment files should not be copied.
 *.log
 .env
+
+# Exclude sensitive local files at the root and in nested directories.
+.env.*
+*.pem
+secrets/
+**/.env
+**/.env.*
+**/*.pem
+**/secrets/

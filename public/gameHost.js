@@ -67,7 +67,13 @@
         if (isActive) gameRoot = candidate;
       }
       this.setActiveStyles(gameId);
-      const baseContext = this.createContext(gameId) ?? {};
+      let baseContext;
+      try {
+        baseContext = this.createContext(gameId) ?? {};
+      } catch (error) {
+        this.unmount();
+        throw error;
+      }
       const inputCleanups = new Set();
       /** Tracks a service's unsubscribe functions so unmount can release them. */
       const trackSubscriptions = (api, methods) => {

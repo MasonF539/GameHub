@@ -69,6 +69,9 @@ The host computer needs:
 
 Players only need a modern web browser.
 
+See [security boundaries](docs/security-boundaries.md) for sensitive-file
+exclusions and the distinction between repository ignores and agent read permissions.
+
 ## Starting GameHub
 
 Open the project in Visual Studio Code and press:

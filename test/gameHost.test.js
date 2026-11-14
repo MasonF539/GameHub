@@ -257,3 +257,21 @@ test("the general scoreboard hook opens only the mounted supported game", () => 
   host.register("scores", { mount() { return { receiveState() {}, receiveEvent() {}, showScoreboard() { opens++; }, destroy() {} }; } });
   host.mount("scores"); assert.equal(host.showScoreboard(), true); assert.equal(opens, 1); host.unmount(); assert.equal(host.showScoreboard(), false);
 });
+
+
+test("context initialization failures hide game markup and styles before a clean retry", () => {
+  const gameRoot = { hidden: true, getAttribute: () => "context-failure" };
+  const gameStyle = { disabled: true, getAttribute: () => "context-failure" };
+  let fail = true, mounts = 0;
+  const host = new GameClientHost({
+    root: { querySelectorAll: () => [gameRoot], ownerDocument: { querySelectorAll: () => [gameStyle] } },
+    createContext() { if (fail) throw new Error("Context unavailable"); return {}; }
+  });
+  host.register("context-failure", { mount() { mounts++; return { receiveState() {}, receiveEvent() {}, destroy() {} }; } });
+  assert.throws(() => host.mount("context-failure"), /Context unavailable/);
+  assert.equal(mounts, 0); assert.equal(host.activeGameId, null); assert.equal(host.activeInstance, null);
+  assert.equal(gameRoot.hidden, true); assert.equal(gameStyle.disabled, true);
+  fail = false; host.mount("context-failure");
+  assert.equal(mounts, 1); assert.equal(gameRoot.hidden, false); assert.equal(gameStyle.disabled, false);
+  host.unmount();
+});

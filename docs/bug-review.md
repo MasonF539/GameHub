@@ -1368,3 +1368,34 @@ verification pass.
 
 The final installed-game stress run passed 18 games, 38,852 actions and 88,141
 state checks across all 87 card types. Roulette source checkpoint: d5923f9.
+
+
+## Cross-project review (2026-11-14)
+
+The game template now recovers from rejected action promises instead of leaving
+the action button locked. Late failures from a destroyed instance do not notify
+or change its replacement. Immediate pause events disable scoring while waiting
+for the next snapshot, and resume does not override server permissions. Three
+new regressions failed before these fixes; all 12 template tests and type checks
+now pass. The template is not a configured runtime game, so no game archive or
+registry version changed for these template fixes.
+
+Hub game-context initialization failures now use existing unmount cleanup,
+hiding package markup and disabling game CSS before retry. The regression
+failed before the cleanup guard; all 247 Hub and 9 SDK tests and type checks
+pass. Egyptian War also passed its 99 tests and type checks without source
+changes in this pass.
+
+Roulette also passed all 459 tests and type checks. Updated the current manual
+checklist to check automatic scoreboard reset, and clarified unpublished local
+tarball testing in the game template README. Its `npm pack --dry-run` build
+passes without registry publication.
+
+
+Sensitive-file follow-up: Git and Docker exclusions now cover `.env`, `.env.*`,
+`*.pem` and `secrets/` in all four repositories, with nested Docker rules. No
+matching tracked filenames were found. Synthetic fixtures verified all eight
+root/nested paths per repository in Git and real Docker exports. Agent guidance
+records no reads of those paths and no automatic fetching/embedding of external
+images. No actual secret contents, permission profiles or application rendering
+settings were read or changed. See `docs/security-boundaries.md` for limits.
